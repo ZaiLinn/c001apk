@@ -13,6 +13,14 @@ IPA 构建与架构检查均成功。下载后的正式 APK 已复核证书、�
 桌面归档与 IPA 已复核校验值、运行目录完整性及架构。Windows 云端包已同步本机安装并验证正常退出，
 Android arm64 已保留数据覆盖安装；Linux / iOS 运行体验仍待验收。
 
+## Kotlin / Compose Android
+
+[Android workflow](../.github/workflows/android.yml) 只在 `apps/android/`、
+`apps/flutter/pubspec.yaml`（版本来源）或该 workflow 改动时运行，使用 Temurin JDK 21 与
+Android SDK 37。普通 push/PR 执行 `core` 与界面测试并上传 debug APK（保留 7 天）；
+手动运行并勾选 `release` 时，用与 Flutter 相同的 Secrets 与证书指纹检查生成正式签名的通用 APK
+及 SHA-256 清单（保留 14 天）。在线检查不在 CI 运行。
+
 ## 运行方式
 
 - 推送 `main` 或提交 PR，且改动 Flutter 工程或 workflow 时，自动执行离线检查和构建。

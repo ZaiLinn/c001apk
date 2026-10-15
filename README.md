@@ -9,6 +9,7 @@
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-607D8B?style=flat-square)](LICENSE)
 [![Flutter](https://img.shields.io/badge/Flutter-3.24.5-02569B?style=flat-square&logo=flutter&logoColor=white)](docs/DEVELOPMENT.md)
 [![Build](https://github.com/ZaiLinn/c001apk/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/ZaiLinn/c001apk/actions/workflows/build.yml)
+[![Android](https://github.com/ZaiLinn/c001apk/actions/workflows/android.yml/badge.svg?branch=main)](https://github.com/ZaiLinn/c001apk/actions/workflows/android.yml)
 ![Platforms](https://img.shields.io/badge/平台-Android%20%7C%20Windows-486B78?style=flat-square)
 ![Status](https://img.shields.io/badge/状态-持续维护中-6E8B74?style=flat-square)
 
@@ -71,10 +72,18 @@
 - [x] 本地关注与悄悄关注、多账号管理及游客模式切换。
 - [x] 主导航与分类设置调整，新增 c001apk 自身更新检测。
 - [ ] 继续完善验证码放行与部分账号操作。
-- [ ] Android 迁移到 Kotlin / Jetpack Compose，采用 Material 3 Expressive。
+- [ ] Android 迁移到 Kotlin / Jetpack Compose，采用 Material 3 Expressive（预览版已在 `apps/android`，见下文）。
 - [ ] 完善 Flutter 桌面端随窗口尺寸变化的自适应布局与图片保存。
 
-当前重点维护 **Android 与 Windows**，代码仍为 Flutter。Android 包名（applicationId）为 `com.zailinn.c001apk`，代码 namespace 仍为 `app.awavenue.c001apk`；Linux 已通过云端 release 构建，iOS `arm64` 未签名 IPA 已随 [1.2.0-release](https://github.com/ZaiLinn/c001apk/releases/tag/1.2.0-release) 提供，安装前需自行签名。Linux / iOS 运行体验仍待验收。新包与旧包独立安装，登录及本地数据不会自动迁移。
+### Kotlin / Compose 预览版
+
+`apps/android` 是原生重写的 Android 客户端（Kotlin、Jetpack Compose、Material 3 Expressive），
+已覆盖浏览、详情与回复、搜索、用户与话题、登录与多账号、人机验证、发布与图片上传、私信、
+本地关注、历史收藏与黑名单、设置等 Flutter 版功能。预览期间包名为 `com.zailinn.c001apk.compose`，
+可与 Flutter 版同时安装，数据互不迁移；功能对齐并完成实机验收后再接替 Flutter Android 包。
+云端构建包见 [Android workflow](https://github.com/ZaiLinn/c001apk/actions/workflows/android.yml)。
+
+当前重点维护 **Android 与 Windows**，正式发布包仍为 Flutter 构建。Android 包名（applicationId）为 `com.zailinn.c001apk`，代码 namespace 仍为 `app.awavenue.c001apk`；Linux 已通过云端 release 构建，iOS `arm64` 未签名 IPA 已随 [1.2.0-release](https://github.com/ZaiLinn/c001apk/releases/tag/1.2.0-release) 提供，安装前需自行签名。Linux / iOS 运行体验仍待验收。新包与旧包独立安装，登录及本地数据不会自动迁移。
 
 > [!NOTE]
 > 部分内容仍受登录、验证码和服务端接口限制，验证码放行与部分账号操作仍需继续完善。Windows 暂不支持应用内直接保存图片，可在浏览器中打开后保存。

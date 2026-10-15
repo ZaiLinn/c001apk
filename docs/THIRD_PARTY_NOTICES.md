@@ -19,6 +19,11 @@
 本项目独立实现 Flutter 请求和回退逻辑，并实测补齐该页面需要的客户端
 签名头；上述 MIT 许可证及版权声明同样适用于这一协议调研来源。
 
+2026-10-15 起的 Kotlin 原生版本将上述 Token V3 实现、协议查找表、公开动态请求、
+验证码解析与表单参数移植到 `apps/android/core/`（`protocol/TokenUtils.kt`、
+`protocol/TokenV3Data.kt`、`net/` 下各文件），来源与 MIT 声明同上；
+bcrypt 使用 [jBCrypt](https://www.mindrot.org/projects/jBCrypt/)（ISC 许可）。
+
 `apps/flutter/test/fixtures/token_v3.json` 为合成设备与固定时间的测试签名，使用独立
 Node bcryptjs 实现生成，不含真实设备、账号凭据或用户 Token。
 

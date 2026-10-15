@@ -52,6 +52,12 @@ import com.zailinn.c001apk.ui.screens.runAction
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
+private val productSorts = listOf(
+    "默认" to "ignoreEntityById=1",
+    "最新" to "ignoreEntityById=1&listType=dateline_desc",
+    "热度" to "listType=rank_score",
+)
+
 /** Topic (by tag) or product (by id) with its server-defined tabs. */
 class TopicViewModel(private val app: AppContainer, private val tag: String?, private val productId: String?) : ViewModel() {
     val topic = MutableStateFlow<LoadResult<Datum>>(LoadResult.Loading)
@@ -115,6 +121,7 @@ fun TopicScreen(tag: String?, id: String?) {
     val following by vm.following.collectAsStateWithLifecycle()
     var menu by remember { mutableStateOf(false) }
     var composing by remember { mutableStateOf(false) }
+    var sort by remember { mutableStateOf(0) }
     val data = (state as? LoadResult.Success)?.value
     val isTopic = data?.entityType == "topic"
     Scaffold(
@@ -137,6 +144,11 @@ fun TopicScreen(tag: String?, id: String?) {
                         val shareUrl = "https://www.coolapk1s.com/" + if (isTopic) "t/${data.title}" else "product/${data.id}"
                         DropdownMenuItem({ Text("复制链接") }, { menu = false; navigator.copy(shareUrl) })
                         DropdownMenuItem({ Text("分享") }, { menu = false; navigator.share(shareUrl) })
+                        if (!isTopic) {
+                            productSorts.forEachIndexed { index, (label, _) ->
+                                DropdownMenuItem({ Text("排序：$label" + if (index == sort) " ✓" else "") }, { menu = false; sort = index })
+                            }
+                        }
                         DropdownMenuItem({ Text(if (following) "取消关注" else "关注") }, { menu = false; vm.toggleFollow() })
                         DropdownMenuItem({ Text(if (blocked) "取消屏蔽" else "屏蔽") }, { menu = false; vm.toggleBlock() })
                     }
@@ -182,7 +194,14 @@ fun TopicScreen(tag: String?, id: String?) {
             } else {
                 val selected = tabs.indexOfFirst { it.string("page_name") == data.string("selectedTab") || it.string("pageName") == data.string("selectedTab") }
                 TabbedPages(tabs.map { it.title.orEmpty() }, initial = selected.coerceAtLeast(0)) { index ->
-                    DataListContent(tabs[index].url.orEmpty(), tabs[index].title.orEmpty(), key = "topic-${data.id}-$index")
+                    val tab = tabs[index]
+                    if (!isTopic && tab.title == "讨论" && sort > 0) {
+                        // Product discussions can be re-sorted from the menu, as in the Flutter client.
+                        val (label, query) = productSorts[sort]
+                        DataListContent("/page?url=/product/feedList?type=feed&id=${data.id}&$query", label, key = "topic-${data.id}-$index-$sort")
+                    } else {
+                        DataListContent(tab.url.orEmpty(), tab.title.orEmpty(), key = "topic-${data.id}-$index")
+                    }
                 }
             }
         }

@@ -94,8 +94,9 @@ kotlin {
 
 // Never produce an unsigned or debug-signed release when credentials are missing.
 tasks.matching { it.name == "preReleaseBuild" }.configureEach {
+    val signingReady = hasReleaseSigning
     doFirst {
-        if (!hasReleaseSigning) {
+        if (!signingReady) {
             throw GradleException(
                 "Release signing is not configured. Set KEYSTORE, KEY_ALIAS and KEYSTORE_PASSWORD/KEY_PASSWORD " +
                     "(or REVIA_KS_PASS); see docs/DEVELOPMENT.md.",

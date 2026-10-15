@@ -7,6 +7,9 @@
 ```text
 c001apk/
 ├── apps/
+│   ├── android/             # Kotlin / Jetpack Compose 原生 Android（预览）
+│   │   ├── core/            # 纯 Kotlin 协议、网络、模型与更新检查，可在 JVM 上测试
+│   │   └── app/             # Compose 界面、数据存储与 Android 平台功能
 │   └── flutter/             # 当前 Flutter 应用
 │       ├── lib/             # 页面、组件、网络层、模型与工具
 │       ├── assets/          # 应用资源
@@ -25,6 +28,35 @@ c001apk/
 ```
 
 ## 本地开发
+
+### Kotlin / Compose 原生 Android（`apps/android`）
+
+工具链：Gradle 9.7.1（wrapper）、AGP 9.4.1、Kotlin 2.3.21、compileSdk 37、minSdk 24、JDK 21。
+依赖版本集中在 `apps/android/gradle/libs.versions.toml`。界面使用 Compose BOM 2026.09.00 与
+material3 `1.5.0-beta01`（Material 3 Expressive 组件目前在该版本线提供）。
+Android SDK 需安装 `platforms;android-37.0` 与 `build-tools;37.0.0`，并在
+`apps/android/local.properties` 写入 `sdk.dir`（该文件已被忽略）。
+
+```bash
+cd apps/android
+./gradlew :core:test                 # 协议、签名、请求头、验证码、响应、本地关注、更新检查
+./gradlew :app:testDebugUnitTest     # Robolectric 渲染真实界面并走合成数据
+./gradlew :app:assembleDebug         # app/build/outputs/apk/debug/app-debug.apk
+```
+
+- `core` 不依赖 Android，移植并扩充了 Flutter 的网络回归测试；`token_v3.json` 复用 Flutter 的同一组合成签名向量。
+- `app` 的界面测试使用合成响应，不访问网络；加 `-Proborazzi.record=true` 会在
+  `app/build/outputs/roborazzi/` 写出各页面截图，便于检查布局。
+- 在线检查默认跳过：`COOLAPK_LIVE_PROBE=1 ./gradlew :core:test --tests '*LiveProbe*'`，
+  只以游客身份读取首页与一条动态详情，输出结构摘要，不输出内容或凭据。
+- 若 Robolectric 下载 Android 运行时受限，可在 `~/.gradle/gradle.properties` 设置
+  `robolectric.repo=<Maven 镜像地址>`。
+- 版本名与版本号读取 `apps/flutter/pubspec.yaml`，与 Flutter 发布线保持一致；只生成单个通用 APK（无原生库）。
+- release 签名沿用下文 `KEYSTORE`、`KEY_ALIAS`、`KEYSTORE_PASSWORD`/`KEY_PASSWORD`/`REVIA_KS_PASS`
+  环境变量或 `apps/android/key.properties`；缺少签名时 release 构建直接失败。release 开启 R8 压缩。
+- 预览包名 `com.zailinn.c001apk.compose`，与 Flutter 包（`com.zailinn.c001apk`）并存；
+  本地数据（DataStore）与 Flutter 的 Hive 数据互不迁移。预览版不自动提示 c001apk 更新，
+  以免把 Flutter 正式包当作更新，手动检查仍可用。
 
 ### 应用更新检测
 
