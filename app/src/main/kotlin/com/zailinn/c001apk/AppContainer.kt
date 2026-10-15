@@ -18,7 +18,7 @@ import com.zailinn.c001apk.data.LocalContent
 import com.zailinn.c001apk.data.LocalStore
 import com.zailinn.c001apk.data.AppSettings
 import com.zailinn.c001apk.data.SettingsRepository
-import com.zailinn.c001apk.data.enabledCategories
+import com.zailinn.c001apk.data.sensitiveFilterOn
 import com.zailinn.c001apk.semantic.SemanticConfig
 import com.zailinn.c001apk.semantic.SemanticModel
 import kotlinx.coroutines.CompletableDeferred
@@ -66,11 +66,11 @@ class AppContainer(
     val semantic = SemanticModel(context, baseHttp, scope)
     val repository = CoolapkRepository(client) {
         val current = settings.current
-        content.filter(current).copy(semantic = semantic.matcher(current.sensitiveFold && current.semanticFold, semanticConfig()))
+        content.filter(current).copy(semantic = semantic.matcher(current.sensitiveFilterOn && current.semanticFold, semanticConfig()))
     }
 
     fun semanticConfig(current: AppSettings = settings.current) =
-        SemanticConfig(current.enabledCategories, content.semanticPhrases.value, current.semanticThreshold)
+        SemanticConfig(content.filterCategories.value.filter { it.enabled }, current.semanticThreshold)
     val uploader = com.zailinn.c001apk.core.upload.OssUploader(repository, baseHttp)
     val captcha = CaptchaCoordinator()
     val updates = UpdateService(UpdatePreferences(settings), { BuildConfig.VERSION_NAME }, UpdateService.defaultFetcher(baseHttp))
@@ -86,7 +86,7 @@ class AppContainer(
         runBlocking { settings.initialize() }
         client.captchaVerifier = captcha::verify
         // Start loading the model early so the first pages can already use it.
-        settings.current.let { semantic.matcher(it.sensitiveFold && it.semanticFold, semanticConfig(it)) }
+        settings.current.let { semantic.matcher(it.sensitiveFilterOn && it.semanticFold, semanticConfig(it)) }
     }
 }
 

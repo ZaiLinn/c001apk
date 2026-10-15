@@ -6,7 +6,6 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
-import com.zailinn.c001apk.core.model.SensitiveCategory
 import com.zailinn.c001apk.core.protocol.Constants
 import com.zailinn.c001apk.core.protocol.ProtocolParams
 import com.zailinn.c001apk.core.semantic.SemanticAnchors
@@ -26,8 +25,8 @@ data class AppSettings(
     val secretFollow: Boolean = false,
     /** Fold feeds and replies that match the sensitive-topic word list. */
     val sensitiveFold: Boolean = false,
-    /** Enabled built-in categories; null means all of them. */
-    val sensitiveCategories: Set<String>? = null,
+    /** Remove matching feeds and replies entirely instead of folding them. */
+    val sensitiveHide: Boolean = false,
     /** Also fold by meaning with the downloaded model. */
     val semanticFold: Boolean = false,
     val semanticThreshold: Float = SemanticAnchors.DEFAULT_THRESHOLD,
@@ -35,9 +34,8 @@ data class AppSettings(
     val protocol: ProtocolParams = ProtocolParams(),
 )
 
-/** Built-in sensitive categories the user left switched on. */
-val AppSettings.enabledCategories: List<SensitiveCategory>
-    get() = SensitiveCategory.builtIn.filter { sensitiveCategories == null || it.id in sensitiveCategories }
+/** Either switch turns sensitive-topic matching on; hiding wins over folding. */
+val AppSettings.sensitiveFilterOn: Boolean get() = sensitiveFold || sensitiveHide
 
 object SettingKeys {
     val dynamicColor = booleanPreferencesKey("useMaterial")
@@ -50,7 +48,7 @@ object SettingKeys {
     val showEmoji = booleanPreferencesKey("showEmoji")
     val secretFollow = booleanPreferencesKey("secretFollowEnabled")
     val sensitiveFold = booleanPreferencesKey("sensitiveFold")
-    val sensitiveCategories = stringPreferencesKey("sensitiveFoldCategories")
+    val sensitiveHide = booleanPreferencesKey("sensitiveHide")
     val semanticFold = booleanPreferencesKey("semanticFold")
     val semanticThreshold = floatPreferencesKey("semanticThreshold")
     val installTime = stringPreferencesKey("installTime")
@@ -111,7 +109,7 @@ class SettingsRepository(private val store: LocalStore) : UpdatePreferenceStore 
         showEmoji = p[SettingKeys.showEmoji] ?: true,
         secretFollow = p[SettingKeys.secretFollow] ?: false,
         sensitiveFold = p[SettingKeys.sensitiveFold] ?: false,
-        sensitiveCategories = p[SettingKeys.sensitiveCategories]?.split(',')?.filter { it.isNotEmpty() }?.toSet(),
+        sensitiveHide = p[SettingKeys.sensitiveHide] ?: false,
         semanticFold = p[SettingKeys.semanticFold] ?: false,
         semanticThreshold = p[SettingKeys.semanticThreshold] ?: SemanticAnchors.DEFAULT_THRESHOLD,
         installTime = p[SettingKeys.installTime].orEmpty(),

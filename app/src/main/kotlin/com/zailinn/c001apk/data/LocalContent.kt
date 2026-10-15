@@ -1,7 +1,10 @@
 package com.zailinn.c001apk.data
 
+import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.stringPreferencesKey
 import com.zailinn.c001apk.core.model.ContentFilter
 import com.zailinn.c001apk.core.model.Datum
+import com.zailinn.c001apk.core.model.SensitiveCategory
 import com.zailinn.c001apk.core.model.SensitiveMatcher
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
@@ -51,50 +54,85 @@ class LocalContent(private val store: LocalStore) {
     val searchHistory: StateFlow<List<String>> = store.state { store.readJson(it, SEARCH_HISTORY, strings, emptyList()) }
     val localFollows: StateFlow<List<LocalFollowUser>> = store.state { store.readJson(it, LOCAL_FOLLOWS, follows, emptyList()) }
 
-    /** The user's own words for sensitive-topic folding; `#话题#` matches a topic. */
-    val sensitiveWords: StateFlow<List<String>> = store.state { store.readJson(it, SENSITIVE_WORDS, strings, emptyList()) }
+    private val categories = ListSerializer(SensitiveCategory.serializer())
+
+    /** Sensitive-topic categories, editable by the user; starts from [SensitiveCategory.builtIn]. */
+    val filterCategories: StateFlow<List<SensitiveCategory>> = store.state(::readCategories)
 
     private var matcherKey: Any? = null
     private var matcher: SensitiveMatcher? = null
 
-    fun filter(settings: AppSettings? = null) =
-        ContentFilter(blockedUsers.value.toSet(), blockedTopics.value, settings?.let(::sensitiveMatcher))
+    /**
+     * Blacklists always remove items. Sensitive categories fold or, with
+     * [AppSettings.sensitiveHide], remove them; both switches off disables them.
+     */
+    fun filter(settings: AppSettings? = null) = ContentFilter(
+        blockedUsers.value.toSet(),
+        blockedTopics.value,
+        settings?.takeIf { it.sensitiveFilterOn }?.let { sensitiveMatcher() },
+        hideSensitive = settings?.sensitiveHide == true,
+    )
 
-    /** Rebuilt only when the switch, categories or words change. */
+    /** Rebuilt only when the categories change. */
     @Synchronized
-    private fun sensitiveMatcher(settings: AppSettings): SensitiveMatcher? {
-        if (!settings.sensitiveFold) return null
-        val key = settings.sensitiveCategories to sensitiveWords.value
-        if (key != matcherKey) {
-            matcher = SensitiveMatcher(settings.enabledCategories, sensitiveWords.value).takeUnless { it.isEmpty }
-            matcherKey = key
+    private fun sensitiveMatcher(): SensitiveMatcher? {
+        val enabled = filterCategories.value.filter { it.enabled }
+        if (enabled != matcherKey) {
+            matcher = SensitiveMatcher(enabled).takeUnless { it.isEmpty }
+            matcherKey = enabled
         }
         return matcher
     }
 
-    /** Returns false when the word already exists. */
-    suspend fun addSensitiveWord(word: String): Boolean {
-        val value = word.trim()
-        if (value.isEmpty() || value in sensitiveWords.value) return false
-        store.updateJson(SENSITIVE_WORDS, strings, emptyList()) { listOf(value) + it.filter { v -> v != value } }
-        return true
+    private fun readCategories(prefs: Preferences): List<SensitiveCategory> =
+        prefs[stringPreferencesKey(FILTER_CATEGORIES)]
+            ?.let { runCatching { storeJson.decodeFromString(categories, it) }.getOrNull() }
+            ?: legacyCategories(prefs)
+
+    /**
+     * 2.0.0 kept the enabled built-in ids, the user's words and semantic
+     * phrases separately; they become the built-in categories plus "自定义".
+     */
+    private fun legacyCategories(prefs: Preferences): List<SensitiveCategory> {
+        val enabled = prefs[stringPreferencesKey(LEGACY_ENABLED)]?.split(',')?.filter { it.isNotEmpty() }?.toSet()
+        val words = store.readJson(prefs, LEGACY_WORDS, strings, emptyList())
+        val phrases = store.readJson(prefs, LEGACY_PHRASES, strings, emptyList())
+        val builtIn = SensitiveCategory.builtIn.map { it.copy(enabled = enabled == null || it.id in enabled) }
+        if (words.isEmpty() && phrases.isEmpty()) return builtIn
+        val (tags, keywords) = words.partition { it.length > 2 && it.startsWith("#") && it.endsWith("#") }
+        return builtIn + SensitiveCategory(CUSTOM_ID, "自定义", tags = tags.map { it.trim('#') }, keywords = keywords, examples = phrases)
     }
 
-    suspend fun removeSensitiveWord(word: String) =
-        store.updateJson(SENSITIVE_WORDS, strings, emptyList()) { it.filter { v -> v != word } }
+    suspend fun updateCategories(transform: (List<SensitiveCategory>) -> List<SensitiveCategory>) =
+        store.edit { prefs ->
+            prefs[stringPreferencesKey(FILTER_CATEGORIES)] = storeJson.encodeToString(categories, transform(readCategories(prefs)))
+        }
 
-    /** The user's own example sentences for semantic folding. */
-    val semanticPhrases: StateFlow<List<String>> = store.state { store.readJson(it, SEMANTIC_PHRASES, strings, emptyList()) }
+    suspend fun updateCategory(id: String, transform: (SensitiveCategory) -> SensitiveCategory) =
+        updateCategories { list -> list.map { if (it.id == id) transform(it) else it } }
 
-    suspend fun addSemanticPhrase(phrase: String): Boolean {
-        val value = phrase.trim()
-        if (value.isEmpty() || value in semanticPhrases.value) return false
-        store.updateJson(SEMANTIC_PHRASES, strings, emptyList()) { listOf(value) + it.filter { v -> v != value } }
-        return true
+    /** Adds an empty, enabled category and returns its id. */
+    suspend fun addCategory(title: String): String {
+        val id = "user-${System.currentTimeMillis()}"
+        updateCategories { it + SensitiveCategory(id, title.trim()) }
+        return id
     }
 
-    suspend fun removeSemanticPhrase(phrase: String) =
-        store.updateJson(SEMANTIC_PHRASES, strings, emptyList()) { it.filter { v -> v != phrase } }
+    suspend fun deleteCategory(id: String) = updateCategories { list -> list.filter { it.id != id } }
+
+    /** Back to the shipped lists for one built-in category, keeping whether it is on. */
+    suspend fun restoreCategory(id: String) {
+        val default = SensitiveCategory.builtIn(id) ?: return
+        updateCategories { list ->
+            if (list.any { it.id == id }) list.map { if (it.id == id) default.copy(enabled = it.enabled) else it }
+            else list + default
+        }
+    }
+
+    /** Restores every built-in category and keeps the user's own. */
+    suspend fun restoreAllCategories() = updateCategories { list ->
+        SensitiveCategory.builtIn + list.filter { SensitiveCategory.builtIn(it.id) == null }
+    }
 
     suspend fun addHistory(feed: Datum) = store.updateJson(HISTORY, records, emptyList()) { list ->
         val record = FeedRecord.of(feed)
@@ -158,8 +196,11 @@ class LocalContent(private val store: LocalStore) {
         private const val BLOCKED_TOPICS = "topicBlackList"
         private const val SEARCH_HISTORY = "searchHistory"
         private const val LOCAL_FOLLOWS = "localFollowUsers"
-        private const val SENSITIVE_WORDS = "sensitiveWords"
-        private const val SEMANTIC_PHRASES = "semanticPhrases"
+        private const val FILTER_CATEGORIES = "filterCategoriesV1"
+        private const val LEGACY_ENABLED = "sensitiveFoldCategories"
+        private const val LEGACY_WORDS = "sensitiveWords"
+        private const val LEGACY_PHRASES = "semanticPhrases"
+        const val CUSTOM_ID = "custom"
         private const val MAX_HISTORY = 1000
     }
 }

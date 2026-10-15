@@ -39,7 +39,7 @@ class SemanticMatcherTest {
         override fun close() = Unit
     }
 
-    private val chars = (SemanticAnchors.byCategory.values.flatten() + SemanticAnchors.everyday + "，。")
+    private val chars = (SensitiveCategory.builtIn.flatMap { it.examples } + SemanticAnchors.everyday + "，。")
         .joinToString("").toSet().map(Char::toString)
     private val runtime = FakeRuntime()
     private val encoder = TextEncoder(BertTokenizer(listOf("[PAD]", "[UNK]", "[CLS]", "[SEP]") + chars), runtime)
@@ -74,8 +74,8 @@ class SemanticMatcherTest {
     }
 
     @Test
-    fun customPhrasesAndWordsComeFirst() {
-        val custom = SemanticMatcher(encoder, emptyList(), listOf("今天天气不错出去玩吧"))
+    fun customExamplesAndWordsComeFirst() {
+        val custom = SemanticMatcher(encoder, listOf(SensitiveCategory("mine", "自定义", examples = listOf("今天天气不错出去玩吧"))))
         assertEquals("自定义", custom.test("今天天气不错出去玩吧")?.title)
         // Words decide first; the model only sees what they left visible.
         val filter = ContentFilter(sensitive = SensitiveMatcher(SensitiveCategory.builtIn), semantic = matcher)

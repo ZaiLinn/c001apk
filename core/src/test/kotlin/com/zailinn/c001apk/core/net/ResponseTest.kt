@@ -59,6 +59,15 @@ class ResponseTest {
     }
 
     @Test
+    fun hiddenSensitiveFeedsAreRemovedButPagingContinues() = runTest {
+        val body = """{"data":[{"entityType":"feed","id":"1","message":"刷机"},{"entityType":"feed","id":"2","message":"晒女友"}]}"""
+        val filter = ContentFilter(sensitive = SensitiveMatcher(SensitiveCategory.builtIn), hideSensitive = true)
+        val items = (repo(body = body, filter = filter).dataListFromUrl("/x") as LoadResult.Success).value
+        assertEquals(listOf("1"), items.map { it.id })
+        assertEquals("2", items.cursorLastId)
+    }
+
+    @Test
     fun negativeStatusIsAnError() = runTest {
         assertTrue(repo(body = """{"status":-1}""").dataFromUrl("/x") is LoadResult.Error)
     }
