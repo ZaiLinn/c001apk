@@ -1,6 +1,5 @@
 package com.zailinn.c001apk.ui.screens.main
 
-import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.WindowInsets
@@ -30,6 +29,8 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.zailinn.c001apk.ui.common.backPreview
+import com.zailinn.c001apk.ui.common.predictiveBack
 
 private data class Destination(val label: String, val icon: ImageVector, val selected: ImageVector)
 
@@ -45,7 +46,8 @@ fun MainScreen(generation: Int) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var reselect by rememberSaveable { mutableIntStateOf(0) }
     val holder = rememberSaveableStateHolder()
-    BackHandler(tab != 0) { tab = 0 }
+    // Back from 关注 or 我的 returns to 主页 first, previewed with the gesture.
+    val backProgress = predictiveBack(tab != 0) { tab = 0 }
     val select = { index: Int ->
         if (index == tab) reselect++ else tab = index
     }
@@ -82,7 +84,7 @@ fun MainScreen(generation: Int) {
                         }
                     }
                 }
-                Box(Modifier.weight(1f).fillMaxSize().padding(padding)) {
+                Box(Modifier.weight(1f).fillMaxSize().padding(padding).backPreview(backProgress)) {
                     holder.SaveableStateProvider("$tab-$generation") {
                         when (tab) {
                             0 -> HomeScreen(generation, reselect)

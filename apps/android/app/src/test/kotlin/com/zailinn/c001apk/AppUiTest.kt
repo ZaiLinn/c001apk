@@ -2,7 +2,9 @@ package com.zailinn.c001apk
 
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
-import androidx.compose.ui.test.junit4.createComposeRule
+import androidx.activity.BackEventCompat
+import androidx.activity.ComponentActivity
+import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -27,7 +29,7 @@ import java.util.UUID
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
 @Config(sdk = [35], qualifiers = "w411dp-h891dp-xxhdpi")
 class AppUiTest {
-    @get:Rule val compose = createComposeRule()
+    @get:Rule val compose = createAndroidComposeRule<ComponentActivity>()
     private val transport = FixtureTransport()
     private lateinit var app: AppContainer
 
@@ -85,6 +87,46 @@ class AppUiTest {
         compose.onNodeWithContentDescription("我的").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("点击登录").fetchSemanticsNodes().isNotEmpty() }
         shot("mine")
+    }
+
+    /** Start, drag and release a predictive back gesture. */
+    private fun backGesture(cancel: Boolean = false) {
+        val dispatcher = compose.activity.onBackPressedDispatcher
+        compose.runOnUiThread {
+            dispatcher.dispatchOnBackStarted(BackEventCompat(0f, 500f, 0f, BackEventCompat.EDGE_LEFT))
+            dispatcher.dispatchOnBackProgressed(BackEventCompat(200f, 500f, 0.5f, BackEventCompat.EDGE_LEFT))
+        }
+        compose.waitForIdle()
+        compose.runOnUiThread { if (cancel) dispatcher.dispatchOnBackCancelled() else dispatcher.onBackPressed() }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun predictiveBackReturnsFromTabsAndPages() {
+        launch()
+        compose.onNodeWithContentDescription("我的").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("点击登录").fetchSemanticsNodes().isNotEmpty() }
+        // A cancelled gesture stays on the tab; a completed one returns to 主页.
+        backGesture(cancel = true)
+        compose.onNodeWithText("点击登录").assertIsDisplayed()
+        backGesture()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("第二条合成动态，带三张图").fetchSemanticsNodes().isNotEmpty() }
+
+        compose.onAllNodesWithText("合成动态正文", substring = true, useUnmergedTree = true).onFirst().performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("合成回复内容", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.mainClock.autoAdvance = false
+        compose.runOnUiThread {
+            compose.activity.onBackPressedDispatcher.dispatchOnBackStarted(BackEventCompat(0f, 500f, 0f, BackEventCompat.EDGE_LEFT))
+            compose.activity.onBackPressedDispatcher.dispatchOnBackProgressed(BackEventCompat(300f, 500f, 0.6f, BackEventCompat.EDGE_LEFT))
+        }
+        compose.mainClock.advanceTimeBy(500)
+        shot("back-gesture")
+        compose.runOnUiThread { compose.activity.onBackPressedDispatcher.dispatchOnBackCancelled() }
+        compose.mainClock.autoAdvance = true
+        compose.waitForIdle()
+        backGesture()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("合成回复内容", useUnmergedTree = true).fetchSemanticsNodes().isEmpty() }
+        compose.onNodeWithText("第二条合成动态，带三张图").assertIsDisplayed()
     }
 
     @Test

@@ -1,6 +1,12 @@
 package com.zailinn.c001apk.ui
 
 import android.net.Uri
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
@@ -124,7 +130,16 @@ fun C001apkApp(app: AppContainer, deepLink: Uri?, onDeepLinkHandled: () -> Unit)
             LocalSession provides session,
             LocalAppSettings provides settings,
         ) {
-            NavHost(nav, startDestination = MainRoute) {
+            NavHost(
+                nav,
+                startDestination = MainRoute,
+                // Shared-axis transitions. The pop pair is what the predictive back gesture
+                // scrubs through, so every page previews its return the same way.
+                enterTransition = { slideInHorizontally(tween(300)) { it / 4 } + fadeIn(tween(300)) },
+                exitTransition = { slideOutHorizontally(tween(300)) { -it / 4 } + fadeOut(tween(300)) },
+                popEnterTransition = { slideInHorizontally(tween(300)) { -it / 4 } + fadeIn(tween(300)) },
+                popExitTransition = { scaleOut(tween(300), targetScale = 0.9f) + fadeOut(tween(300)) },
+            ) {
                 composable<MainRoute> { MainScreen(generation) }
                 composable<FeedRoute> { FeedScreen(it.toRoute<FeedRoute>().id) }
                 composable<UserRoute> { UserScreen(it.toRoute<UserRoute>().uid) }
