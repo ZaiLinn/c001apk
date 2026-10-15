@@ -74,6 +74,10 @@ fun readApiObject(response: ApiResponse): JsonObject {
     return checkApiObject(body)
 }
 
+/** A short, readable server message, or null when there is none worth showing. */
+private fun serverReason(message: String): String? =
+    message.replace(Regex("<[^>]*>"), "").trim().takeIf { it.isNotEmpty() && it.length <= 80 && it.any { c -> c.code > 0x2E80 } }
+
 fun checkApiObject(body: JsonObject): JsonObject {
     val marker = body.raw("messageStatus").orEmpty().lowercase()
     val message = body.raw("message").orEmpty()
@@ -101,7 +105,8 @@ fun checkApiObject(body: JsonObject): JsonObject {
                 ApiFailure(ApiFailureKind.Authentication, "登录状态已失效或需要登录，请重新登录")
             clues.contains("rate_limit") || clues.contains("频繁") || code == 429 ->
                 ApiFailure(ApiFailureKind.RateLimit, "请求过于频繁，请稍后重试")
-            else -> ApiFailure(ApiFailureKind.Business, "服务器未能完成请求，请稍后重试")
+            // The server's own reason, such as 用户不存在 or a privacy notice, says more than a generic text.
+            else -> ApiFailure(ApiFailureKind.Business, serverReason(message) ?: "服务器未能完成请求，请稍后重试")
         }
     }
     if (!body.containsKey("data")) {
