@@ -7,15 +7,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.DynamicFeed
+import androidx.compose.material.icons.filled.AccountCircle
+import androidx.compose.material.icons.filled.Group
 import androidx.compose.material.icons.filled.Home
-import androidx.compose.material.icons.filled.Person
-import androidx.compose.material.icons.outlined.DynamicFeed
+import androidx.compose.material.icons.outlined.AccountCircle
+import androidx.compose.material.icons.outlined.Group
 import androidx.compose.material.icons.outlined.Home
-import androidx.compose.material.icons.outlined.Person
 import androidx.compose.material3.Icon
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarItem
 import androidx.compose.material3.NavigationRail
 import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
@@ -36,8 +37,8 @@ private data class Destination(val label: String, val icon: ImageVector, val sel
 
 private val destinations = listOf(
     Destination("主页", Icons.Outlined.Home, Icons.Filled.Home),
-    Destination("关注", Icons.Outlined.DynamicFeed, Icons.Filled.DynamicFeed),
-    Destination("我的", Icons.Outlined.Person, Icons.Filled.Person),
+    Destination("关注", Icons.Outlined.Group, Icons.Filled.Group),
+    Destination("我的", Icons.Outlined.AccountCircle, Icons.Filled.AccountCircle),
 )
 
 /** Home, follow feed and profile with a bottom bar, or a rail on wide windows. */
@@ -57,14 +58,14 @@ fun MainScreen(generation: Int) {
             contentWindowInsets = WindowInsets(0),
             bottomBar = {
                 if (!wide) {
-                    NavigationBar {
+                    // Expressive short bar: compact height, labels always visible.
+                    ShortNavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                         destinations.forEachIndexed { index, item ->
-                            NavigationBarItem(
+                            ShortNavigationBarItem(
                                 selected = tab == index,
                                 onClick = { select(index) },
-                                icon = { Icon(if (tab == index) item.selected else item.icon, item.label) },
+                                icon = { Icon(if (tab == index) item.selected else item.icon, contentDescription = null) },
                                 label = { Text(item.label) },
-                                alwaysShowLabel = false,
                             )
                         }
                     }
@@ -73,7 +74,7 @@ fun MainScreen(generation: Int) {
         ) { padding ->
             Row(Modifier.fillMaxSize()) {
                 if (wide) {
-                    NavigationRail {
+                    NavigationRail(containerColor = MaterialTheme.colorScheme.surfaceContainer) {
                         destinations.forEachIndexed { index, item ->
                             NavigationRailItem(
                                 selected = tab == index,

@@ -43,6 +43,10 @@ class AppUiTest {
         compose.waitUntil(10_000) { compose.onAllNodesWithText("合成动态正文", substring = true).fetchSemanticsNodes().isNotEmpty() }
     }
 
+    /** Bottom bar item: the clickable node carrying the label. */
+    private fun tab(label: String) =
+        compose.onNode(hasText(label) and androidx.compose.ui.test.hasClickAction()).performClick()
+
     private fun shot(name: String) = compose.onRoot().captureRoboImage("${System.getProperty("roborazzi.output.dir")}/$name.png")
 
     @Test
@@ -74,17 +78,17 @@ class AppUiTest {
         compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("保存")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("/3", substring = true).assertIsDisplayed()
         compose.onNodeWithContentDescription("返回").performClick()
-        compose.onNodeWithText("话题").performClick()
+        compose.onNode(hasText("话题") and androidx.compose.ui.test.hasClickAction()).performClick()
         compose.waitForIdle()
     }
 
     @Test
     fun bottomNavigationReachesFollowAndMine() {
         launch()
-        compose.onNodeWithContentDescription("关注").performClick()
+        tab("关注")
         compose.waitUntil(5_000) { compose.onAllNodes(hasText("还没有本地关注的用户", substring = true)).fetchSemanticsNodes().isNotEmpty() }
         shot("follow")
-        compose.onNodeWithContentDescription("我的").performClick()
+        tab("我的")
         compose.waitUntil(5_000) { compose.onAllNodesWithText("点击登录").fetchSemanticsNodes().isNotEmpty() }
         shot("mine")
     }
@@ -104,7 +108,7 @@ class AppUiTest {
     @Test
     fun predictiveBackReturnsFromTabsAndPages() {
         launch()
-        compose.onNodeWithContentDescription("我的").performClick()
+        tab("我的")
         compose.waitUntil(5_000) { compose.onAllNodesWithText("点击登录").fetchSemanticsNodes().isNotEmpty() }
         // A cancelled gesture stays on the tab; a completed one returns to 主页.
         backGesture(cancel = true)
@@ -132,6 +136,10 @@ class AppUiTest {
     @Test
     fun settingsAndSearchOpen() {
         launch()
+        // Settings live on the profile page, not on the home top bar.
+        assertTrue(compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("设置")).fetchSemanticsNodes().isEmpty())
+        tab("我的")
+        compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("设置")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("设置").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("外观与字号").fetchSemanticsNodes().isNotEmpty() }
         shot("settings")

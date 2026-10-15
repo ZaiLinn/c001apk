@@ -18,14 +18,13 @@ import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
-import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SecondaryScrollableTabRow
+import androidx.compose.material3.PrimaryScrollableTabRow
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -39,6 +38,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -52,11 +52,11 @@ import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.cards.ItemCard
 import com.zailinn.c001apk.ui.common.PagedList
+import com.zailinn.c001apk.ui.common.SearchPill
 import com.zailinn.c001apk.ui.common.PagedListView
 import com.zailinn.c001apk.ui.common.StatusBox
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.SearchRoute
-import com.zailinn.c001apk.ui.nav.SettingsRoute
 import com.zailinn.c001apk.ui.screens.ContentViewModel
 import com.zailinn.c001apk.ui.screens.appViewModel
 import com.zailinn.c001apk.ui.screens.compose.ComposerSheet
@@ -86,33 +86,40 @@ fun HomeScreen(generation: Int, reselect: Int) {
     var composing by remember { mutableStateOf(false) }
     val reselectTab = remember { mutableStateOf(0) }
     LaunchedEffect(reselect) { if (reselect > 0) reselectTab.value++ }
+    // The search row slides away while reading and returns on the first scroll up; tabs stay pinned.
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            TopAppBar(
-                title = {
-                    SecondaryScrollableTabRow(
-                        selectedTabIndex = pager.currentPage,
-                        edgePadding = 0.dp,
-                        containerColor = Color.Transparent,
-                        divider = {},
-                    ) {
-                        tabs.forEachIndexed { index, tab ->
-                            Tab(
-                                selected = pager.currentPage == index,
-                                onClick = {
-                                    if (pager.currentPage == index) reselectTab.value++
-                                    else scope.launch { pager.animateScrollToPage(index) }
-                                },
-                                text = { Text(tab.label) },
-                            )
-                        }
+            Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
+                TopAppBar(
+                    title = { SearchPill("搜索动态、应用、话题和用户", Modifier.padding(end = 16.dp)) { navigator.navigate(SearchRoute()) } },
+                    scrollBehavior = scrollBehavior,
+                    colors = TopAppBarDefaults.topAppBarColors(scrolledContainerColor = MaterialTheme.colorScheme.surface),
+                    windowInsets = TopAppBarDefaults.windowInsets,
+                )
+                PrimaryScrollableTabRow(
+                    selectedTabIndex = pager.currentPage,
+                    edgePadding = 8.dp,
+                    minTabWidth = 56.dp,
+                    divider = {},
+                ) {
+                    tabs.forEachIndexed { index, tab ->
+                        val selected = pager.currentPage == index
+                        Tab(
+                            selected = selected,
+                            onClick = {
+                                if (selected) reselectTab.value++
+                                else scope.launch { pager.animateScrollToPage(index) }
+                            },
+                            text = {
+                                Text(tab.label, style = if (selected) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyLarge)
+                            },
+                            unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                     }
-                },
-                actions = {
-                    IconButton(onClick = { navigator.navigate(SettingsRoute) }) { Icon(Icons.Outlined.Settings, "设置") }
-                    IconButton(onClick = { navigator.navigate(SearchRoute()) }) { Icon(Icons.Outlined.Search, "搜索") }
-                },
-            )
+                }
+            }
         },
         floatingActionButton = {
             if (session.isLogin && pager.currentPage == HomeTab.Feed.ordinal) {

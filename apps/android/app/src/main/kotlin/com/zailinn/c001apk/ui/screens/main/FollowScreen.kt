@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material.icons.outlined.Settings
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -40,7 +39,6 @@ import com.zailinn.c001apk.ui.common.PagedListView
 import com.zailinn.c001apk.ui.nav.LocalFollowRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.SearchRoute
-import com.zailinn.c001apk.ui.nav.SettingsRoute
 import com.zailinn.c001apk.ui.screens.ContentViewModel
 import com.zailinn.c001apk.ui.screens.appViewModel
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -107,11 +105,8 @@ fun FollowScreen(generation: Int, reselect: Int) {
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("动态") },
-                actions = {
-                    IconButton(onClick = { navigator.navigate(SettingsRoute) }) { Icon(Icons.Outlined.Settings, "设置") }
-                    IconButton(onClick = { navigator.navigate(SearchRoute()) }) { Icon(Icons.Outlined.Search, "搜索") }
-                },
+                title = { Text("关注") },
+                actions = { IconButton(onClick = { navigator.navigate(SearchRoute()) }) { Icon(Icons.Outlined.Search, "搜索") } },
             )
         },
     ) { padding ->
