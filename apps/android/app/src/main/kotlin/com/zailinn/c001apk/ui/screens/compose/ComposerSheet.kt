@@ -67,6 +67,7 @@ import coil3.compose.AsyncImage
 import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.core.net.ApiFailure
 import com.zailinn.c001apk.core.upload.UploadImage
+import com.zailinn.c001apk.ui.common.emojiBitmap
 import com.zailinn.c001apk.ui.common.emojiMap
 import com.zailinn.c001apk.ui.screens.appContainer
 import kotlinx.coroutines.CancellationException
@@ -262,13 +263,10 @@ fun ComposerSheet(
 
 @Composable
 private fun EmojiPanel(onPick: (String) -> Unit) {
-    val context = LocalContext.current
     val entries = remember { emojiMap.entries.filter { it.value.endsWith(".png") }.toList() }
     LazyVerticalGrid(GridCells.Adaptive(44.dp), Modifier.height(240.dp)) {
         items(entries, key = { it.key }) { (key, file) ->
-            val bitmap = remember(file) {
-                runCatching { context.assets.open("emojis/$file").use(BitmapFactory::decodeStream)?.asImageBitmap() }.getOrNull()
-            }
+            val bitmap = emojiBitmap(file)
             Box(Modifier.size(44.dp).clickable { onPick(key) }, contentAlignment = Alignment.Center) {
                 bitmap?.let { Image(it, key, Modifier.size(30.dp)) }
             }

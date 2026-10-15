@@ -112,7 +112,12 @@ fun PagedListView(
             verticalArrangement = Arrangement.spacedBy(spacing.dp),
         ) {
             header()
-            itemsIndexed(state.items, key = { index, it -> "${it.entityType}-${it.entityId ?: it.id}-$index" }) { index, datum ->
+            itemsIndexed(
+                state.items,
+                key = { index, it -> "${it.entityType}-${it.entityId ?: it.id}-$index" },
+                // Lets the list reuse a feed card's layout for the next feed card.
+                contentType = { _, it -> "${it.entityType}/${it.entityTemplate}" },
+            ) { index, datum ->
                 item(index, datum)
             }
             item(key = "footer") { FooterItem(state.footer, list::retry) }

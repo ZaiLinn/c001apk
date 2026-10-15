@@ -3,12 +3,10 @@ package com.zailinn.c001apk.ui.common
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.AllInclusive
 import androidx.compose.material.icons.filled.Person
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -19,7 +17,10 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import coil3.compose.SubcomposeAsyncImage
+import coil3.compose.AsyncImage
+import androidx.compose.runtime.remember
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.painter.ColorPainter
 
 private fun String.isWebUrl() = startsWith("https://") || startsWith("http://")
 
@@ -32,32 +33,23 @@ fun NetworkImage(
     isAvatar: Boolean = false,
     contentDescription: String? = null,
 ) {
+    // A plain color placeholder: no subcomposition per image while scrolling.
+    val tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
+    val placeholder = remember(tint) { ColorPainter(tint) }
     if (url.isNullOrEmpty() || !url.isWebUrl()) {
-        ImagePlaceholder(modifier, isAvatar)
+        Box(modifier.background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)), contentAlignment = Alignment.Center) {
+            if (isAvatar) Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.outline)
+        }
         return
     }
-    SubcomposeAsyncImage(
+    AsyncImage(
         model = url,
         contentDescription = contentDescription,
         contentScale = contentScale,
         modifier = modifier,
-        loading = { ImagePlaceholder(Modifier.fillMaxSize(), isAvatar) },
-        error = { ImagePlaceholder(Modifier.fillMaxSize(), isAvatar) },
+        placeholder = placeholder,
+        error = placeholder,
     )
-}
-
-@Composable
-private fun ImagePlaceholder(modifier: Modifier, isAvatar: Boolean) {
-    Box(
-        modifier.background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)),
-        contentAlignment = Alignment.Center,
-    ) {
-        Icon(
-            if (isAvatar) Icons.Default.Person else Icons.Default.AllInclusive,
-            contentDescription = null,
-            tint = MaterialTheme.colorScheme.outline,
-        )
-    }
 }
 
 @Composable
@@ -85,4 +77,5 @@ fun imageAspectRatio(url: String): Float? {
     return if (width > 0 && height > 0) width / height else null
 }
 
-fun thumbnail(url: String) = if (url.endsWith(".gif")) url else "$url.s.jpg"
+/** Server-side thumbnail, used for every list image as in the Flutter client; the viewer loads originals. */
+fun thumbnail(url: String) = if (url.endsWith(".s.jpg")) url else "$url.s.jpg"

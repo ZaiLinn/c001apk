@@ -42,7 +42,10 @@ cd apps/android
 ./gradlew :core:test                 # 协议、签名、请求头、验证码、响应、本地关注、更新检查
 ./gradlew :app:testDebugUnitTest     # Robolectric 渲染真实界面并走合成数据
 ./gradlew :app:assembleDebug         # app/build/outputs/apk/debug/app-debug.apk
+./gradlew :app:assemblePreview       # 与 release 相同的 R8 优化、不可调试，用调试密钥签名
 ```
+
+判断滑动流畅度请用 `assemblePreview` 的包：debug 包可调试且未经 R8 与基线配置优化，Compose 列表会明显卡顿。
 
 - `core` 不依赖 Android，移植并扩充了 Flutter 的网络回归测试；`token_v3.json` 复用 Flutter 的同一组合成签名向量。
 - `app` 的界面测试使用合成响应，不访问网络；加 `-Proborazzi.record=true` 会在

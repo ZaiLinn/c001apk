@@ -1,13 +1,16 @@
 package com.zailinn.c001apk.ui.common
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
@@ -16,44 +19,43 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
-import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
-import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.padding
 import com.zailinn.c001apk.ui.nav.LocalNavigator
-import kotlin.math.min
+import kotlin.math.max
+
+private val Space = 5.dp
+private val Corner = RoundedCornerShape(12.dp)
 
 /**
  * Feed images: one image keeps its proportions (bounded at 22:9), several are
- * laid out three per row with thumbnails. Tapping opens the full viewer.
+ * laid out three per row. Lists always load thumbnails; tapping opens originals.
+ * Sizes come from weights and aspect ratios, so no subcomposition is needed.
  */
 @Composable
 fun ImageGrid(pics: List<String>, modifier: Modifier = Modifier, article: Boolean = false, gallery: List<String> = pics) {
     if (pics.isEmpty()) return
     val navigator = LocalNavigator.current
-    BoxWithConstraints(modifier.fillMaxWidth()) {
-        val space = 5.dp
-        val cell = (maxWidth - space * 2) / 3
-        if (article || pics.size == 1) {
-            val url = pics.first()
-            val ratio = imageAspectRatio(url) ?: 1f
-            val width: Dp = when {
-                article -> maxWidth
-                ratio > 1.5f -> maxWidth
-                ratio >= 1f || (ratio < 1f && 1f / ratio < 1.5f) -> cell * 2 + space
-                else -> cell
-            }
-            val height = width * min(1f / ratio, 22f / 9f)
-            ImageCell(url, width, height, long = 1f / ratio > 22f / 9f) { navigator.openImages(gallery, gallery.indexOf(url).coerceAtLeast(0)) }
-        } else {
-            Column(verticalArrangement = Arrangement.spacedBy(space)) {
-                pics.chunked(3).forEachIndexed { row, items ->
-                    Row(horizontalArrangement = Arrangement.spacedBy(space)) {
-                        items.forEachIndexed { column, url ->
-                            val index = row * 3 + column
-                            ImageCell(thumbnail(url), cell, cell, gif = url.endsWith(".gif")) { navigator.openImages(gallery, gallery.indexOf(url).takeIf { it >= 0 } ?: index) }
-                        }
+    val open = { url: String, index: Int -> navigator.openImages(gallery, gallery.indexOf(url).takeIf { it >= 0 } ?: index) }
+    if (article || pics.size == 1) {
+        val url = pics.first()
+        val ratio = imageAspectRatio(url) ?: 1f
+        // Width as a share of the row: full, two cells or one cell, like the Flutter grid.
+        val share = when {
+            article || ratio > 1.5f -> 1f
+            ratio >= 1f || 1f / ratio < 1.5f -> 2f / 3f
+            else -> 1f / 3f
+        }
+        Box(modifier.fillMaxWidth()) {
+            ImageCell(url, Modifier.fillMaxWidth(share).aspectRatio(max(ratio, 9f / 22f)), long = 1f / ratio > 22f / 9f) { open(url, 0) }
+        }
+    } else {
+        Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space)) {
+            pics.chunked(3).forEachIndexed { row, items ->
+                Row(horizontalArrangement = Arrangement.spacedBy(Space)) {
+                    items.forEachIndexed { column, url ->
+                        ImageCell(url, Modifier.weight(1f).aspectRatio(1f)) { open(url, row * 3 + column) }
                     }
+                    repeat(3 - items.size) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
@@ -61,11 +63,11 @@ fun ImageGrid(pics: List<String>, modifier: Modifier = Modifier, article: Boolea
 }
 
 @Composable
-private fun ImageCell(url: String, width: Dp, height: Dp, long: Boolean = false, gif: Boolean = false, onClick: () -> Unit) {
-    Box(Modifier.size(width, height).clip(RoundedCornerShape(12.dp)).clickable(onClick = onClick)) {
-        NetworkImage(url, Modifier.size(width, height))
+private fun ImageCell(url: String, modifier: Modifier, long: Boolean = false, onClick: () -> Unit) {
+    Box(modifier.clip(Corner).clickable(onClick = onClick)) {
+        NetworkImage(thumbnail(url), Modifier.fillMaxSize())
         val label = when {
-            gif -> "动图"
+            url.endsWith(".gif") -> "GIF"
             long -> "长图"
             else -> null
         }

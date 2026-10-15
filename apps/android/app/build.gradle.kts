@@ -60,6 +60,13 @@ android {
             proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
         }
+        // Optimized like release (R8, not debuggable) but signed with the debug key,
+        // so it installs over a debug build to judge real scrolling performance.
+        create("preview") {
+            initWith(getByName("release"))
+            signingConfig = signingConfigs.getByName("debug")
+            matchingFallbacks += "release"
+        }
     }
 
     compileOptions {
@@ -90,6 +97,10 @@ kotlin {
             "androidx.compose.foundation.layout.ExperimentalLayoutApi",
         )
     }
+}
+
+composeCompiler {
+    stabilityConfigurationFiles.add(layout.projectDirectory.file("compose-stability.conf"))
 }
 
 // Never produce an unsigned or debug-signed release when credentials are missing.
