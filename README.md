@@ -6,7 +6,7 @@
 
 **轻量、简体中文的非官方酷安 Android 客户端**
 
-[![Release](https://img.shields.io/github/v/release/ZaiLinn/c001apk?style=flat-square&color=486B78&label=最新版本)](https://github.com/ZaiLinn/c001apk/releases/latest)
+[![下载](https://img.shields.io/badge/下载-Android_APK-486B78?style=flat-square&logo=android&logoColor=white)](https://github.com/ZaiLinn/c001apk/releases/latest)
 [![Android CI](https://github.com/ZaiLinn/c001apk/actions/workflows/android.yml/badge.svg?branch=main)](https://github.com/ZaiLinn/c001apk/actions/workflows/android.yml)
 ![Android](https://img.shields.io/badge/Android-7.0%2B-6E8B74?style=flat-square&logo=android&logoColor=white)
 [![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-607D8B?style=flat-square)](LICENSE)
