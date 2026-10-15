@@ -290,7 +290,7 @@ class CoolapkRepository(
                 // Cursor ids come from every known item, including blocked ones, so a
                 // fully blocked page still moves the next request forward.
                 val known = ContentFilter()
-                val shown = items.filter { rules.accepts(it, includeConfigCard) }.map(rules::mark)
+                val shown = rules.markAll(items.filter { rules.accepts(it, includeConfigCard) })
                 LoadResult.Success(DatumPage(
                     shown,
                     rawFirstId = items.firstOrNull { known.accepts(it, includeConfigCard) && it.id != null }?.id,

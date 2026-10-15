@@ -2,7 +2,6 @@ package com.zailinn.c001apk.data
 
 import com.zailinn.c001apk.core.model.ContentFilter
 import com.zailinn.c001apk.core.model.Datum
-import com.zailinn.c001apk.core.model.SensitiveCategory
 import com.zailinn.c001apk.core.model.SensitiveMatcher
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
@@ -67,9 +66,7 @@ class LocalContent(private val store: LocalStore) {
         if (!settings.sensitiveFold) return null
         val key = settings.sensitiveCategories to sensitiveWords.value
         if (key != matcherKey) {
-            val enabled = settings.sensitiveCategories
-            val categories = SensitiveCategory.builtIn.filter { enabled == null || it.id in enabled }
-            matcher = SensitiveMatcher(categories, sensitiveWords.value).takeUnless { it.isEmpty }
+            matcher = SensitiveMatcher(settings.enabledCategories, sensitiveWords.value).takeUnless { it.isEmpty }
             matcherKey = key
         }
         return matcher
@@ -85,6 +82,19 @@ class LocalContent(private val store: LocalStore) {
 
     suspend fun removeSensitiveWord(word: String) =
         store.updateJson(SENSITIVE_WORDS, strings, emptyList()) { it.filter { v -> v != word } }
+
+    /** The user's own example sentences for semantic folding. */
+    val semanticPhrases: StateFlow<List<String>> = store.state { store.readJson(it, SEMANTIC_PHRASES, strings, emptyList()) }
+
+    suspend fun addSemanticPhrase(phrase: String): Boolean {
+        val value = phrase.trim()
+        if (value.isEmpty() || value in semanticPhrases.value) return false
+        store.updateJson(SEMANTIC_PHRASES, strings, emptyList()) { listOf(value) + it.filter { v -> v != value } }
+        return true
+    }
+
+    suspend fun removeSemanticPhrase(phrase: String) =
+        store.updateJson(SEMANTIC_PHRASES, strings, emptyList()) { it.filter { v -> v != phrase } }
 
     suspend fun addHistory(feed: Datum) = store.updateJson(HISTORY, records, emptyList()) { list ->
         val record = FeedRecord.of(feed)
@@ -149,6 +159,7 @@ class LocalContent(private val store: LocalStore) {
         private const val SEARCH_HISTORY = "searchHistory"
         private const val LOCAL_FOLLOWS = "localFollowUsers"
         private const val SENSITIVE_WORDS = "sensitiveWords"
+        private const val SEMANTIC_PHRASES = "semanticPhrases"
         private const val MAX_HISTORY = 1000
     }
 }

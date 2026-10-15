@@ -29,6 +29,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zailinn.c001apk.core.model.SensitiveCategory
+import com.zailinn.c001apk.core.semantic.SemanticAnchors
 import com.zailinn.c001apk.data.SettingKeys
 import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.common.SectionTitle
@@ -73,6 +74,8 @@ fun SensitiveRulesScreen() {
                 CategoryItem(category, category.id in enabled) { toggle(category.id, it) }
             }
             item {
+                HorizontalDivider()
+                SemanticSection()
                 HorizontalDivider()
                 SectionTitle("自定义屏蔽词")
                 ListItem(
@@ -124,6 +127,7 @@ private fun CategoryItem(category: SensitiveCategory, checked: Boolean, onChange
         val lines = buildList {
             if (category.tags.isNotEmpty()) add("话题：" + category.tags.joinToString("  ") { "#$it#" })
             if (category.keywords.isNotEmpty()) add("关键词：" + category.keywords.joinToString("、"))
+            SemanticAnchors.byCategory[category.id]?.let { add("语义例句：" + it.joinToString("、")) }
             if (category.patterns.isNotEmpty()) add("句式（括号内任选一个）：\n" + category.patterns.joinToString("\n") { it.replace("?", "").replace("|", "/") })
         }
         Text(

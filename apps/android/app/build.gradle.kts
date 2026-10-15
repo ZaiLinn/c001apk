@@ -1,4 +1,6 @@
 import java.util.Properties
+import java.util.zip.ZipFile
+import javax.tools.ToolProvider
 
 plugins {
     alias(libs.plugins.android.application)
@@ -116,7 +118,68 @@ tasks.matching { it.name == "preReleaseBuild" }.configureEach {
     }
 }
 
+// Semantic folding: ONNX Runtime's Java API and the OrtRuntime adapter are
+// dexed on their own into the semantic-runtime.jar asset. Keeping them out of
+// the app dex means R8 never merges their code into app classes, and the APK
+// carries no native libraries: those are downloaded on demand in settings.
+val semanticRuntimeAar = configurations.create("semanticRuntimeAar") {
+    isTransitive = false
+    isCanBeConsumed = false
+}
+
+abstract class SemanticRuntimeTask : DefaultTask() {
+    @get:InputFiles @get:PathSensitive(PathSensitivity.NONE)
+    abstract val aar: ConfigurableFileCollection
+
+    @get:InputDirectory @get:PathSensitive(PathSensitivity.RELATIVE)
+    abstract val adapterSources: DirectoryProperty
+
+    @get:CompileClasspath
+    abstract val bootClasspath: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val outputDir: DirectoryProperty
+
+    @TaskAction
+    fun run() {
+        val work = temporaryDir.apply { deleteRecursively(); mkdirs() }
+        val classesJar = File(work, "ort-classes.jar")
+        ZipFile(aar.singleFile).use { zip ->
+            zip.getInputStream(zip.getEntry("classes.jar")).use { input -> classesJar.outputStream().use(input::copyTo) }
+        }
+        val adapterClasses = File(work, "adapter").apply { mkdirs() }
+        val sources = adapterSources.get().asFileTree.files.filter { it.extension == "java" }.map { it.path }
+        val javac = requireNotNull(ToolProvider.getSystemJavaCompiler()) { "A JDK is required to build the semantic runtime" }
+        val args = listOf("--release", "11", "-classpath", classesJar.path, "-d", adapterClasses.path) + sources
+        check(javac.run(null, null, null, *args.toTypedArray()) == 0) { "Compiling the semantic adapter failed" }
+        val out = outputDir.get().asFile.apply { deleteRecursively(); mkdirs() }
+        com.android.tools.r8.D8.run(
+            com.android.tools.r8.D8Command.builder()
+                .addProgramFiles(classesJar.toPath())
+                .addProgramFiles(adapterClasses.walkTopDown().filter { it.extension == "class" }.map { it.toPath() }.toList())
+                .addLibraryFiles(bootClasspath.files.map { it.toPath() })
+                .setMinApiLevel(24)
+                .setMode(com.android.tools.r8.CompilationMode.RELEASE)
+                .setOutput(File(out, "semantic-runtime.jar").toPath(), com.android.tools.r8.OutputMode.DexIndexed)
+                .build(),
+        )
+    }
+}
+
+val semanticRuntime = tasks.register<SemanticRuntimeTask>("semanticRuntimeDex") {
+    aar.from(semanticRuntimeAar)
+    adapterSources.set(layout.projectDirectory.dir("src/semantic/java"))
+    bootClasspath.from(androidComponents.sdkComponents.bootClasspath)
+}
+
+androidComponents {
+    onVariants { variant ->
+        variant.sources.assets?.addGeneratedSourceDirectory(semanticRuntime, SemanticRuntimeTask::outputDir)
+    }
+}
+
 dependencies {
+    semanticRuntimeAar(variantOf(libs.onnxruntime.android) { artifactType("aar") })
     implementation(project(":core"))
     implementation(libs.kotlinx.coroutines.android)
 

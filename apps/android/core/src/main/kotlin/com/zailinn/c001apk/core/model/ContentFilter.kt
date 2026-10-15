@@ -1,6 +1,7 @@
 package com.zailinn.c001apk.core.model
 
 import com.zailinn.c001apk.core.protocol.Constants
+import com.zailinn.c001apk.core.semantic.SemanticMatcher
 
 /** Local blocking rules applied to every list response. */
 data class ContentFilter(
@@ -8,6 +9,8 @@ data class ContentFilter(
     val blockedTopics: List<String> = emptyList(),
     /** Folds matching feeds and replies instead of removing them; null when off. */
     val sensitive: SensitiveMatcher? = null,
+    /** Embedding-based folding for what the word list misses; null when off or not loaded. */
+    val semantic: SemanticMatcher? = null,
 ) {
     fun isTopicBlocked(text: String): Boolean = blockedTopics.any { it.isNotEmpty() && text.contains(it) }
 
@@ -26,8 +29,21 @@ data class ContentFilter(
     /** Marks an accepted item that should be shown folded. */
     fun mark(item: Datum): Datum {
         val reason = sensitive?.match(item) ?: return item
-        return item.with(FOLD_TITLE, reason.title).with(FOLD_HIT, reason.hit)
+        return item.marked(reason)
     }
+
+    /** [mark] for a page, then semantic matching for what the words missed. */
+    fun markAll(items: List<Datum>): List<Datum> {
+        val marked = items.map(::mark)
+        val semantic = semantic ?: return marked
+        val rest = marked.indices.filter { marked[it].foldReason == null }
+        // The model is optional: if it fails, the page still shows.
+        val reasons = runCatching { semantic.matchAll(rest.map { marked[it] }) }.getOrElse { emptyMap() }
+        if (reasons.isEmpty()) return marked
+        return marked.toMutableList().apply { reasons.forEach { (n, reason) -> this[rest[n]] = this[rest[n]].marked(reason) } }
+    }
+
+    private fun Datum.marked(reason: FoldReason) = with(FOLD_TITLE, reason.title).with(FOLD_HIT, reason.hit)
 
     /** Hide replies from blocked users inside a reply's nested rows. */
     fun filterReplyRows(item: Datum): Datum =

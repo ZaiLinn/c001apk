@@ -6,8 +6,10 @@ import androidx.datastore.preferences.core.floatPreferencesKey
 import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
+import com.zailinn.c001apk.core.model.SensitiveCategory
 import com.zailinn.c001apk.core.protocol.Constants
 import com.zailinn.c001apk.core.protocol.ProtocolParams
+import com.zailinn.c001apk.core.semantic.SemanticAnchors
 import com.zailinn.c001apk.core.update.UpdatePreferenceStore
 import kotlinx.coroutines.flow.StateFlow
 
@@ -26,9 +28,16 @@ data class AppSettings(
     val sensitiveFold: Boolean = false,
     /** Enabled built-in categories; null means all of them. */
     val sensitiveCategories: Set<String>? = null,
+    /** Also fold by meaning with the downloaded model. */
+    val semanticFold: Boolean = false,
+    val semanticThreshold: Float = SemanticAnchors.DEFAULT_THRESHOLD,
     val installTime: String = "",
     val protocol: ProtocolParams = ProtocolParams(),
 )
+
+/** Built-in sensitive categories the user left switched on. */
+val AppSettings.enabledCategories: List<SensitiveCategory>
+    get() = SensitiveCategory.builtIn.filter { sensitiveCategories == null || it.id in sensitiveCategories }
 
 object SettingKeys {
     val dynamicColor = booleanPreferencesKey("useMaterial")
@@ -42,6 +51,8 @@ object SettingKeys {
     val secretFollow = booleanPreferencesKey("secretFollowEnabled")
     val sensitiveFold = booleanPreferencesKey("sensitiveFold")
     val sensitiveCategories = stringPreferencesKey("sensitiveFoldCategories")
+    val semanticFold = booleanPreferencesKey("semanticFold")
+    val semanticThreshold = floatPreferencesKey("semanticThreshold")
     val installTime = stringPreferencesKey("installTime")
 
     val versionName = stringPreferencesKey("versionName")
@@ -101,6 +112,8 @@ class SettingsRepository(private val store: LocalStore) : UpdatePreferenceStore 
         secretFollow = p[SettingKeys.secretFollow] ?: false,
         sensitiveFold = p[SettingKeys.sensitiveFold] ?: false,
         sensitiveCategories = p[SettingKeys.sensitiveCategories]?.split(',')?.filter { it.isNotEmpty() }?.toSet(),
+        semanticFold = p[SettingKeys.semanticFold] ?: false,
+        semanticThreshold = p[SettingKeys.semanticThreshold] ?: SemanticAnchors.DEFAULT_THRESHOLD,
         installTime = p[SettingKeys.installTime].orEmpty(),
         protocol = ProtocolParams(
             versionName = p[SettingKeys.versionName] ?: Constants.VERSION_NAME,
