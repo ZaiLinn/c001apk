@@ -1,0 +1,147 @@
+name: Android
+
+on:
+  push:
+    branches: [main]
+    paths-ignore: ['**.md', 'docs/**']
+  pull_request:
+    paths-ignore: ['**.md', 'docs/**']
+  workflow_dispatch:
+    inputs:
+      release:
+        description: 'Build the signed release APK with the official certificate (requires Secrets)'
+        type: boolean
+        default: false
+  # Called by release.yml to build the APK it publishes.
+  workflow_call:
+    inputs:
+      release:
+        type: boolean
+        default: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: android-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
+  cancel-in-progress: true
+
+jobs:
+  build:
+    name: Tests and debug APK
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            **/*.gradle.kts
+            gradle.properties
+            gradle/libs.versions.toml
+            gradle/wrapper/gradle-wrapper.properties
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          cmdline-tools-version: '16111833'
+          log-accepted-android-sdk-licenses: false
+          packages: 'platforms;android-37.0 build-tools;37.0.0'
+      - name: Protocol core and UI tests
+        run: ./gradlew --no-daemon :core:test :app:testDebugUnitTest
+      - name: Debug APK
+        run: ./gradlew --no-daemon :app:assembleDebug
+      - name: Name artifact
+        run: |
+          version=$(sed -n 's/^c001apk.versionName=//p' gradle.properties | tr -d '\r')
+          mkdir -p build/distribution
+          cp app/build/outputs/apk/debug/app-debug.apk "build/distribution/c001apk-$version-debug.apk"
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: c001apk-debug
+          path: build/distribution/*.apk
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        if: failure()
+        with:
+          name: android-test-reports
+          path: |
+            core/build/reports/tests
+            app/build/reports/tests
+          retention-days: 7
+
+  release:
+    name: Signed release APK
+    if: ${{ inputs.release }}
+    needs: build
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    env:
+      KEY_ALIAS: 'c001apk'
+      EXPECTED_CERT_SHA256: '7529ACEF89DD527EE11CB33F45D25827F04AA7057FB61798E24BE645FCC63408'
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: actions/setup-java@de7274f081f381c8f8158605e0321c36c376e2e6 # v6
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: gradle
+          cache-dependency-path: |
+            **/*.gradle.kts
+            gradle.properties
+            gradle/libs.versions.toml
+            gradle/wrapper/gradle-wrapper.properties
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+        with:
+          cmdline-tools-version: '16111833'
+          log-accepted-android-sdk-licenses: false
+          packages: 'platforms;android-37.0 build-tools;37.0.0'
+      - name: Restore and verify release keystore
+        env:
+          KEYSTORE: ${{ runner.temp }}/c001apk-signing/release.jks
+          ANDROID_KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+          REVIA_KS_PASS: ${{ secrets.REVIA_KS_PASS }}
+        run: |
+          test -n "$ANDROID_KEYSTORE_BASE64" || { echo 'Missing ANDROID_KEYSTORE_BASE64 Secret'; exit 1; }
+          test -n "$REVIA_KS_PASS" || { echo 'Missing REVIA_KS_PASS Secret'; exit 1; }
+          umask 077
+          mkdir -p "$(dirname "$KEYSTORE")"
+          printf 'KEYSTORE=%s\n' "$KEYSTORE" >> "$GITHUB_ENV"
+          printf '%s' "$ANDROID_KEYSTORE_BASE64" | base64 --decode > "$KEYSTORE"
+          keytool -exportcert -keystore "$KEYSTORE" -alias "$KEY_ALIAS" -storepass:env REVIA_KS_PASS -file "$RUNNER_TEMP/c001apk-signing/cert.der"
+          actual=$(sha256sum "$RUNNER_TEMP/c001apk-signing/cert.der" | cut -d ' ' -f 1 | tr '[:lower:]' '[:upper:]')
+          test "$actual" = "$EXPECTED_CERT_SHA256" || { echo 'Unexpected release signing certificate'; exit 1; }
+      - name: Build signed APK
+        env:
+          REVIA_KS_PASS: ${{ secrets.REVIA_KS_PASS }}
+        run: ./gradlew --no-daemon :app:assembleRelease
+      - name: Verify signature and package
+        run: |
+          version=$(sed -n 's/^c001apk.versionName=//p' gradle.properties | tr -d '\r')
+          apk=app/build/outputs/apk/release/app-release.apk
+          report=$("$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$apk")
+          actual=$(printf '%s\n' "$report" | sed -n 's/^.*[Ss]igner.*certificate SHA-256 digest: //p' | head -n 1 | tr '[:lower:]' '[:upper:]')
+          test "$actual" = "$EXPECTED_CERT_SHA256" || { echo 'Unexpected APK certificate'; exit 1; }
+          mkdir -p build/distribution
+          # The in-app updater looks for c001apk-<version>-android-universal.apk.
+          cp "$apk" "build/distribution/c001apk-$version-android-universal.apk"
+          (cd build/distribution && sha256sum ./*.apk > SHA256SUMS.txt)
+      - name: Remove temporary signing material
+        if: always()
+        run: |
+          rm -f "$RUNNER_TEMP/c001apk-signing/release.jks" "$RUNNER_TEMP/c001apk-signing/cert.der"
+          rmdir "$RUNNER_TEMP/c001apk-signing" 2>/dev/null || true
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
+        with:
+          name: c001apk-release
+          path: |
+            build/distribution/*.apk
+            build/distribution/SHA256SUMS.txt
+          if-no-files-found: error
+          retention-days: 14
