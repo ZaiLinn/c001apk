@@ -4,95 +4,68 @@
 
 # c001apk
 
-**轻量、简体中文的非官方酷安客户端**
+**轻量、简体中文的非官方酷安 Android 客户端**
 
-[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-607D8B?style=flat-square)](LICENSE)
-[![Flutter](https://img.shields.io/badge/Flutter-3.24.5-02569B?style=flat-square&logo=flutter&logoColor=white)](docs/DEVELOPMENT.md)
-[![Build](https://github.com/ZaiLinn/c001apk/actions/workflows/build.yml/badge.svg?branch=main)](https://github.com/ZaiLinn/c001apk/actions/workflows/build.yml)
 [![Android](https://github.com/ZaiLinn/c001apk/actions/workflows/android.yml/badge.svg?branch=main)](https://github.com/ZaiLinn/c001apk/actions/workflows/android.yml)
-![Platforms](https://img.shields.io/badge/平台-Android%20%7C%20Windows-486B78?style=flat-square)
-![Status](https://img.shields.io/badge/状态-持续维护中-6E8B74?style=flat-square)
+[![Release](https://img.shields.io/github/v/release/ZaiLinn/c001apk?style=flat-square&color=486B78&label=Release)](https://github.com/ZaiLinn/c001apk/releases/latest)
+[![License: AGPL v3](https://img.shields.io/badge/License-AGPL_v3-607D8B?style=flat-square)](LICENSE)
+![Kotlin](https://img.shields.io/badge/Kotlin-Jetpack_Compose-6E8B74?style=flat-square&logo=kotlin&logoColor=white)
+![Android](https://img.shields.io/badge/Android-7.0+-6E8B74?style=flat-square&logo=android&logoColor=white)
 
-[下载](https://github.com/ZaiLinn/c001apk/releases) · [反馈问题](https://github.com/ZaiLinn/c001apk/issues) · [参与开发](docs/DEVELOPMENT.md)
+[下载](https://github.com/ZaiLinn/c001apk/releases/latest) · [反馈问题](https://github.com/ZaiLinn/c001apk/issues) · [开发指南](docs/DEVELOPMENT.md)
 
 </div>
 
 ## 关于
 
-基于 [c001apk-flutter](https://github.com/bggRGjQaUbCoE/c001apk-flutter) 继续维护，修复 API、完善中文体验，让日常浏览保持轻巧。
+c001apk 是用 Kotlin 与 Jetpack Compose 原生编写的酷安第三方客户端，界面采用 Material 3 Expressive，
+安装包约 4 MB。项目源自 [c001apk-flutter](https://github.com/bggRGjQaUbCoE/c001apk-flutter)，
+2.0 起改为原生重写，只提供 Android 版本。
 
-<table align="center">
-  <thead>
-    <tr>
-      <th align="center">浏览内容</th>
-      <th align="center">找到兴趣</th>
-      <th align="center">按你的习惯</th>
-    </tr>
-  </thead>
-  <tbody>
-    <tr>
-      <td align="center">动态、文章、评论、用户空间</td>
-      <td align="center">动态、应用、用户、话题与内容搜索</td>
-      <td align="center">明暗主题、字体大小</td>
-    </tr>
-    <tr>
-      <td align="center">图文详情与图片查看</td>
-      <td align="center">应用、话题及产品详情</td>
-      <td align="center">本地收藏与屏蔽、浏览历史</td>
-    </tr>
-  </tbody>
-</table>
+## 功能
 
-## 界面预览
+| 浏览 | 账号 | 个性化 |
+| --- | --- | --- |
+| 首页动态、热门、话题、数码、酷图 | 账号密码与网页登录、人机验证 | 动态取色或固定配色、深色模式 |
+| 动态、文章、评论与楼中楼 | 多账号保存与一键切换、游客模式 | 字体大小、表情显示 |
+| 用户空间、话题与产品页、应用详情 | 点赞、回复、发布动态与图片上传 | 浏览历史、本地收藏 |
+| 动态、应用、用户与话题搜索 | 私信、通知、关注与粉丝列表 | 用户与话题黑名单 |
+| 大图查看、缩放与保存 | 本地关注与悄悄关注（仅存本机） | 已安装应用的酷安更新检查 |
 
-<p align="center">
-  <img src="docs/media/screenshots/android-home.avif" width="31%" alt="Android 首页：动态列表与底部导航">
-  <img src="docs/media/screenshots/android-article.avif" width="31%" alt="Android 图文详情：文章封面与正文">
-  <img src="docs/media/screenshots/android-settings.avif" width="31%" alt="Android 中文设置：字体、历史记录与缓存管理">
-</p>
-<p align="center"><sub>Android · 首页 / 图文详情 / 中文设置</sub></p>
+### 敏感话题折叠
 
-<p align="center">
-  <img src="docs/media/screenshots/windows-home.avif" width="96%" alt="Windows 桌面端首页：侧边导航与宽屏内容区域">
-</p>
-<p align="center"><sub>Windows · 桌面端首页</sub></p>
+在 **设置 → 浏览与隐私 → 折叠敏感话题** 打开后，命中的动态和回复会折叠成一行，
+例如“已折叠 · 晒对象 · 晒女友”，点击即可展开。所有判断都在本机完成。
 
-以上为当前 Flutter 调试版的真实截图，界面随主题设置变化。
+- **关键词**：内置晒对象、相亲恋爱、性压抑/擦边、两性对立四类词表，可逐类开关；
+  也可以添加自己的屏蔽词，写成 `#话题#` 时按话题匹配，例如 `#相亲#`、`#酷安夜话#`。
+- **语义屏蔽（可选）**：在折叠规则页按需下载约 34 MB 的中文语义模型
+  （bge-small-zh 与 ONNX Runtime）。它按意思判断，能抓到换了说法、不含关键词的帖子。
+  模型不随安装包分发，不用时可以删除；只分析文字，不看图片，内容不会上传。
+  页面提供阈值调节和“试一试”，也可以用一句话描述想折叠的内容。
 
-## 下载与进度
+## 下载安装
 
-正式安装包可从 [Releases](https://github.com/ZaiLinn/c001apk/releases) 获取，也可以参照 [开发指南](docs/DEVELOPMENT.md) 自行构建。
+从 [Releases](https://github.com/ZaiLinn/c001apk/releases/latest) 下载
+`c001apk-<版本>-android-universal.apk` 安装。支持 Android 7.0 及以上，所有 CPU 架构共用这一个安装包。
+应用会自动检查 GitHub 上的新版本，可在 **设置 → 存储与更新** 关闭。
 
-云端构建包可从 [Actions](https://github.com/ZaiLinn/c001apk/actions/workflows/build.yml) 的 Artifacts 下载，平台、签名与手动构建方式见 [云端构建指南](docs/CI.md)。
-
-- [x] 更新公共 API 请求协议、签名与错误处理。
-- [x] 完成现有 Flutter 界面的一轮简体中文汉化。
-- [x] 恢复主要游客浏览流程，为部分受限动态、文章提供公开详情回退。
-- [x] 基本修复账号登录与状态管理，补齐验证码交互。
-- [x] 本地关注与悄悄关注、多账号管理及游客模式切换。
-- [x] 主导航与分类设置调整，新增 c001apk 自身更新检测。
-- [ ] 继续完善验证码放行与部分账号操作。
-- [ ] Android 迁移到 Kotlin / Jetpack Compose，采用 Material 3 Expressive（预览版已在 `apps/android`，见下文）。
-- [ ] 完善 Flutter 桌面端随窗口尺寸变化的自适应布局与图片保存。
-
-### Kotlin / Compose 预览版
-
-`apps/android` 是原生重写的 Android 客户端（Kotlin、Jetpack Compose、Material 3 Expressive），
-已覆盖浏览、详情与回复、搜索、用户与话题、登录与多账号、人机验证、发布与图片上传、私信、
-本地关注、历史收藏与黑名单、设置等 Flutter 版功能，并新增本地“敏感话题折叠”
-（设置 → 浏览与隐私：晒对象、相亲恋爱、性压抑/擦边、两性对立等分类与自定义屏蔽词，命中后折叠为一行，点击展开）。预览期间包名为 `com.zailinn.c001apk.compose`，
-可与 Flutter 版同时安装，数据互不迁移；功能对齐并完成实机验收后再接替 Flutter Android 包。
-云端构建包见 [Android workflow](https://github.com/ZaiLinn/c001apk/actions/workflows/android.yml)。
-
-当前重点维护 **Android 与 Windows**，正式发布包仍为 Flutter 构建。Android 包名（applicationId）为 `com.zailinn.c001apk`，代码 namespace 仍为 `app.awavenue.c001apk`；Linux 已通过云端 release 构建，iOS `arm64` 未签名 IPA 已随 [1.2.0-release](https://github.com/ZaiLinn/c001apk/releases/tag/1.2.0-release) 提供，安装前需自行签名。Linux / iOS 运行体验仍待验收。新包与旧包独立安装，登录及本地数据不会自动迁移。
+从 1.x（Flutter 版）升级时可直接覆盖安装。2.0 不读取旧版数据，需要重新登录，设置、历史和黑名单也需要重新配置。
 
 > [!NOTE]
-> 部分内容仍受登录、验证码和服务端接口限制，验证码放行与部分账号操作仍需继续完善。Windows 暂不支持应用内直接保存图片，可在浏览器中打开后保存。
+> 部分内容仍受登录、验证码和服务端风控限制。完成人机验证不保证服务端解除其他限制。
 
-## 参与与致谢
+## 参与开发
 
-欢迎提交 [Issue](https://github.com/ZaiLinn/c001apk/issues) 或 Pull Request。反馈请附平台、版本、复现步骤与脱敏错误信息；开发环境、工程目录及检查命令见 [开发指南](docs/DEVELOPMENT.md)。
+欢迎提交 [Issue](https://github.com/ZaiLinn/c001apk/issues) 或 Pull Request。反馈问题请附上应用版本、
+系统版本、复现步骤与脱敏后的错误信息，不要附带密码、Cookie、Token 或私信内容。
 
-感谢 [bggRGjQaUbCoE/c001apk-flutter](https://github.com/bggRGjQaUbCoE/c001apk-flutter) 的开源，以及 [daimiaopeng/coolapk-desktop](https://github.com/daimiaopeng/coolapk-desktop) 的协议调研参考。
+构建、测试与发版流程见 [开发指南](docs/DEVELOPMENT.md)。
 
-本项目沿用 [GNU AGPL v3](LICENSE)，第三方来源与 MIT 许可见 [第三方声明](docs/THIRD_PARTY_NOTICES.md)。本项目与酷安官方无隶属关系，酷安名称、商标及服务内容归相应权利人所有。
+## 致谢与许可
+
+感谢 [bggRGjQaUbCoE/c001apk-flutter](https://github.com/bggRGjQaUbCoE/c001apk-flutter) 的开源，
+以及 [daimiaopeng/coolapk-desktop](https://github.com/daimiaopeng/coolapk-desktop) 的协议调研参考。
+
+本项目沿用 [GNU AGPL v3](LICENSE)，第三方来源与许可见 [第三方声明](docs/THIRD_PARTY_NOTICES.md)。
+本项目与酷安官方无隶属关系，酷安名称、商标及服务内容归相应权利人所有。

@@ -1,23 +1,14 @@
 name: Release
 
-# Push a tag such as 1.3.0-release or v1.3.0 to build every platform and publish
-# a GitHub Release. The tag must match the version name in apps/flutter/pubspec.yaml.
+# Push a tag such as 2.0.0-release or v2.0.0 to build the signed APK and publish
+# a GitHub Release. The tag must match c001apk.versionName in gradle.properties.
 on:
   push:
     tags:
       - '[0-9]+.[0-9]+.[0-9]+-release'
       - 'v[0-9]+.[0-9]+.[0-9]+'
+  # Run from a tag (select it under "Use workflow from") to retry a failed release.
   workflow_dispatch:
-    # Run from a tag (select it under "Use workflow from") to retry a failed release.
-    inputs:
-      ios:
-        description: 'Also attach an unsigned iOS arm64 IPA (requires your own signing)'
-        type: boolean
-        default: false
-      compose_preview:
-        description: 'Also attach the Kotlin / Compose preview APK (installs next to the Flutter app)'
-        type: boolean
-        default: false
 
 permissions:
   contents: read
@@ -47,27 +38,17 @@ jobs:
           test "$REF_TYPE" = tag || { echo 'Run this workflow from a release tag'; exit 1; }
           tag_version=$(printf '%s' "$TAG" | sed -E 's/^v//; s/-release$//')
           echo "$tag_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "Unsupported tag: $TAG"; exit 1; }
-          app_version=$(sed -n 's/^version: //p' apps/flutter/pubspec.yaml | tr -d '\r' | cut -d '+' -f 1)
+          app_version=$(sed -n 's/^c001apk.versionName=//p' gradle.properties | tr -d '\r')
           test "$tag_version" = "$app_version" || {
-            echo "Tag $TAG does not match pubspec version $app_version"; exit 1; }
+            echo "Tag $TAG does not match c001apk.versionName $app_version"; exit 1; }
           if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $TAG already exists; delete it first to publish again"; exit 1
           fi
           printf 'tag=%s\nversion=%s\n' "$TAG" "$tag_version" >> "$GITHUB_OUTPUT"
 
-  flutter:
-    name: Flutter builds
+  android:
+    name: Android
     needs: verify
-    uses: ./.github/workflows/build.yml
-    with:
-      android_release: true
-      ios: ${{ inputs.ios == true }}
-    secrets: inherit
-
-  compose:
-    name: Compose preview
-    needs: verify
-    if: ${{ inputs.compose_preview == true }}
     uses: ./.github/workflows/android.yml
     with:
       release: true
@@ -75,8 +56,7 @@ jobs:
 
   publish:
     name: Publish GitHub Release
-    needs: [verify, flutter, compose]
-    if: ${{ !cancelled() && needs.flutter.result == 'success' && (needs.compose.result == 'success' || needs.compose.result == 'skipped') }}
+    needs: [verify, android]
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     permissions:
@@ -84,34 +64,20 @@ jobs:
     steps:
       - uses: actions/download-artifact@37930b1c2abaa49bbe596cd826c3c89aef350131 # v7
         with:
-          pattern: c001apk-*
-          path: artifacts
-      - name: Collect assets
+          name: c001apk-release
+          path: release
+      - name: Check assets
         run: |
-          mkdir -p release
-          # Debug builds never reach a release. Drop the +build suffix: GitHub may rename
-          # '+' in asset names, and the in-app updater matches c001apk-<version>-<platform>.
-          find artifacts -path '*debug*' -prune -o -type f \
-            \( -name '*.apk' -o -name '*.zip' -o -name '*.tar.gz' -o -name '*.ipa' \) -print \
-            | while read -r file; do cp "$file" "release/$(basename "$file" | sed -E 's/\+[0-9]+//')"; done
-          ls release/*-android-arm64-v8a.apk release/*-windows-x86_64.zip release/*-linux-x86_64.tar.gz >/dev/null
-          (cd release && sha256sum ./* > SHA256SUMS.txt && cat SHA256SUMS.txt)
+          ls release/c001apk-*-android-universal.apk >/dev/null
+          cat release/SHA256SUMS.txt
       - name: Write release notes
-        env:
-          VERSION: ${{ needs.verify.outputs.version }}
         run: |
           {
             echo "## 下载"
             echo
-            echo "- Android：按设备选择 \`android-arm64-v8a\`（大多数手机）、\`armeabi-v7a\` 或 \`x86_64\` 的 APK。"
-            echo "- Windows：解压 \`windows-x86_64.zip\` 后运行 \`c001apk.exe\`。"
-            echo "- Linux：解压 \`linux-x86_64.tar.gz\` 后运行 \`c001apk\`。"
-            if ls release/*.ipa >/dev/null 2>&1; then
-              echo "- iOS：\`ios-arm64-unsigned.ipa\` 未签名，安装前需自行签名。"
-            fi
-            if ls release/c001apk-compose-*.apk >/dev/null 2>&1; then
-              echo "- Kotlin / Compose 预览版：\`c001apk-compose-*.apk\`，包名不同，可与正式版同时安装，数据不互通。"
-            fi
+            echo "下载 \`c001apk-*-android-universal.apk\` 安装即可，适用于所有 Android 7.0 及以上设备。"
+            echo
+            echo "从 1.x（Flutter 版）升级：可直接覆盖安装；新版本不读取旧版数据，需要重新登录，设置、历史和黑名单需重新配置。"
             echo
             echo "校验值见 \`SHA256SUMS.txt\`。"
           } > notes.md

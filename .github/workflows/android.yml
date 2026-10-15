@@ -1,24 +1,18 @@
-name: Android (Kotlin / Compose)
+name: Android
 
 on:
   push:
     branches: [main]
-    paths:
-      - 'apps/android/**'
-      - 'apps/flutter/pubspec.yaml'
-      - '.github/workflows/android.yml'
+    paths-ignore: ['**.md', 'docs/**']
   pull_request:
-    paths:
-      - 'apps/android/**'
-      - 'apps/flutter/pubspec.yaml'
-      - '.github/workflows/android.yml'
+    paths-ignore: ['**.md', 'docs/**']
   workflow_dispatch:
     inputs:
       release:
         description: 'Build the signed release APK with the official certificate (requires Secrets)'
         type: boolean
         default: false
-  # Called by release.yml to attach the Compose preview APK.
+  # Called by release.yml to build the APK it publishes.
   workflow_call:
     inputs:
       release:
@@ -31,10 +25,6 @@ permissions:
 concurrency:
   group: android-${{ github.workflow }}-${{ github.ref }}-${{ github.event_name }}
   cancel-in-progress: true
-
-defaults:
-  run:
-    working-directory: apps/android
 
 jobs:
   build:
@@ -51,9 +41,10 @@ jobs:
           java-version: '21'
           cache: gradle
           cache-dependency-path: |
-            apps/android/**/*.gradle.kts
-            apps/android/gradle/libs.versions.toml
-            apps/android/gradle/wrapper/gradle-wrapper.properties
+            **/*.gradle.kts
+            gradle.properties
+            gradle/libs.versions.toml
+            gradle/wrapper/gradle-wrapper.properties
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           cmdline-tools-version: '16111833'
@@ -65,13 +56,13 @@ jobs:
         run: ./gradlew --no-daemon :app:assembleDebug
       - name: Name artifact
         run: |
-          version=$(sed -n 's/^version: //p' ../flutter/pubspec.yaml | tr -d '\r')
+          version=$(sed -n 's/^c001apk.versionName=//p' gradle.properties | tr -d '\r')
           mkdir -p build/distribution
-          cp app/build/outputs/apk/debug/app-debug.apk "build/distribution/c001apk-compose-$version-debug.apk"
+          cp app/build/outputs/apk/debug/app-debug.apk "build/distribution/c001apk-$version-debug.apk"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: c001apk-compose-debug
-          path: apps/android/build/distribution/*.apk
+          name: c001apk-debug
+          path: build/distribution/*.apk
           if-no-files-found: error
           retention-days: 7
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
@@ -79,8 +70,8 @@ jobs:
         with:
           name: android-test-reports
           path: |
-            apps/android/core/build/reports/tests
-            apps/android/app/build/reports/tests
+            core/build/reports/tests
+            app/build/reports/tests
           retention-days: 7
 
   release:
@@ -102,9 +93,10 @@ jobs:
           java-version: '21'
           cache: gradle
           cache-dependency-path: |
-            apps/android/**/*.gradle.kts
-            apps/android/gradle/libs.versions.toml
-            apps/android/gradle/wrapper/gradle-wrapper.properties
+            **/*.gradle.kts
+            gradle.properties
+            gradle/libs.versions.toml
+            gradle/wrapper/gradle-wrapper.properties
       - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
         with:
           cmdline-tools-version: '16111833'
@@ -131,13 +123,14 @@ jobs:
         run: ./gradlew --no-daemon :app:assembleRelease
       - name: Verify signature and package
         run: |
-          version=$(sed -n 's/^version: //p' ../flutter/pubspec.yaml | tr -d '\r')
+          version=$(sed -n 's/^c001apk.versionName=//p' gradle.properties | tr -d '\r')
           apk=app/build/outputs/apk/release/app-release.apk
           report=$("$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$apk")
           actual=$(printf '%s\n' "$report" | sed -n 's/^.*[Ss]igner.*certificate SHA-256 digest: //p' | head -n 1 | tr '[:lower:]' '[:upper:]')
           test "$actual" = "$EXPECTED_CERT_SHA256" || { echo 'Unexpected APK certificate'; exit 1; }
           mkdir -p build/distribution
-          cp "$apk" "build/distribution/c001apk-compose-$version-universal.apk"
+          # The in-app updater looks for c001apk-<version>-android-universal.apk.
+          cp "$apk" "build/distribution/c001apk-$version-android-universal.apk"
           (cd build/distribution && sha256sum ./*.apk > SHA256SUMS.txt)
       - name: Remove temporary signing material
         if: always()
@@ -146,9 +139,9 @@ jobs:
           rmdir "$RUNNER_TEMP/c001apk-signing" 2>/dev/null || true
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7
         with:
-          name: c001apk-compose-release
+          name: c001apk-release
           path: |
-            apps/android/build/distribution/*.apk
-            apps/android/build/distribution/SHA256SUMS.txt
+            build/distribution/*.apk
+            build/distribution/SHA256SUMS.txt
           if-no-files-found: error
           retention-days: 14
