@@ -38,7 +38,7 @@ sealed interface SemanticStatus {
 }
 
 /** What the model should fold: rebuilt when any of it changes. */
-data class SemanticConfig(val categories: List<SensitiveCategory>, val phrases: List<String>, val threshold: Float)
+data class SemanticConfig(val categories: List<SensitiveCategory>, val threshold: Float)
 
 /**
  * Downloads, verifies, loads and unloads the optional embedding model. Nothing
@@ -245,7 +245,7 @@ class SemanticModel(
         synchronized(this) { if (matcherConfig == config) return@withLock matcher }
         try {
             val encoder = encoder ?: TextEncoder(BertTokenizer.fromVocabText(vocabFile.readText()), createRuntime()).also { encoder = it }
-            val built = SemanticMatcher(encoder, config.categories, config.phrases, config.threshold).takeUnless { it.isEmpty }
+            val built = SemanticMatcher(encoder, config.categories, config.threshold).takeUnless { it.isEmpty }
             synchronized(this) {
                 matcher = built
                 matcherConfig = config

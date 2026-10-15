@@ -46,6 +46,12 @@ class AppUiTest {
     private fun tab(label: String) =
         compose.onNode(hasText(label) and androidx.compose.ui.test.hasClickAction()).performClick()
 
+    private suspend fun addWord(word: String) = app.content.updateCategories {
+        it + com.zailinn.c001apk.core.model.SensitiveCategory("test", "自定义", keywords = listOf(word))
+    }
+
+    private fun hasWord(word: String) = app.content.filterCategories.value.any { word in it.keywords }
+
     private fun shot(name: String) = compose.onRoot().captureRoboImage("${System.getProperty("roborazzi.output.dir")}/$name.png")
 
     @Test
@@ -61,9 +67,9 @@ class AppUiTest {
     fun sensitiveFeedsFoldUntilTapped() {
         kotlinx.coroutines.runBlocking {
             app.settings.set(com.zailinn.c001apk.data.SettingKeys.sensitiveFold, true)
-            app.content.addSensitiveWord("三张图")
+            addWord("三张图")
             kotlinx.coroutines.withTimeout(5_000) {
-                while (!app.settings.current.sensitiveFold || app.content.sensitiveWords.value.isEmpty()) kotlinx.coroutines.delay(20)
+                while (!app.settings.current.sensitiveFold || !hasWord("三张图")) kotlinx.coroutines.delay(20)
             }
         }
         launch()
@@ -72,6 +78,23 @@ class AppUiTest {
         shot("folded")
         compose.onNodeWithText("已折叠 · 自定义 · 三张图").performClick()
         compose.onNodeWithText("第二条合成动态，带三张图").assertIsDisplayed()
+    }
+
+    @Test
+    fun hiddenSensitiveFeedsLeaveNoTrace() {
+        kotlinx.coroutines.runBlocking {
+            // Hiding wins when both switches are on.
+            app.settings.set(com.zailinn.c001apk.data.SettingKeys.sensitiveFold, true)
+            app.settings.set(com.zailinn.c001apk.data.SettingKeys.sensitiveHide, true)
+            addWord("三张图")
+            kotlinx.coroutines.withTimeout(5_000) {
+                while (!app.settings.current.sensitiveHide || !hasWord("三张图")) kotlinx.coroutines.delay(20)
+            }
+        }
+        launch()
+        assertTrue(compose.onAllNodesWithText("第二条合成动态，带三张图").fetchSemanticsNodes().isEmpty())
+        assertTrue(compose.onAllNodesWithText("已折叠", substring = true).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("合成应用").assertIsDisplayed()
     }
 
     @Test
@@ -146,21 +169,23 @@ class AppUiTest {
     }
 
     @Test
-    fun sensitiveRulesToggleCategories() {
+    fun contentFilterEditsCategories() {
         launch()
         tab("我的")
         compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("设置")).fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithContentDescription("设置").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("浏览与隐私").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("浏览与隐私").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("折叠规则").fetchSemanticsNodes().isNotEmpty() }
-        shot("settings-privacy")
-        compose.onNodeWithText("折叠规则").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("两性对立").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("内容过滤").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("内容过滤").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("用户黑名单").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("直接隐藏").performClick()
+        compose.waitUntil(5_000) { app.settings.current.sensitiveHide }
+        shot("content-filter")
         compose.onNodeWithText("两性对立").performClick()
-        compose.waitUntil(5_000) { app.settings.current.sensitiveCategories == setOf("couple", "dating", "lust") }
-        compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("查看词表")).onFirst().performClick()
-        compose.waitForIdle()
-        shot("settings-sensitive")
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("舔狗").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("启用此分类").performClick()
+        compose.waitUntil(5_000) { app.content.filterCategories.value.single { it.id == "gender" }.enabled.not() }
+        compose.onNodeWithContentDescription("删除 舔狗").performClick()
+        compose.waitUntil(5_000) { "舔狗" !in app.content.filterCategories.value.single { it.id == "gender" }.keywords }
+        shot("category-edit")
     }
 }

@@ -51,7 +51,7 @@ class SemanticModelTest {
     private val lib = ByteArray(200_000) { (it % 251).toByte() }
     private val jni = "jni bytes".toByteArray()
     private val model = ByteArray(50_000) { (it % 7).toByte() }
-    private val chars = (SemanticAnchors.byCategory.values.flatten() + SemanticAnchors.everyday).joinToString("").toSet()
+    private val chars = (SensitiveCategory.builtIn.flatMap { it.examples } + SemanticAnchors.everyday).joinToString("").toSet()
     private val vocab = (listOf("[PAD]", "[UNK]", "[CLS]", "[SEP]") + chars.map(Char::toString)).joinToString("\n").toByteArray()
     private val aar = ByteArrayOutputStream().also { bytes ->
         ZipOutputStream(bytes).use { zip ->
@@ -127,7 +127,7 @@ class SemanticModelTest {
             FakeRuntime()
         }
 
-    private val config = SemanticConfig(SensitiveCategory.builtIn, emptyList(), SemanticAnchors.DEFAULT_THRESHOLD)
+    private val config = SemanticConfig(SensitiveCategory.builtIn, SemanticAnchors.DEFAULT_THRESHOLD)
 
     @Test
     fun downloadsOnlyTheAbiLibrariesAndFallsBackAcrossMirrors() = runBlocking {

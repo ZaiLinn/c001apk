@@ -5,14 +5,11 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.outlined.Add
-import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Science
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
@@ -49,11 +46,9 @@ fun SemanticSection() {
     val settings = LocalAppSettings.current
     val status by app.semantic.status.collectAsStateWithLifecycle()
     val loadError by app.semantic.loadError.collectAsStateWithLifecycle()
-    val phrases by app.content.semanticPhrases.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var confirmDelete by remember { mutableStateOf(false) }
     var testing by remember { mutableStateOf(false) }
-    var addingPhrase by remember { mutableStateOf(false) }
     val installed = status is SemanticStatus.Installed
 
     Column {
@@ -61,7 +56,7 @@ fun SemanticSection() {
         ListItem(
             headlineContent = {},
             supportingContent = {
-                Text("用本机运行的中文语义模型按意思判断，能抓到换了说法、不含关键词的帖子。只看文字不看图片，内容不会上传。")
+                Text("用本机运行的中文语义模型，把帖子和各分类的“语义例句”比较，能抓到换了说法、不含关键词的内容。只看文字不看图片，内容不会上传。")
             },
         )
         when (val s = status) {
@@ -103,7 +98,7 @@ fun SemanticSection() {
         ListItem(
             headlineContent = { Text("启用语义屏蔽") },
             supportingContent = {
-                Text(if (installed) "和关键词使用同一组分类，关键词没命中时再按意思判断" else "下载模型后可开启")
+                Text(if (installed) "关键词没命中时再按意思判断，按上面的开关折叠或隐藏" else "下载模型后可开启")
             },
             trailingContent = {
                 Switch(settings.semanticFold, { scope.launch { app.settings.set(SettingKeys.semanticFold, it) } }, enabled = installed)
@@ -134,24 +129,6 @@ fun SemanticSection() {
             leadingContent = { Icon(Icons.Outlined.Science, null) },
             modifier = Modifier.clickable(enabled = installed) { testing = true },
         )
-        SectionTitle("自定义语义描述")
-        ListItem(
-            headlineContent = {},
-            supportingContent = { Text("用一句话描述想折叠的内容，例如“晒自己买的奢侈品”。意思相近的帖子会被折叠") },
-        )
-        phrases.forEach { phrase ->
-            ListItem(
-                headlineContent = { Text(phrase) },
-                trailingContent = {
-                    IconButton(onClick = { scope.launch { app.content.removeSemanticPhrase(phrase) } }) { Icon(Icons.Outlined.Delete, "移除") }
-                },
-            )
-        }
-        ListItem(
-            headlineContent = { Text("添加描述") },
-            leadingContent = { Icon(Icons.Outlined.Add, null) },
-            modifier = Modifier.clickable { addingPhrase = true },
-        )
     }
 
     if (confirmDelete) {
@@ -172,11 +149,6 @@ fun SemanticSection() {
         )
     }
     if (testing) TestDialog { testing = false }
-    if (addingPhrase) {
-        EditDialog("添加语义描述", "", onDismiss = { addingPhrase = false }) { value ->
-            scope.launch { if (!app.content.addSemanticPhrase(value)) app.toast("已存在或为空") }
-        }
-    }
 }
 
 @Composable

@@ -46,30 +46,12 @@ class TextEncoder(
 }
 
 /**
- * Example sentences per category for semantic folding, plus everyday Coolapk
- * topics. A post folds only when it is close to a category sentence and clearly
- * closer to it than to every everyday topic, which keeps phone and app posts
- * that merely share words ("老婆" for a phone) visible.
+ * Everyday Coolapk topics. A post folds only when it is close to one of its
+ * category's example sentences and clearly closer to it than to every everyday
+ * topic, which keeps phone and app posts that merely share words ("老婆" for a
+ * phone) visible. The example sentences live in each [SensitiveCategory].
  */
 object SemanticAnchors {
-    val byCategory: Map<String, List<String>> = mapOf(
-        "couple" to listOf(
-            "晒一下我女朋友的照片", "和女朋友一起出去约会吃饭", "女朋友送我的生日礼物", "我对象今天特别可爱",
-            "情侣日常秀恩爱撒狗粮", "和老婆一起去旅游", "我家宝贝笑起来真好看",
-        ),
-        "dating" to listOf(
-            "家里安排我去相亲见了个女生", "怎么追喜欢的女生", "表白被拒绝了", "和女朋友分手了很难受",
-            "和对象吵架冷战了", "结婚彩礼要多少钱", "约会该穿什么",
-        ),
-        "lust" to listOf(
-            "单身太久了好寂寞想找个女朋友", "晚上一个人很孤独空虚", "身材很好的美女照片", "男生的生理需求怎么解决",
-            "好想有个人陪我", "年纪大了还没谈过恋爱",
-        ),
-        "gender" to listOf(
-            "现在的女生太物质了", "男女之间的矛盾越来越严重", "女权和男权的争论", "现在的女孩子要求太高要房要车",
-        ),
-    )
-
     val everyday: List<String> = listOf(
         "手机续航和充电速度怎么样", "系统更新后流畅了很多", "推荐一款好用的应用", "软件闪退和bug反馈",
         "数码产品价格和购买建议", "电脑显卡和硬件配置", "今天天气不错出去玩", "工作加班写代码好累",
@@ -92,7 +74,6 @@ data class SemanticScore(val title: String, val anchor: String, val score: Float
 class SemanticMatcher(
     private val encoder: TextEncoder,
     categories: List<SensitiveCategory>,
-    customPhrases: List<String> = emptyList(),
     private val threshold: Float = SemanticAnchors.DEFAULT_THRESHOLD,
 ) {
     private class Anchor(val title: String, val text: String, val vector: FloatArray)
@@ -101,8 +82,7 @@ class SemanticMatcher(
     private val everyday: List<FloatArray>
 
     init {
-        val labelled = categories.flatMap { c -> SemanticAnchors.byCategory[c.id].orEmpty().map { c.title to it } } +
-            customPhrases.map(String::trim).filter { it.isNotEmpty() }.map { "自定义" to it }
+        val labelled = categories.flatMap { c -> c.examples.map(String::trim).filter { it.isNotEmpty() }.map { c.title to it } }
         val vectors = encoder.encode(labelled.map { it.second } + SemanticAnchors.everyday)
         anchors = labelled.mapIndexed { i, (title, text) -> Anchor(title, text, vectors[i]) }
         everyday = vectors.drop(labelled.size)

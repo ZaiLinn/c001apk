@@ -41,11 +41,13 @@ class SensitiveMatcherTest {
 
     @Test
     fun disabledCategoriesAndCustomWords() {
-        val custom = SensitiveMatcher(SensitiveCategory.builtIn.filter { it.id == "gender" }, listOf("内卷", "#打工人#"))
+        val mine = SensitiveCategory("mine", "自定义", keywords = listOf("内卷", " "), tags = listOf("#打工人#"), patterns = listOf("(坏正则"))
+        val custom = SensitiveMatcher(SensitiveCategory.builtIn.filter { it.id == "gender" } + mine)
         assertNull(custom.match(feed(""""message":"晒女友"""")))
         assertEquals(FoldReason("自定义", "内卷"), custom.match(feed(""""message":"又在内卷"""")))
         assertEquals(FoldReason("自定义", "#打工人#"), custom.match(feed(""""tags":"打工人"""")))
-        assertEquals(true, SensitiveMatcher(emptyList(), listOf(" ")).isEmpty)
+        // Blank words and broken user patterns are ignored instead of failing.
+        assertEquals(true, SensitiveMatcher(listOf(SensitiveCategory("x", "x", keywords = listOf(" "), patterns = listOf("(")))).isEmpty)
     }
 
     @Test

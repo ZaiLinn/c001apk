@@ -1,28 +1,32 @@
 package com.zailinn.c001apk.core.model
 
+import kotlinx.serialization.Serializable
+
 /**
- * A built-in group of words for the "fold sensitive topics" switch. [tags] match
+ * A user-editable group of rules for sensitive-topic filtering. [tags] match
  * topic fields exactly or `#tag#` in the text; [keywords] match anywhere in the
- * text; [patterns] are regular expressions for phrasings a plain word misses.
+ * text; [patterns] are regular expressions for phrasings a plain word misses;
+ * [examples] are sentences the optional semantic model compares posts with.
  */
+@Serializable
 data class SensitiveCategory(
     val id: String,
     val title: String,
-    val description: String,
+    val enabled: Boolean = true,
     val tags: List<String> = emptyList(),
     val keywords: List<String> = emptyList(),
     val patterns: List<String> = emptyList(),
+    val examples: List<String> = emptyList(),
 ) {
     companion object {
         /**
          * Draft word list. Bare "我老婆" is left out on purpose: on Coolapk it
          * usually means a phone or a game character, so only longer phrasings match.
          */
-        val builtIn = listOf(
+        val builtIn: List<SensitiveCategory> = listOf(
             SensitiveCategory(
                 id = "couple",
                 title = "晒对象",
-                description = "晒女友、晒老婆、秀恩爱、撒狗粮",
                 tags = listOf("晒对象", "晒女友", "晒女朋友", "晒老婆", "晒男友", "秀恩爱", "我的女朋友", "情侣日常"),
                 keywords = listOf(
                     "晒女友", "晒女朋友", "晒对象", "晒老婆", "晒媳妇", "晒男友", "晒男朋友",
@@ -35,22 +39,28 @@ data class SensitiveCategory(
                     "(女朋友|女友|对象|媳妇|老婆)的?(照片|自拍|美照|生图|素颜)",
                     "(和|跟|带|陪)(女朋友|女友|对象|媳妇)(去|出去|一起|约会|旅游|逛)",
                 ),
+                examples = listOf(
+                    "晒一下我女朋友的照片", "和女朋友一起出去约会吃饭", "女朋友送我的生日礼物", "我对象今天特别可爱",
+                    "情侣日常秀恩爱撒狗粮", "和老婆一起去旅游", "我家宝贝笑起来真好看",
+                ),
             ),
             SensitiveCategory(
                 id = "dating",
                 title = "相亲恋爱",
-                description = "相亲、找对象、表白、分手、彩礼",
                 tags = listOf("相亲", "找对象", "征婚", "脱单", "恋爱", "情感", "婚恋"),
                 keywords = listOf(
                     "相亲", "征婚", "找对象", "介绍对象", "求脱单", "怎么追女生", "追女生", "追女孩",
                     "表白", "被拒绝了", "前女友", "前任", "分手", "失恋", "谈恋爱", "恋爱经验",
                     "彩礼", "催婚", "剩男", "剩女", "大龄单身",
                 ),
+                examples = listOf(
+                    "家里安排我去相亲见了个女生", "怎么追喜欢的女生", "表白被拒绝了", "和女朋友分手了很难受",
+                    "和对象吵架冷战了", "结婚彩礼要多少钱", "约会该穿什么",
+                ),
             ),
             SensitiveCategory(
                 id = "lust",
                 title = "性压抑/擦边",
-                description = "酷安夜话、寂寞空虚、找不到女朋友、擦边图",
                 tags = listOf("酷安夜话", "夜话", "深夜话题", "福利", "美女", "小姐姐"),
                 keywords = listOf(
                     "性压抑", "压抑太久", "憋得慌", "憋坏了", "憋不住", "好寂寞", "好空虚", "寂寞难耐",
@@ -64,42 +74,43 @@ data class SensitiveCategory(
                     "(想|好想|求)(找|要|谈)?(个|一个)?(女朋友|女友|对象|妹子)",
                     "(寂寞|空虚|孤独)的?(夜|晚上|深夜)",
                 ),
+                examples = listOf(
+                    "单身太久了好寂寞想找个女朋友", "晚上一个人很孤独空虚", "身材很好的美女照片", "男生的生理需求怎么解决",
+                    "好想有个人陪我", "年纪大了还没谈过恋爱",
+                ),
             ),
             SensitiveCategory(
                 id = "gender",
                 title = "两性对立",
-                description = "舔狗、渣女、小仙女、普信男、捞女",
                 keywords = listOf(
                     "舔狗", "渣女", "渣男", "绿茶婊", "小仙女", "普信男", "普信女", "女拳", "男拳",
                     "田园女权", "捞女", "接盘侠", "扶弟魔", "嫁不出去", "娶不到老婆", "打光棍", "女德", "男德",
                 ),
+                examples = listOf(
+                    "现在的女生太物质了", "男女之间的矛盾越来越严重", "女权和男权的争论", "现在的女孩子要求太高要房要车",
+                ),
             ),
         )
+        fun builtIn(id: String): SensitiveCategory? = builtIn.firstOrNull { it.id == id }
     }
 }
 
 /** Why an item is folded: the category title and the word or tag that matched. */
 data class FoldReason(val title: String, val hit: String)
 
-/** Compiled matcher for the enabled categories plus the user's own words. */
-class SensitiveMatcher(categories: List<SensitiveCategory>, customWords: List<String> = emptyList()) {
+/** Compiled matcher for the given categories (callers pass the enabled ones). */
+class SensitiveMatcher(categories: List<SensitiveCategory>) {
     private class Group(val title: String, val tags: List<String>, val keywords: List<String>, val patterns: List<Regex>)
 
-    private val groups: List<Group> = buildList {
-        categories.forEach { category ->
-            add(Group(
-                category.title,
-                category.tags.map(::normalize),
-                category.keywords.map(::normalize),
-                category.patterns.map { Regex(it) },
-            ))
-        }
-        val words = customWords.map(String::trim).filter { it.isNotEmpty() }
-        if (words.isNotEmpty()) {
-            val (tags, keywords) = words.partition { it.length > 2 && it.startsWith("#") && it.endsWith("#") }
-            add(Group("自定义", tags.map { normalize(it.trim('#')) }, keywords.map(::normalize), emptyList()))
-        }
-    }
+    private val groups: List<Group> = categories.map { category ->
+        Group(
+            category.title,
+            category.tags.map { normalize(it.trim('#')) }.filter { it.isNotEmpty() },
+            category.keywords.map(::normalize).filter { it.isNotEmpty() },
+            // A broken user pattern is skipped rather than failing every page.
+            category.patterns.mapNotNull { runCatching { Regex(it) }.getOrNull() },
+        )
+    }.filter { it.tags.isNotEmpty() || it.keywords.isNotEmpty() || it.patterns.isNotEmpty() }
 
     val isEmpty: Boolean get() = groups.isEmpty()
 

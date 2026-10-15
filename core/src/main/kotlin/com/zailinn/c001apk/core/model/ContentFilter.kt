@@ -11,6 +11,8 @@ data class ContentFilter(
     val sensitive: SensitiveMatcher? = null,
     /** Embedding-based folding for what the word list misses; null when off or not loaded. */
     val semantic: SemanticMatcher? = null,
+    /** Drop matched items instead of folding them. */
+    val hideSensitive: Boolean = false,
 ) {
     fun isTopicBlocked(text: String): Boolean = blockedTopics.any { it.isNotEmpty() && text.contains(it) }
 
@@ -32,8 +34,16 @@ data class ContentFilter(
         return item.marked(reason)
     }
 
-    /** [mark] for a page, then semantic matching for what the words missed. */
+    /**
+     * [mark] for a page, then semantic matching for what the words missed.
+     * With [hideSensitive], matched items are removed instead of folded.
+     */
     fun markAll(items: List<Datum>): List<Datum> {
+        val marked = markPage(items)
+        return if (hideSensitive) marked.filter { it.foldReason == null } else marked
+    }
+
+    private fun markPage(items: List<Datum>): List<Datum> {
         val marked = items.map(::mark)
         val semantic = semantic ?: return marked
         val rest = marked.indices.filter { marked[it].foldReason == null }
