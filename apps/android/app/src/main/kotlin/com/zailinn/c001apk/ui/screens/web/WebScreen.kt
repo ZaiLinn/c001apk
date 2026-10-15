@@ -12,6 +12,7 @@ import android.webkit.WebResourceRequest
 import android.webkit.WebResourceResponse
 import android.webkit.WebView
 import android.webkit.WebViewClient
+import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -42,8 +43,6 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import com.zailinn.c001apk.AppContainer
 import com.zailinn.c001apk.core.protocol.Constants
-import com.zailinn.c001apk.ui.common.backPreview
-import com.zailinn.c001apk.ui.common.predictiveBack
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.appContainer
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
@@ -125,8 +124,8 @@ fun WebScreen(url: String, isLogin: Boolean) {
         }
     }
 
-    // Web history first; the page shrinks with the gesture like other pages.
-    val backProgress = predictiveBack(canGoBack) { web?.goBack() }
+    // Web history first, then the page itself.
+    BackHandler(canGoBack) { web?.goBack() }
     Scaffold(
         topBar = {
             Column {
@@ -148,7 +147,7 @@ fun WebScreen(url: String, isLogin: Boolean) {
             }
         },
     ) { padding ->
-        Box(Modifier.padding(padding).fillMaxSize().backPreview(backProgress)) {
+        Box(Modifier.padding(padding).fillMaxSize()) {
             if (ready) {
                 AndroidView(
                     factory = { context ->
