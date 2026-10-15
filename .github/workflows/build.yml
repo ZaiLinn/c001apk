@@ -20,6 +20,15 @@ on:
         description: 'Also build an unsigned iOS arm64 IPA (requires your own signing)'
         type: boolean
         default: false
+  # Called by release.yml when a release tag is pushed.
+  workflow_call:
+    inputs:
+      android_release:
+        type: boolean
+        default: true
+      ios:
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -128,7 +137,7 @@ jobs:
 
   android-debug:
     name: Android debug (no release Secrets)
-    if: github.event_name != 'workflow_dispatch' || !inputs.android_release
+    if: ${{ !inputs.android_release }}
     needs: checks
     runs-on: ubuntu-22.04
     timeout-minutes: 35
@@ -167,7 +176,7 @@ jobs:
 
   android-release:
     name: Android signed release (three ABIs)
-    if: github.event_name == 'workflow_dispatch' && inputs.android_release
+    if: ${{ inputs.android_release }}
     needs: checks
     runs-on: ubuntu-22.04
     timeout-minutes: 35
@@ -273,7 +282,7 @@ jobs:
 
   ios:
     name: iOS arm64 unsigned IPA
-    if: github.event_name == 'workflow_dispatch' && inputs.ios
+    if: ${{ inputs.ios }}
     needs: checks
     runs-on: macos-14
     timeout-minutes: 35

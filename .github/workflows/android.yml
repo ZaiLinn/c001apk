@@ -18,6 +18,12 @@ on:
         description: 'Build the signed release APK with the official certificate (requires Secrets)'
         type: boolean
         default: false
+  # Called by release.yml to attach the Compose preview APK.
+  workflow_call:
+    inputs:
+      release:
+        type: boolean
+        default: true
 
 permissions:
   contents: read
@@ -79,7 +85,7 @@ jobs:
 
   release:
     name: Signed release APK
-    if: github.event_name == 'workflow_dispatch' && inputs.release
+    if: ${{ inputs.release }}
     needs: build
     runs-on: ubuntu-24.04
     timeout-minutes: 40

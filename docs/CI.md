@@ -13,6 +13,26 @@ IPA 构建与架构检查均成功。下载后的正式 APK 已复核证书、�
 桌面归档与 IPA 已复核校验值、运行目录完整性及架构。Windows 云端包已同步本机安装并验证正常退出，
 Android arm64 已保留数据覆盖安装；Linux / iOS 运行体验仍待验收。
 
+## 发布 Release
+
+[Release workflow](../.github/workflows/release.yml) 在推送版本 tag 时自动发布：
+
+```bash
+# 先确认 apps/flutter/pubspec.yaml 的版本名（如 1.3.0+20261020）已提交到 main
+git tag 1.3.0-release   # 或 v1.3.0
+git push origin 1.3.0-release
+```
+
+1. 检查 tag 与 `pubspec.yaml` 版本名一致，且同名 Release 尚不存在；不一致直接失败，不会构建。
+2. 调用 Build workflow 生成 Android 三 ABI 正式签名 APK、Windows / Linux x86_64 包（需要正式签名 Secrets）。
+3. 汇总产物、去掉文件名中的 `+构建号`（应用内更新按 `c001apk-<版本>-<平台>` 匹配），
+   生成统一的 `SHA256SUMS.txt`，创建正式（非预发布）Release 并设为 Latest，说明附下载指引和自动生成的变更列表。
+
+若某个平台构建失败，不会创建 Release，修复后可删除 tag 重新推送，或在 Actions → Release
+中选择该 tag（Use workflow from）重新运行。手动运行时可勾选附带 iOS 未签名 IPA，或附带
+Kotlin / Compose 预览 APK（文件名以 `c001apk-compose-` 开头，不会被应用内更新识别为正式包）。
+推送 tag 默认只发布 Flutter 各平台正式包。
+
 ## Kotlin / Compose Android
 
 [Android workflow](../.github/workflows/android.yml) 只在 `apps/android/`、

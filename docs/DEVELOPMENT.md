@@ -174,6 +174,7 @@ flutter build apk --release --split-per-abi
 ```
 
 GitHub Actions 配置见 [云端构建指南](CI.md) 与 [Build workflow](../.github/workflows/build.yml)。
+推送 `X.Y.Z-release` 或 `vX.Y.Z` tag 会自动构建并发布 GitHub Release，详见云端构建指南的“发布 Release”。
 普通 push/PR 执行离线检查、Windows/Linux x86_64 release 和 Android debug 构建；
 手动运行可生成正式签名的 Android 三 ABI APK，并选择构建 iOS arm64 未签名 IPA（安装前需自行签名）。
 Android 签名使用 Actions Secrets `ANDROID_KEYSTORE_BASE64` 和 `REVIA_KS_PASS`：
