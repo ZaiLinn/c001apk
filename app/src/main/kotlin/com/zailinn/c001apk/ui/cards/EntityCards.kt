@@ -316,6 +316,18 @@ fun CollectionCard(data: Datum) {
     }
 }
 
+/**
+ * The link a notification is about. Notes usually start with the sender's
+ * name (`/u/…`, e.g. 酷安小秘书) and then link the feed or reply concerned, so
+ * content links win over user links; a user link is the fallback.
+ */
+internal fun noticeLink(note: String): String? {
+    val links = org.jsoup.Jsoup.parseBodyFragment(note).select("a[href]").map { it.attr("href").trim() }
+        .filter { it.isNotEmpty() && !it.startsWith("javascript:", ignoreCase = true) }
+    fun isUser(link: String) = Regex("^(https?://(www\\.)?coolapk1?s?\\.com)?/u/", RegexOption.IGNORE_CASE).containsMatchIn(link)
+    return links.firstOrNull { !isUser(it) } ?: links.firstOrNull()
+}
+
 /** Mentions, comments and follows in the notification list. */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
@@ -329,11 +341,11 @@ fun NotificationCard(data: Datum, actions: ItemActions) {
         modifier = Modifier.fillMaxWidth().clip(CardShape).combinedClickable(
             onClick = {
                 if (data.string("type") == "contacts_follow") {
-                    fromUid?.let { navigator.navigate(UserRoute(it)) }
+                    navigator.openUser(fromUid)
                 } else if (!data.url.isNullOrEmpty()) {
                     navigator.openLink(data.url.orEmpty())
                 } else {
-                    org.jsoup.Jsoup.parseBodyFragment(note).selectFirst("a[href]")?.attr("href")?.let { navigator.openLink(it) }
+                    noticeLink(note)?.let { navigator.openLink(it) }
                 }
             },
             onLongClick = { navigator.navigate(CopyRoute(htmlToPlain(note))) },
@@ -341,7 +353,7 @@ fun NotificationCard(data: Datum, actions: ItemActions) {
     ) {
         Box {
             Row(Modifier.padding(10.dp)) {
-                Avatar(data.string("fromUserAvatar"), 36.dp) { fromUid?.let { navigator.navigate(UserRoute(it)) } }
+                Avatar(data.string("fromUserAvatar"), 36.dp) { navigator.openUser(fromUid) }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f).padding(end = 24.dp)) {
                     HtmlText(data.string("fromusername").orEmpty())
@@ -377,7 +389,7 @@ fun MessageCard(data: Datum, actions: ItemActions) {
         onClick = { actions.onOpenMessage?.invoke(data) },
     ) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
-            Avatar(data.string("messageUserAvatar"), 40.dp) { data.string("messageUid")?.let { navigator.navigate(UserRoute(it)) } }
+            Avatar(data.string("messageUserAvatar"), 40.dp) { navigator.openUser(data.string("messageUid")) }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {

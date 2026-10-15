@@ -65,6 +65,8 @@ class Datum(val json: JsonObject) {
     val relationRows: List<Datum> get() = list("relationRows")
     val targetRow: Datum? get() = obj("targetRow")
     val isLiked: Boolean get() = userAction?.int("like") == 1
+    /** Posted anonymously: the author's profile must not be opened. */
+    val isAnonymous: Boolean get() = string("is_anonymous") == "1"
 
     /** Display name for feeds/replies: some endpoints only fill userInfo. */
     val displayName: String get() = userInfo?.username ?: username.orEmpty()

@@ -27,6 +27,13 @@ class AppNavigator(
 
     fun toast(message: String) = Toast.makeText(context, message, Toast.LENGTH_SHORT).show()
 
+    /** Opens a profile, except for anonymous posts and ids that cannot be a user. */
+    fun openUser(uid: String?, anonymous: Boolean = false) = when {
+        anonymous -> toast("匿名发布，无法查看用户主页")
+        uid.isNullOrBlank() || uid == "0" -> toast("无法打开该用户")
+        else -> navigate(UserRoute(uid))
+    }
+
     fun copy(text: String, toast: Boolean = true) {
         val clipboard = context.getSystemService(ClipboardManager::class.java)
         clipboard.setPrimaryClip(ClipData.newPlainText("c001apk", text))
@@ -80,7 +87,7 @@ class AppNavigator(
             path.startsWith(Constants.PREFIX_FEED) ->
                 path.removePrefix(Constants.PREFIX_FEED).takeWhile { it.isDigit() }.takeIf { it.isNotEmpty() }?.let(::FeedRoute)
             path.startsWith(Constants.PREFIX_USER) ->
-                UserRoute(Uri.decode(path.removePrefix(Constants.PREFIX_USER).substringBefore('?')))
+                return openUser(Uri.decode(path.removePrefix(Constants.PREFIX_USER).substringBefore('?')))
             path.startsWith(Constants.PREFIX_APP) -> AppRoute(path.removePrefix(Constants.PREFIX_APP).substringBefore('?'))
             path.startsWith(Constants.PREFIX_GAME) -> AppRoute(path.removePrefix(Constants.PREFIX_GAME).substringBefore('?'))
             path.startsWith(Constants.PREFIX_TOPIC) -> {

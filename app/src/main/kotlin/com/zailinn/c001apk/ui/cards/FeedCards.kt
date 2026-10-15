@@ -117,7 +117,7 @@ private fun FeedHeader(data: Datum, detail: Boolean, actions: ItemActions) {
             Modifier.weight(1f).padding(start = if (detail) 16.dp else 10.dp, top = if (detail) 12.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Avatar(data.userAvatar ?: data.userInfo?.userAvatar, 36.dp) { data.uid?.let { navigator.navigate(UserRoute(it)) } }
+            Avatar(data.userAvatar ?: data.userInfo?.userAvatar, 36.dp) { navigator.openUser(data.uid, data.isAnonymous) }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(data.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 15.sp)
@@ -335,7 +335,7 @@ fun ReplyCard(
     ) {
         Box {
             Row(Modifier.padding(horizontal = if (isFeedReply) 16.dp else 10.dp, vertical = if (isFeedReply) 12.dp else 10.dp)) {
-                Avatar(data.userAvatar ?: data.userInfo?.userAvatar, 30.dp) { data.uid?.let { navigator.navigate(UserRoute(it)) } }
+                Avatar(data.userAvatar ?: data.userInfo?.userAvatar, 30.dp) { navigator.openUser(data.uid, data.isAnonymous) }
                 Spacer(Modifier.width(10.dp))
                 Column(Modifier.weight(1f)) {
                     HtmlText(replyTitle(data, nested, isTop, feedUid, floorUid), Modifier.padding(end = 28.dp))
