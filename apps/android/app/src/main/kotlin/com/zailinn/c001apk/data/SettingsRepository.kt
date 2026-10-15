@@ -22,6 +22,10 @@ data class AppSettings(
     val recordHistory: Boolean = true,
     val showEmoji: Boolean = true,
     val secretFollow: Boolean = false,
+    /** Fold feeds and replies that match the sensitive-topic word list. */
+    val sensitiveFold: Boolean = false,
+    /** Enabled built-in categories; null means all of them. */
+    val sensitiveCategories: Set<String>? = null,
     val installTime: String = "",
     val protocol: ProtocolParams = ProtocolParams(),
 )
@@ -36,6 +40,8 @@ object SettingKeys {
     val recordHistory = booleanPreferencesKey("recordHistory")
     val showEmoji = booleanPreferencesKey("showEmoji")
     val secretFollow = booleanPreferencesKey("secretFollowEnabled")
+    val sensitiveFold = booleanPreferencesKey("sensitiveFold")
+    val sensitiveCategories = stringPreferencesKey("sensitiveFoldCategories")
     val installTime = stringPreferencesKey("installTime")
 
     val versionName = stringPreferencesKey("versionName")
@@ -93,6 +99,8 @@ class SettingsRepository(private val store: LocalStore) : UpdatePreferenceStore 
         recordHistory = p[SettingKeys.recordHistory] ?: true,
         showEmoji = p[SettingKeys.showEmoji] ?: true,
         secretFollow = p[SettingKeys.secretFollow] ?: false,
+        sensitiveFold = p[SettingKeys.sensitiveFold] ?: false,
+        sensitiveCategories = p[SettingKeys.sensitiveCategories]?.split(',')?.filter { it.isNotEmpty() }?.toSet(),
         installTime = p[SettingKeys.installTime].orEmpty(),
         protocol = ProtocolParams(
             versionName = p[SettingKeys.versionName] ?: Constants.VERSION_NAME,

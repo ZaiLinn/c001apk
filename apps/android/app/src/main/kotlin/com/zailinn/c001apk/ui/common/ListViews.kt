@@ -1,6 +1,20 @@
 package com.zailinn.c001apk.ui.common
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material3.Icon
+import androidx.compose.material3.Surface
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.setValue
+import androidx.compose.ui.text.style.TextOverflow
+import com.zailinn.c001apk.core.model.FoldReason
+import com.zailinn.c001apk.core.model.foldReason
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.PaddingValues
@@ -70,6 +84,39 @@ fun FooterItem(footer: Footer, onRetry: () -> Unit) {
     }
 }
 
+/** A sensitive-topic item shown as one line until it is tapped open. */
+@Composable
+fun FoldedItem(datum: Datum, reason: FoldReason, inset: Boolean = false, content: @Composable () -> Unit) {
+    var open by rememberSaveable(datum.entityType, datum.id) { mutableStateOf(false) }
+    if (open) return content()
+    Surface(
+        onClick = { open = true },
+        modifier = Modifier.fillMaxWidth().then(if (inset) Modifier.padding(horizontal = 12.dp, vertical = 6.dp) else Modifier),
+        shape = MaterialTheme.shapes.medium,
+        color = MaterialTheme.colorScheme.surfaceContainerLow,
+    ) {
+        Row(Modifier.padding(horizontal = 16.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(
+                Icons.Outlined.VisibilityOff, null, Modifier.size(18.dp),
+                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.width(10.dp))
+            Text(
+                buildString {
+                    append("已折叠 · ").append(reason.title)
+                    if (reason.hit.isNotEmpty()) append(" · ").append(reason.hit)
+                },
+                Modifier.weight(1f),
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                maxLines = 1,
+                overflow = TextOverflow.Ellipsis,
+            )
+            Text("展开", style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.primary)
+        }
+    }
+}
+
 /**
  * Pull-to-refresh list with automatic paging. [header] items stay above the
  * entries; [item] renders one entry.
@@ -104,7 +151,7 @@ fun PagedListView(
                 last >= listState.layoutInfo.totalItemsCount - 3
             }
         }
-        LaunchedEffect(nearEnd, state.items.size) { if (nearEnd) list.loadMore() }
+        LaunchedEffect(nearEnd, state.items.size, state.footer) { if (nearEnd) list.loadMore() }
         LazyColumn(
             Modifier.fillMaxSize(),
             state = listState,
@@ -118,7 +165,12 @@ fun PagedListView(
                 // Lets the list reuse a feed card's layout for the next feed card.
                 contentType = { _, it -> "${it.entityType}/${it.entityTemplate}" },
             ) { index, datum ->
-                item(index, datum)
+                val reason = datum.foldReason
+                if (reason == null) {
+                    item(index, datum)
+                } else {
+                    FoldedItem(datum, reason, inset = spacing == 0) { item(index, datum) }
+                }
             }
             item(key = "footer") { FooterItem(state.footer, list::retry) }
         }

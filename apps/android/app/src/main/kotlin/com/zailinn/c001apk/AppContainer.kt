@@ -59,7 +59,7 @@ class AppContainer(
         .build()
 
     val client = CoolapkClient(session, CoolapkHeaders(session, { settings.current.protocol }), baseHttp, transport)
-    val repository = CoolapkRepository(client) { content.filter() }
+    val repository = CoolapkRepository(client) { content.filter(settings.current) }
     val uploader = com.zailinn.c001apk.core.upload.OssUploader(repository, baseHttp)
     val captcha = CaptchaCoordinator()
     val updates = UpdateService(UpdatePreferences(settings), { BuildConfig.VERSION_NAME }, UpdateService.defaultFetcher(baseHttp))

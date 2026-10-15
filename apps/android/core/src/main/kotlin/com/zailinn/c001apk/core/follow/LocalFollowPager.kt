@@ -1,6 +1,7 @@
 package com.zailinn.c001apk.core.follow
 
 import com.zailinn.c001apk.core.model.Datum
+import com.zailinn.c001apk.core.model.DatumPage
 import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.core.net.Page
 import kotlinx.coroutines.CancellationException
@@ -74,7 +75,7 @@ class LocalFollowPager(uids: Iterable<String>, private val fetch: UserFeedFetche
                     cursor.page = Page(
                         page = cursor.page.page + 1,
                         firstItem = cursor.page.firstItem ?: feeds.firstOrNull()?.id,
-                        lastItem = feeds.lastOrNull()?.id ?: cursor.page.lastItem,
+                        lastItem = feeds.lastOrNull()?.id ?: (items as? DatumPage)?.rawLastId ?: cursor.page.lastItem,
                     )
                     cursor.buffer.addAll(feeds.filter { cursor.seen.add(it.id!!) })
                     cursor.buffer.sortByDescending(::time)

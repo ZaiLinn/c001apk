@@ -28,6 +28,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class HistoryRoute(val favorites: Boolean)
 @Serializable data class BlacklistRoute(val users: Boolean)
 @Serializable data object LocalFollowRoute
+@Serializable data object SensitiveRulesRoute
 @Serializable data class UserListRoute(val type: String, val uid: String? = null, val title: String? = null)
 @Serializable data class NotificationRoute(val type: String)
 @Serializable data class ChatRoute(val ukey: String, val uid: String, val username: String)

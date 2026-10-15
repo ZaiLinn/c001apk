@@ -13,6 +13,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.automirrored.outlined.Rule
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.DarkMode
 import androidx.compose.material.icons.outlined.DeveloperMode
@@ -69,6 +70,7 @@ import com.zailinn.c001apk.ui.common.SectionTitle
 import com.zailinn.c001apk.ui.nav.AboutRoute
 import com.zailinn.c001apk.ui.nav.AccountsRoute
 import com.zailinn.c001apk.ui.nav.BlacklistRoute
+import com.zailinn.c001apk.ui.nav.SensitiveRulesRoute
 import com.zailinn.c001apk.ui.nav.LocalFollowRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.ParamsRoute
@@ -82,7 +84,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 enum class SettingsSection(val title: String, val description: String, val icon: ImageVector) {
     Appearance("外观与字号", "动态取色、主题、深色模式与字体大小", Icons.Outlined.Palette),
     Content("关注与内容", "本地关注、悄悄关注、账号关注与表情", Icons.Outlined.Feed),
-    Privacy("浏览与隐私", "用户与话题黑名单、浏览历史、外部链接", Icons.Outlined.PrivacyTip),
+    Privacy("浏览与隐私", "黑名单、敏感话题折叠、浏览历史、外部链接", Icons.Outlined.PrivacyTip),
     Storage("存储与更新", "图片缓存、版本与更新检查", Icons.Outlined.Storage),
     Protocol("协议与设备", "设备标识与客户端请求参数", Icons.Outlined.DeveloperMode),
 }
@@ -275,6 +277,15 @@ private fun SectionItems(section: SettingsSection) {
                 headlineContent = { Text("话题黑名单") }, supportingContent = { Text("按关键词过滤相关话题内容") },
                 leadingContent = { Icon(Icons.Outlined.Block, null) },
                 modifier = Modifier.clickable { navigator.navigate(BlacklistRoute(users = false)) },
+            )
+            SwitchItem(
+                Icons.Outlined.VisibilityOff, "折叠敏感话题", "晒对象、相亲、性压抑等内容折叠成一行，点击可展开",
+                settings.sensitiveFold,
+            ) { setBool(SettingKeys.sensitiveFold, it) }
+            ListItem(
+                headlineContent = { Text("折叠规则") }, supportingContent = { Text("选择分类、查看词表或添加自己的屏蔽词") },
+                leadingContent = { Icon(Icons.AutoMirrored.Outlined.Rule, null) },
+                modifier = Modifier.clickable { navigator.navigate(SensitiveRulesRoute) },
             )
             SwitchItem(Icons.Outlined.History, "记录浏览历史", "将浏览过的动态保存在本机，便于再次查看", settings.recordHistory) {
                 setBool(SettingKeys.recordHistory, it)

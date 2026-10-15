@@ -2,10 +2,13 @@ package com.zailinn.c001apk.core.net
 
 import com.zailinn.c001apk.core.model.ContentFilter
 import com.zailinn.c001apk.core.model.Datum
+import com.zailinn.c001apk.core.model.DatumPage
 import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.core.protocol.Constants
 import com.zailinn.c001apk.core.protocol.TokenUtils
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
@@ -283,7 +286,17 @@ class CoolapkRepository(
             LoadResult.Empty
         } else {
             val rules = filter()
-            LoadResult.Success(items.filter { rules.accepts(it, includeConfigCard) })
+            withContext(Dispatchers.Default) {
+                // Cursor ids come from every known item, including blocked ones, so a
+                // fully blocked page still moves the next request forward.
+                val known = ContentFilter()
+                val shown = items.filter { rules.accepts(it, includeConfigCard) }.map(rules::mark)
+                LoadResult.Success(DatumPage(
+                    shown,
+                    rawFirstId = items.firstOrNull { known.accepts(it, includeConfigCard) && it.id != null }?.id,
+                    rawLastId = items.lastOrNull { known.accepts(it, includeConfigCard) && it.id != null }?.id,
+                ))
+            }
         }
     } catch (e: CancellationException) {
         throw e

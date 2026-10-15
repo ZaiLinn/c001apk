@@ -30,6 +30,7 @@ import com.zailinn.c001apk.ui.nav.AccountsRoute
 import com.zailinn.c001apk.ui.nav.AppNavigator
 import com.zailinn.c001apk.ui.nav.AppRoute
 import com.zailinn.c001apk.ui.nav.BlacklistRoute
+import com.zailinn.c001apk.ui.nav.SensitiveRulesRoute
 import com.zailinn.c001apk.ui.nav.CarouselRoute
 import com.zailinn.c001apk.ui.nav.ChatRoute
 import com.zailinn.c001apk.ui.nav.CoolpicRoute
@@ -72,6 +73,7 @@ import com.zailinn.c001apk.ui.screens.search.SearchResultScreen
 import com.zailinn.c001apk.ui.screens.search.SearchScreen
 import com.zailinn.c001apk.ui.screens.settings.AboutScreen
 import com.zailinn.c001apk.ui.screens.settings.BlacklistScreen
+import com.zailinn.c001apk.ui.screens.settings.SensitiveRulesScreen
 import com.zailinn.c001apk.ui.screens.settings.LocalFollowManageScreen
 import com.zailinn.c001apk.ui.screens.settings.ParamsScreen
 import com.zailinn.c001apk.ui.screens.settings.SettingsScreen
@@ -161,6 +163,7 @@ fun C001apkApp(app: AppContainer, deepLink: Uri?, onDeepLinkHandled: () -> Unit)
                 composable<HistoryRoute> { HistoryScreen(it.toRoute<HistoryRoute>().favorites) }
                 composable<BlacklistRoute> { BlacklistScreen(it.toRoute<BlacklistRoute>().users) }
                 composable<LocalFollowRoute> { LocalFollowManageScreen() }
+                composable<SensitiveRulesRoute> { SensitiveRulesScreen() }
                 composable<UserListRoute> { it.toRoute<UserListRoute>().let { r -> UserListScreen(r.type, r.uid, r.title) } }
                 composable<NotificationRoute> { NotificationScreen(it.toRoute<NotificationRoute>().type) }
                 composable<ChatRoute> { it.toRoute<ChatRoute>().let { r -> ChatScreen(r.ukey, r.uid, r.username) } }

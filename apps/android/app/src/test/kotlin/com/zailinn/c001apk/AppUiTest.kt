@@ -58,6 +58,23 @@ class AppUiTest {
     }
 
     @Test
+    fun sensitiveFeedsFoldUntilTapped() {
+        kotlinx.coroutines.runBlocking {
+            app.settings.set(com.zailinn.c001apk.data.SettingKeys.sensitiveFold, true)
+            app.content.addSensitiveWord("三张图")
+            kotlinx.coroutines.withTimeout(5_000) {
+                while (!app.settings.current.sensitiveFold || app.content.sensitiveWords.value.isEmpty()) kotlinx.coroutines.delay(20)
+            }
+        }
+        launch()
+        compose.onNodeWithText("已折叠 · 自定义 · 三张图").assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("第二条合成动态，带三张图").fetchSemanticsNodes().isEmpty())
+        shot("folded")
+        compose.onNodeWithText("已折叠 · 自定义 · 三张图").performClick()
+        compose.onNodeWithText("第二条合成动态，带三张图").assertIsDisplayed()
+    }
+
+    @Test
     fun feedDetailShowsRepliesAndNestedRows() {
         launch()
         // Tap the message text itself; the card center is its image, which opens the viewer.
@@ -126,5 +143,24 @@ class AppUiTest {
         compose.onNodeWithText("外观与字号").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("动态取色").fetchSemanticsNodes().isNotEmpty() }
         shot("settings-appearance")
+    }
+
+    @Test
+    fun sensitiveRulesToggleCategories() {
+        launch()
+        tab("我的")
+        compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("设置")).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithContentDescription("设置").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("浏览与隐私").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("浏览与隐私").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("折叠规则").fetchSemanticsNodes().isNotEmpty() }
+        shot("settings-privacy")
+        compose.onNodeWithText("折叠规则").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("两性对立").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("两性对立").performClick()
+        compose.waitUntil(5_000) { app.settings.current.sensitiveCategories == setOf("couple", "dating", "lust") }
+        compose.onAllNodes(androidx.compose.ui.test.hasContentDescription("查看词表")).onFirst().performClick()
+        compose.waitForIdle()
+        shot("settings-sensitive")
     }
 }

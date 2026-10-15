@@ -2,6 +2,8 @@ package com.zailinn.c001apk.ui.common
 
 import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.core.model.LoadResult
+import com.zailinn.c001apk.core.model.cursorFirstId
+import com.zailinn.c001apk.core.model.cursorLastId
 import com.zailinn.c001apk.core.net.Page
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
@@ -88,28 +90,37 @@ class PagedList(
 
     fun replace(id: String?, transform: (Datum) -> Datum) = update { list -> list.map { if (it.id == id) transform(it) else it } }
 
-    private suspend fun fetch(isRefresh: Boolean) {
+    private suspend fun fetch(isRefresh: Boolean, skipped: Int = 0) {
         val requested = cursor
         when (val result = load(requested)) {
             is LoadResult.Success -> {
                 var items = result.value
                 cursor = Page(
                     page = requested.page + 1,
-                    firstItem = requested.firstItem ?: items.firstOrNull()?.id,
-                    lastItem = items.lastOrNull()?.id,
+                    firstItem = requested.firstItem ?: items.cursorFirstId,
+                    lastItem = items.cursorLastId ?: requested.lastItem,
                 )
                 if (items.lastOrNull()?.entityTemplate == "noMoreDataCard") end = true
                 items = transform(requested.page, items)
+                val before = if (isRefresh) 0 else _state.value.items.size
                 val merged = if (isRefresh) items else _state.value.items + items
                 val shown = if (unique) merged.distinctBy { it.entityId ?: it.id ?: it.hashCode().toString() } else merged
+                // A page whose items were all blocked or duplicates adds nothing for the
+                // scroll trigger to react to, so fetch the next one directly.
+                val more = !end && shown.size == before && skipped < MAX_EMPTY_PAGES
                 _state.update {
                     it.copy(
                         items = shown,
                         status = LoadResult.Success(Unit),
                         refreshing = false,
-                        footer = if (end) Footer.End else Footer.Idle,
+                        footer = when {
+                            more -> Footer.Loading
+                            end -> Footer.End
+                            else -> Footer.Idle
+                        },
                     )
                 }
+                if (more) fetch(isRefresh = false, skipped = skipped + 1)
             }
             else -> {
                 end = true
@@ -127,5 +138,9 @@ class PagedList(
                 }
             }
         }
+    }
+
+    private companion object {
+        const val MAX_EMPTY_PAGES = 3
     }
 }

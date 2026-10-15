@@ -79,7 +79,8 @@
 
 `apps/android` 是原生重写的 Android 客户端（Kotlin、Jetpack Compose、Material 3 Expressive），
 已覆盖浏览、详情与回复、搜索、用户与话题、登录与多账号、人机验证、发布与图片上传、私信、
-本地关注、历史收藏与黑名单、设置等 Flutter 版功能。预览期间包名为 `com.zailinn.c001apk.compose`，
+本地关注、历史收藏与黑名单、设置等 Flutter 版功能，并新增本地“敏感话题折叠”
+（设置 → 浏览与隐私：晒对象、相亲恋爱、性压抑/擦边、两性对立等分类与自定义屏蔽词，命中后折叠为一行，点击展开）。预览期间包名为 `com.zailinn.c001apk.compose`，
 可与 Flutter 版同时安装，数据互不迁移；功能对齐并完成实机验收后再接替 Flutter Android 包。
 云端构建包见 [Android workflow](https://github.com/ZaiLinn/c001apk/actions/workflows/android.yml)。
 

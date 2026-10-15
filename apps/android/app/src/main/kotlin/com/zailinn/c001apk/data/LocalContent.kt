@@ -2,6 +2,8 @@ package com.zailinn.c001apk.data
 
 import com.zailinn.c001apk.core.model.ContentFilter
 import com.zailinn.c001apk.core.model.Datum
+import com.zailinn.c001apk.core.model.SensitiveCategory
+import com.zailinn.c001apk.core.model.SensitiveMatcher
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
@@ -50,7 +52,39 @@ class LocalContent(private val store: LocalStore) {
     val searchHistory: StateFlow<List<String>> = store.state { store.readJson(it, SEARCH_HISTORY, strings, emptyList()) }
     val localFollows: StateFlow<List<LocalFollowUser>> = store.state { store.readJson(it, LOCAL_FOLLOWS, follows, emptyList()) }
 
-    fun filter() = ContentFilter(blockedUsers.value.toSet(), blockedTopics.value)
+    /** The user's own words for sensitive-topic folding; `#话题#` matches a topic. */
+    val sensitiveWords: StateFlow<List<String>> = store.state { store.readJson(it, SENSITIVE_WORDS, strings, emptyList()) }
+
+    private var matcherKey: Any? = null
+    private var matcher: SensitiveMatcher? = null
+
+    fun filter(settings: AppSettings? = null) =
+        ContentFilter(blockedUsers.value.toSet(), blockedTopics.value, settings?.let(::sensitiveMatcher))
+
+    /** Rebuilt only when the switch, categories or words change. */
+    @Synchronized
+    private fun sensitiveMatcher(settings: AppSettings): SensitiveMatcher? {
+        if (!settings.sensitiveFold) return null
+        val key = settings.sensitiveCategories to sensitiveWords.value
+        if (key != matcherKey) {
+            val enabled = settings.sensitiveCategories
+            val categories = SensitiveCategory.builtIn.filter { enabled == null || it.id in enabled }
+            matcher = SensitiveMatcher(categories, sensitiveWords.value).takeUnless { it.isEmpty }
+            matcherKey = key
+        }
+        return matcher
+    }
+
+    /** Returns false when the word already exists. */
+    suspend fun addSensitiveWord(word: String): Boolean {
+        val value = word.trim()
+        if (value.isEmpty() || value in sensitiveWords.value) return false
+        store.updateJson(SENSITIVE_WORDS, strings, emptyList()) { listOf(value) + it.filter { v -> v != value } }
+        return true
+    }
+
+    suspend fun removeSensitiveWord(word: String) =
+        store.updateJson(SENSITIVE_WORDS, strings, emptyList()) { it.filter { v -> v != word } }
 
     suspend fun addHistory(feed: Datum) = store.updateJson(HISTORY, records, emptyList()) { list ->
         val record = FeedRecord.of(feed)
@@ -114,6 +148,7 @@ class LocalContent(private val store: LocalStore) {
         private const val BLOCKED_TOPICS = "topicBlackList"
         private const val SEARCH_HISTORY = "searchHistory"
         private const val LOCAL_FOLLOWS = "localFollowUsers"
+        private const val SENSITIVE_WORDS = "sensitiveWords"
         private const val MAX_HISTORY = 1000
     }
 }

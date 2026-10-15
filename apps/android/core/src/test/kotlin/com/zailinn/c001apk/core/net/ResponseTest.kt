@@ -2,6 +2,11 @@ package com.zailinn.c001apk.core.net
 
 import com.zailinn.c001apk.core.model.ContentFilter
 import com.zailinn.c001apk.core.model.LoadResult
+import com.zailinn.c001apk.core.model.SensitiveCategory
+import com.zailinn.c001apk.core.model.SensitiveMatcher
+import com.zailinn.c001apk.core.model.cursorFirstId
+import com.zailinn.c001apk.core.model.cursorLastId
+import com.zailinn.c001apk.core.model.foldReason
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -34,6 +39,23 @@ class ResponseTest {
         val body = """{"data":[{"entityType":"feed","id":"1","tags":"合成话题"},{"entityType":"feed","id":"2"}]}"""
         val state = repo(body = body, filter = ContentFilter(blockedTopics = listOf("合成"))).dataListFromUrl("/x")
         assertEquals(listOf("2"), (state as LoadResult.Success).value.map { it.id })
+    }
+
+    @Test
+    fun blockedLastItemStillAdvancesTheCursor() = runTest {
+        val body = """{"data":[{"entityType":"feed","id":"1","uid":"99"},{"entityType":"feed","id":"2","uid":"99"},{"entityType":"unknownAd","id":"9"}]}"""
+        val items = (repo(body = body, filter = ContentFilter(blockedUsers = setOf("99"))).dataListFromUrl("/x") as LoadResult.Success).value
+        assertTrue(items.isEmpty())
+        assertEquals("1", items.cursorFirstId)
+        assertEquals("2", items.cursorLastId)
+    }
+
+    @Test
+    fun sensitiveFeedsAreFoldedNotRemoved() = runTest {
+        val body = """{"data":[{"entityType":"feed","id":"1","message":"晒女友"},{"entityType":"feed","id":"2","message":"刷机"}]}"""
+        val filter = ContentFilter(sensitive = SensitiveMatcher(SensitiveCategory.builtIn))
+        val items = (repo(body = body, filter = filter).dataListFromUrl("/x") as LoadResult.Success).value
+        assertEquals(listOf("晒对象", null), items.map { it.foldReason?.title })
     }
 
     @Test
