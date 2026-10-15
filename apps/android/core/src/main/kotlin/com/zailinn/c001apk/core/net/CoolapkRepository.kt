@@ -25,7 +25,10 @@ data class Page(val page: Int = 1, val firstItem: String? = null, val lastItem: 
 }
 
 /** Result of a write action: either a server message to show or the `data` field. */
-data class ActionResult(val message: String?, val data: JsonElement?) {
+data class ActionResult(val message: String?, val data: JsonElement?, val messageStatus: String? = null) {
+    /** Publishing needs the legacy image captcha before it can be retried. */
+    val needsImageCaptcha: Boolean get() = messageStatus == "err_request_captcha"
+
     val dataText: String? get() = (data as? JsonPrimitive)?.content
     val dataObject: JsonObject? get() = data as? JsonObject
 }
@@ -216,6 +219,19 @@ class CoolapkRepository(
         return action { client.post("$API/v6/feed/createFeed", body = Body.Form(map.toList())) }
     }
 
+    suspend fun captchaImage(): ByteArray {
+        val response = client.get(
+            "$API/v6/account/captchaImage",
+            listOf("_" to System.currentTimeMillis().toString(), "w" to "270", "h" to "113"),
+        )
+        if (response.code !in 200..299) throw ApiFailure.http(response.code)
+        return response.bytes
+    }
+
+    suspend fun requestValidate(code: String) = action {
+        client.post("$API/v6/account/requestValidate", body = Body.Multipart(listOf("type" to "err_request_captcha", "code" to code)))
+    }
+
     suspend fun sendMessage(uid: String, fields: List<Pair<String, String>>) =
         action { client.post("$API/v6/message/send", listOf("uid" to uid), Body.Multipart(fields)) }
 
@@ -276,9 +292,13 @@ class CoolapkRepository(
     }
 
     private suspend fun action(request: suspend () -> ApiResponse): ActionResult {
-        val body = readApiObject(request())
+        val response = request()
+        val raw = runCatching { lenientJson.parseToJsonElement(response.text) as? JsonObject }.getOrNull()
+        val status = (raw?.get("messageStatus") as? JsonPrimitive)?.content
+        // The legacy image captcha is answered locally, not reported as a failure.
+        val body = if (status == "err_request_captcha" && response.code in 200..299) raw!! else readApiObject(response)
         val message = (body["message"] as? JsonPrimitive)?.content?.takeIf { it.isNotEmpty() }
-        return ActionResult(message, body["data"]?.takeUnless { it == JsonNull })
+        return ActionResult(message, body["data"]?.takeUnless { it == JsonNull }, status)
     }
 
     // endregion

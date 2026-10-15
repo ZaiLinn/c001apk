@@ -18,6 +18,10 @@ webkit = "1.17.1"
 browser = "1.10.0"
 coil = "3.6.3"
 telephoto = "0.19.0"
+materialKolor = "5.0.1"
+robolectric = "4.16.1"
+roborazzi = "1.76.0"
+androidxTest = "1.7.0"
 
 [libraries]
 kotlinx-coroutines-core = { module = "org.jetbrains.kotlinx:kotlinx-coroutines-core", version.ref = "coroutines" }
@@ -48,6 +52,13 @@ androidx-browser = { module = "androidx.browser:browser", version.ref = "browser
 coil-compose = { module = "io.coil-kt.coil3:coil-compose", version.ref = "coil" }
 coil-network-okhttp = { module = "io.coil-kt.coil3:coil-network-okhttp", version.ref = "coil" }
 coil-gif = { module = "io.coil-kt.coil3:coil-gif", version.ref = "coil" }
+material-kolor = { module = "com.materialkolor:material-kolor", version.ref = "materialKolor" }
+robolectric = { module = "org.robolectric:robolectric", version.ref = "robolectric" }
+roborazzi = { module = "io.github.takahirom.roborazzi:roborazzi", version.ref = "roborazzi" }
+roborazzi-compose = { module = "io.github.takahirom.roborazzi:roborazzi-compose", version.ref = "roborazzi" }
+androidx-test-core = { module = "androidx.test:core-ktx", version.ref = "androidxTest" }
+androidx-compose-ui-test-junit4 = { module = "androidx.compose.ui:ui-test-junit4" }
+androidx-compose-ui-test-manifest = { module = "androidx.compose.ui:ui-test-manifest" }
 telephoto-zoomable-image-coil3 = { module = "me.saket.telephoto:zoomable-image-coil3", version.ref = "telephoto" }
 
 [plugins]
