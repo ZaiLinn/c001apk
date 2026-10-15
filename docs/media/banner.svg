@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="600" viewBox="0 0 1600 600" role="img" aria-labelledby="title description">
+  <title id="title">c001apk — 让酷安，轻一点。</title>
+  <desc id="description">蓝灰色项目宣传横幅，展示 c001apk 名称、无穷符号与 Android、Windows、简体中文标签。</desc>
+  <defs>
+    <linearGradient id="background" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#142a35"/>
+      <stop offset="1" stop-color="#365563"/>
+    </linearGradient>
+    <linearGradient id="loop" x1="0" y1="0" x2="1" y2="1">
+      <stop stop-color="#e4f4f4"/>
+      <stop offset="1" stop-color="#90c2ca"/>
+    </linearGradient>
+    <pattern id="grid" width="48" height="48" patternUnits="userSpaceOnUse">
+      <circle cx="1" cy="1" r="1" fill="#d5e7e8" opacity=".11"/>
+    </pattern>
+  </defs>
+  <rect width="1600" height="600" rx="32" fill="url(#background)"/>
+  <rect width="1600" height="600" rx="32" fill="url(#grid)"/>
+  <circle cx="1280" cy="270" r="320" fill="none" stroke="#9cc3ca" stroke-opacity=".1"/>
+  <circle cx="1280" cy="270" r="238" fill="none" stroke="#9cc3ca" stroke-opacity=".13"/>
+  <circle cx="1280" cy="270" r="156" fill="none" stroke="#9cc3ca" stroke-opacity=".12"/>
+  <g font-family="Segoe UI, Arial, Microsoft YaHei, Noto Sans CJK SC, sans-serif">
+    <rect x="96" y="82" width="42" height="4" rx="2" fill="#9bcbd2"/>
+    <text x="154" y="92" fill="#b7d0d5" font-size="19" letter-spacing="4">COMMUNITY, SIMPLIFIED.</text>
+    <text x="90" y="248" fill="#f3f8fa" font-size="112" font-weight="700" letter-spacing="-5">c001apk</text>
+    <text x="96" y="330" fill="#e4f0f1" font-size="46" font-weight="500">让酷安，轻一点。</text>
+    <text x="98" y="387" fill="#aec9d0" font-size="25">一个轻量的非官方酷安客户端</text>
+    <g font-size="20" font-weight="500">
+      <rect x="96" y="452" width="162" height="48" rx="24" fill="#6e929e" fill-opacity=".22" stroke="#8eb2bc" stroke-opacity=".35"/>
+      <text x="177" y="483" text-anchor="middle" fill="#e5f0f3">Android</text>
+      <rect x="272" y="452" width="162" height="48" rx="24" fill="#6e929e" fill-opacity=".22" stroke="#8eb2bc" stroke-opacity=".35"/>
+      <text x="353" y="483" text-anchor="middle" fill="#e5f0f3">Windows</text>
+      <rect x="448" y="452" width="162" height="48" rx="24" fill="#6e929e" fill-opacity=".22" stroke="#8eb2bc" stroke-opacity=".35"/>
+      <text x="529" y="483" text-anchor="middle" fill="#e5f0f3">简体中文</text>
+    </g>
+    <text x="1504" y="550" text-anchor="end" fill="#9fbbc5" font-size="18" letter-spacing="2">OPEN SOURCE · c001apk</text>
+  </g>
+  <g fill="none" stroke="url(#loop)" stroke-width="32" stroke-linecap="butt">
+    <path d="M1160 240 L1118 203 C1084 173 1028 174 997 208 C966 241 966 297 998 330 C1031 364 1084 365 1120 333 L1283 190 C1318 159 1375 159 1410 192 C1445 225 1444 280 1411 314 C1378 348 1324 348 1288 318 L1247 282" transform="translate(-1 25)"/>
+  </g>
+  <circle cx="1468" cy="140" r="7" fill="#b5d9de" opacity=".7"/>
+  <circle cx="996" cy="415" r="5" fill="#b5d9de" opacity=".5"/>
+</svg>

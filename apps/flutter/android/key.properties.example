@@ -1,0 +1,3 @@
+# Copy to key.properties (Git ignored). Keep passwords in environment variables.
+storeFile=C:/path/to/release.jks
+keyAlias=release
