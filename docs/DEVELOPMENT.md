@@ -72,20 +72,18 @@ debug 与 preview 包不会提示安装正式版。
 **[Android workflow](../.github/workflows/android.yml)**：push 到 `main` 和 PR 时运行（只改文档时跳过）。
 它执行 `core` 与界面测试，上传 debug APK（保留 7 天）。
 
-**[Release workflow](../.github/workflows/release.yml)**：推送版本 tag 时发布：
+**[Release workflow](../.github/workflows/release.yml)**：发布正式版本。
 
-```bash
-# 先在 gradle.properties 提升 versionName / versionCode 并合入 main
-git tag 2.0.1-release        # 或 v2.0.1
-git push origin 2.0.1-release
-```
+1. 在 `gradle.properties` 提升 `c001apk.versionName` 与 `versionCode`。
+2. 在 [CHANGELOG.md](../CHANGELOG.md) 顶部新增 `## <版本>` 小节，写本次更新的功能。
+   这一节就是 Release 页面的说明；缺少时发布直接失败。
+3. 合入 `main` 后，选择下面任一方式发布：
+   - 在 Actions → Release → Run workflow 从 `main` 运行，会自动创建 `<版本>-release` tag；
+   - 或推送 tag：`git tag 2.0.1-release && git push origin 2.0.1-release`（也可用 `v2.0.1`），tag 必须与版本一致。
 
-1. 检查 tag 与 `c001apk.versionName` 一致，且同名 Release 不存在。
-2. 用正式签名构建 release APK，核对证书指纹。
-3. 上传 `c001apk-<版本>-android-universal.apk` 与 `SHA256SUMS.txt`，
-   创建正式 Release 并设为 Latest。应用内更新按这个文件名匹配。
-
-构建失败时不会创建 Release。修复后可删除 tag 重新推送，或在 Actions → Release 中选择该 tag 重新运行。
+workflow 会检查同名 Release 不存在，用正式签名构建 release APK 并核对证书指纹。
+然后上传 `c001apk-<版本>-android-universal.apk` 与 `SHA256SUMS.txt`，创建正式 Release 并设为 Latest。
+应用内更新按这个文件名匹配。构建失败时不会创建 Release，修复后重新运行即可。
 
 正式签名使用仓库 Secrets：
 
