@@ -37,6 +37,7 @@ import com.zailinn.c001apk.ui.nav.ChatRoute
 import com.zailinn.c001apk.ui.nav.CoolpicRoute
 import com.zailinn.c001apk.ui.nav.CopyRoute
 import com.zailinn.c001apk.ui.nav.DyhRoute
+import com.zailinn.c001apk.ui.nav.EventRoute
 import com.zailinn.c001apk.ui.nav.FeedRoute
 import com.zailinn.c001apk.ui.nav.HistoryRoute
 import com.zailinn.c001apk.ui.nav.ImageViewerRoute
@@ -144,6 +145,7 @@ fun C001apkApp(app: AppContainer, deepLink: Uri?, onDeepLinkHandled: () -> Unit)
             ) {
                 composable<MainRoute> { MainScreen(generation) }
                 composable<FeedRoute> { FeedScreen(it.toRoute<FeedRoute>().id) }
+                composable<EventRoute> { com.zailinn.c001apk.ui.screens.detail.EventScreen(it.toRoute<EventRoute>().id) }
                 composable<UserRoute> { UserScreen(it.toRoute<UserRoute>().uid) }
                 composable<AppRoute> { AppScreen(it.toRoute<AppRoute>().id) }
                 composable<TopicRoute> { it.toRoute<TopicRoute>().let { r -> TopicScreen(r.tag, r.id) } }

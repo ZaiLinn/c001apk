@@ -89,6 +89,7 @@ jobs:
       - name: Check assets
         run: |
           ls release/c001apk-*-android-universal.apk >/dev/null
+          # The checksum stays in the run log; only the APK is attached to the Release.
           cat release/SHA256SUMS.txt
       - name: Write release notes
         env:
@@ -112,7 +113,7 @@ jobs:
             fi
           fi
           # Creates the tag on this commit when the run was started from a branch.
-          gh release create "$TAG" release/* \
+          gh release create "$TAG" release/*-android-universal.apk \
             --repo "$GITHUB_REPOSITORY" \
             --target "$GITHUB_SHA" \
             --title "c001apk $VERSION" \

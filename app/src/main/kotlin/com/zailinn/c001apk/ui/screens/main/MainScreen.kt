@@ -47,7 +47,9 @@ private val destinations = listOf(
 @Composable
 fun MainScreen(generation: Int) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
-    var reselect by rememberSaveable { mutableIntStateOf(0) }
+    // Taps on the already selected tab, counted per tab so one tab's taps never reach another.
+    var homeReselect by rememberSaveable { mutableIntStateOf(0) }
+    var followReselect by rememberSaveable { mutableIntStateOf(0) }
     val holder = rememberSaveableStateHolder()
     val refreshOnReturn = LocalAppSettings.current.refreshOnReturn
     // Counts returns to 主页 from another tab or page; HomeScreen refreshes once per new count.
@@ -66,7 +68,10 @@ fun MainScreen(generation: Int) {
     BackHandler(tab != 0) { goHome() }
     val select = { index: Int ->
         when {
-            index == tab -> reselect++
+            index == tab -> when (tab) {
+                0 -> homeReselect++
+                1 -> followReselect++
+            }
             index == 0 -> goHome()
             else -> tab = index
         }
@@ -107,8 +112,8 @@ fun MainScreen(generation: Int) {
                 Box(Modifier.weight(1f).fillMaxSize().padding(padding)) {
                     holder.SaveableStateProvider("$tab-$generation") {
                         when (tab) {
-                            0 -> HomeScreen(generation, reselect, homeReturns)
-                            1 -> FollowScreen(generation, reselect)
+                            0 -> HomeScreen(generation, homeReselect, homeReturns)
+                            1 -> FollowScreen(generation, followReselect)
                             else -> MineScreen(generation)
                         }
                     }

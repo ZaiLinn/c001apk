@@ -119,7 +119,19 @@ class AppUiTest {
     @Test
     fun returningHomeRefreshesOnlyWhenEnabled() {
         launch()
+        // Tapping 主页 and 关注 while selected refreshes or scrolls that tab once...
+        tab("主页")
+        compose.waitForIdle()
+        compose.waitUntil(10_000) { homeLoads() >= 2 }
+        tab("关注")
+        compose.waitForIdle()
+        tab("关注")
+        compose.waitForIdle()
+        tab("主页")
+        compose.waitForIdle()
         val first = homeLoads()
+        assertEquals("one refresh for the tap on 主页", 2, first)
+        // ...and is not replayed when 主页 is shown again with the switch off.
         returnHomeTwice()
         assertEquals("switch off: no extra loads", first, homeLoads())
 

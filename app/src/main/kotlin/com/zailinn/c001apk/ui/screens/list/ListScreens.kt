@@ -1,5 +1,11 @@
 package com.zailinn.c001apk.ui.screens.list
 
+import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.PushPin
+import com.zailinn.c001apk.ui.screens.runAction
+import com.zailinn.c001apk.ui.common.SheetAction
+import com.zailinn.c001apk.ui.common.ActionSheet
+import com.zailinn.c001apk.core.net.ConversationAction
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -226,14 +232,57 @@ fun NotificationScreen(type: String) {
     val vm = appViewModel(key = "notification-$type") { app ->
         com.zailinn.c001apk.ui.screens.SimpleListViewModel(app) { page -> repository.notifications(url, page) }
     }
+    val scope = rememberCoroutineScope()
+    var menuFor by remember { mutableStateOf<Datum?>(null) }
+    var deleting by remember { mutableStateOf<Datum?>(null) }
     val actions = vm.actions.copy(
         onOpenMessage = { item ->
             navigator.navigate(ChatRoute(item.string("ukey").orEmpty(), item.string("messageUid").orEmpty(), item.string("messageUsername").orEmpty()))
             vm.list.replace(item.id) { it.with("unreadNum", null as Number?) }
         },
+        onMessageMenu = { item -> if (!item.string("ukey").isNullOrEmpty()) menuFor = item },
     )
+    fun update(item: Datum, action: ConversationAction) {
+        val ukey = item.string("ukey") ?: return
+        scope.launch {
+            vm.app.runAction { vm.app.repository.conversationAction(action, ukey) } ?: return@launch
+            when (action) {
+                ConversationAction.Delete -> vm.list.update { list -> list.filter { it.string("ukey") != ukey } }
+                // Pinned conversations lead the list, in the order they were pinned.
+                else -> vm.list.update { list ->
+                    val changed = list.map { if (it.string("ukey") == ukey) it.with("isTop", if (action == ConversationAction.Pin) 1 else 0) else it }
+                    val target = changed.first { it.string("ukey") == ukey }
+                    val rest = changed.filter { it.string("ukey") != ukey }
+                    val pinned = rest.takeWhile { it.int("isTop") == 1 }
+                    if (action == ConversationAction.Pin) listOf(target) + rest else pinned + target + rest.drop(pinned.size)
+                }
+            }
+            vm.app.toast(when (action) { ConversationAction.Pin -> "已置顶会话"; ConversationAction.Unpin -> "已取消置顶"; else -> "已删除会话" })
+        }
+    }
     Scaffold(topBar = { SimpleTopBar(title) }) { padding ->
         Column(Modifier.padding(padding)) { PagedListView(vm.list) { _, item -> ItemCard(item, actions) } }
+    }
+    menuFor?.let { item ->
+        val pinned = item.int("isTop") == 1
+        ActionSheet(
+            listOf(
+                SheetAction(Icons.Outlined.PushPin, if (pinned) "取消置顶" else "置顶会话") {
+                    update(item, if (pinned) ConversationAction.Unpin else ConversationAction.Pin)
+                },
+                SheetAction(Icons.Outlined.Delete, "删除会话", danger = true) { deleting = item },
+            ),
+            onDismiss = { menuFor = null },
+        )
+    }
+    deleting?.let { item ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("删除此会话？") },
+            text = { Text("与 ${item.string("messageUsername").orEmpty()} 的会话将从私信列表中删除") },
+            confirmButton = { TextButton(onClick = { deleting = null; update(item, ConversationAction.Delete) }) { Text("删除") } },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("取消") } },
+        )
     }
 }
 

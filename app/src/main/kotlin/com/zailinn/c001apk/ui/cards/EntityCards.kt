@@ -380,20 +380,29 @@ fun NotificationCard(data: Datum, actions: ItemActions) {
     }
 }
 
-/** A private conversation in the message list. */
+/** A private conversation in the message list; long press to pin or delete it. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun MessageCard(data: Datum, actions: ItemActions) {
     val navigator = LocalNavigator.current
     Surface(
-        color = cardColor(), shape = CardShape, modifier = Modifier.fillMaxWidth(),
-        onClick = { actions.onOpenMessage?.invoke(data) },
+        color = cardColor(), shape = CardShape,
+        modifier = Modifier.fillMaxWidth().clip(CardShape).combinedClickable(
+            onClick = { actions.onOpenMessage?.invoke(data) },
+            onLongClick = actions.onMessageMenu?.let { { it(data) } },
+        ),
     ) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             Avatar(data.string("messageUserAvatar"), 40.dp) { navigator.openUser(data.string("messageUid")) }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text(data.string("messageUsername").orEmpty(), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(data.string("messageUsername").orEmpty(), Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    if (data.int("isTop") == 1) {
+                        Spacer(Modifier.width(6.dp))
+                        Text("置顶", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Spacer(Modifier.weight(1f))
                     Text(fromToday(data.dateline), fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {

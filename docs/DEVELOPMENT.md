@@ -82,7 +82,7 @@ debug 与 preview 包不会提示安装正式版。
    - 或推送 tag：`git tag 2.0.1-release && git push origin 2.0.1-release`（也可用 `v2.0.1`），tag 必须与版本一致。
 
 workflow 会检查同名 Release 不存在，用正式签名构建 release APK 并核对证书指纹。
-然后上传 `c001apk-<版本>-android-universal.apk` 与 `SHA256SUMS.txt`，创建正式 Release 并设为 Latest。
+然后只上传 `c001apk-<版本>-android-universal.apk`，创建正式 Release 并设为 Latest；SHA-256 校验值打印在运行日志中。
 应用内更新按这个文件名匹配。构建失败时不会创建 Release，修复后重新运行即可。
 需要不改版本号重新发布时，从 `main` 手动运行并勾选 `replace`，会先删除同名 Release 和 tag 再重新创建。删除 Release 后残留的同名 tag 也要用 `replace` 才能重新发布，否则会被拒绝。
 

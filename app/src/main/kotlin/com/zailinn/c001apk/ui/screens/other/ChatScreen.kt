@@ -25,6 +25,20 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.Send
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.EmojiEmotions
+import androidx.compose.material.icons.outlined.Feed
+import androidx.compose.material.icons.outlined.Image
+import androidx.compose.material.icons.outlined.Keyboard
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.material3.TextButton
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.ui.platform.LocalContext
+import com.zailinn.c001apk.ui.common.EmojiPanel
+import com.zailinn.c001apk.ui.common.readUploadImage
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
@@ -64,6 +78,12 @@ import com.zailinn.c001apk.ui.screens.ContentViewModel
 import com.zailinn.c001apk.ui.screens.appViewModel
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
 import com.zailinn.c001apk.ui.screens.runAction
+import com.zailinn.c001apk.core.net.ActionResult
+import com.zailinn.c001apk.core.net.ApiFailure
+import com.zailinn.c001apk.core.net.ApiFailureKind
+import com.zailinn.c001apk.core.upload.UploadImage
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -93,13 +113,58 @@ class ChatViewModel(app: AppContainer, private val ukey: String, private val uid
         }
     }
 
-    fun send(text: String, onSent: () -> Unit) {
+    fun send(text: String, onSent: () -> Unit = {}) {
         if (text.isBlank()) return
         viewModelScope.launch {
             val result = app.runAction { app.repository.sendMessage(uid, listOf("message" to text)) } ?: return@launch
-            val sent = (result.data as? JsonArray)?.mapNotNull { (it as? JsonObject)?.let(::Datum) }.orEmpty()
-            list.update { sent + it }
+            showSent(result)
             onSent()
+        }
+    }
+
+    private fun showSent(result: ActionResult) {
+        val sent = (result.data as? JsonArray)?.mapNotNull { (it as? JsonObject)?.let(::Datum) }.orEmpty()
+        list.update { sent + it }
+    }
+
+    /** An image being sent; kept after a failure so it can be retried without uploading again. */
+    data class PendingImage(val image: UploadImage, val uploaded: String? = null, val error: String? = null)
+
+    val pendingImage = MutableStateFlow<PendingImage?>(null)
+
+    fun sendImage(image: UploadImage) {
+        if (pendingImage.value?.error == null && pendingImage.value != null) return
+        pendingImage.value = PendingImage(image)
+        deliverImage()
+    }
+
+    fun retryImage() {
+        val current = pendingImage.value ?: return
+        pendingImage.value = current.copy(error = null)
+        deliverImage()
+    }
+
+    fun discardImage() {
+        pendingImage.value = null
+    }
+
+    private fun deliverImage() {
+        val generation = app.session.generation
+        viewModelScope.launch {
+            var current = pendingImage.value ?: return@launch
+            try {
+                val pic = current.uploaded ?: app.uploader.uploadMessageImage(current.image, uid)
+                current = current.copy(uploaded = pic)
+                val result = app.repository.sendMessage(uid, listOf("message" to "", "message_pic" to pic))
+                result.message?.let { throw ApiFailure(ApiFailureKind.Business, it) }
+                if (generation != app.session.generation) return@launch
+                showSent(result)
+                pendingImage.value = null
+            } catch (e: CancellationException) {
+                throw e
+            } catch (e: Exception) {
+                if (generation == app.session.generation) pendingImage.value = current.copy(error = ApiFailure.from(e).message)
+            }
         }
     }
 }
@@ -120,6 +185,19 @@ fun ChatScreen(ukey: String, uid: String, username: String) {
     val listState = rememberLazyListState()
     var text by remember { mutableStateOf("") }
     var menuFor by remember { mutableStateOf<Datum?>(null) }
+    var emoji by remember { mutableStateOf(false) }
+    var sharing by remember { mutableStateOf(false) }
+    val pending by vm.pendingImage.collectAsStateWithLifecycle()
+    val context = LocalContext.current
+    val scope = rememberCoroutineScope()
+    val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        uri ?: return@rememberLauncherForActivityResult
+        scope.launch {
+            withContext(Dispatchers.IO) { runCatching { readUploadImage(context, uri) } }
+                .onSuccess(vm::sendImage)
+                .onFailure { navigator.toast(it.message ?: "无法读取图片") }
+        }
+    }
     LaunchedEffect(Unit) { vm.list.start() }
     val nearTop by remember { derivedStateOf { (listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0) >= listState.layoutInfo.totalItemsCount - 3 } }
     LaunchedEffect(nearTop, state.items.size) { if (nearTop) vm.list.loadMore() }
@@ -150,12 +228,43 @@ fun ChatScreen(ukey: String, uid: String, username: String) {
                     item { FooterItem(state.footer, vm.list::retry) }
                 }
             }
-            Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(8.dp), verticalAlignment = Alignment.CenterVertically) {
-                OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text("发送消息") }, maxLines = 4)
-                IconButton(onClick = { vm.send(text) { text = "" } }, enabled = text.isNotBlank()) {
-                    Icon(Icons.AutoMirrored.Filled.Send, "发送")
+            pending?.let { image ->
+                Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(
+                        image.error?.let { "图片发送失败：$it" } ?: "正在发送图片…",
+                        Modifier.weight(1f),
+                        color = if (image.error != null) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.outline,
+                        style = MaterialTheme.typography.bodySmall,
+                    )
+                    if (image.error != null) {
+                        TextButton(onClick = vm::retryImage) { Text("重试") }
+                        TextButton(onClick = vm::discardImage) { Text("放弃") }
+                    }
                 }
             }
+            Column(Modifier.fillMaxWidth().navigationBarsPadding()) {
+                Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    IconButton(onClick = { emoji = !emoji }) {
+                        Icon(if (emoji) Icons.Outlined.Keyboard else Icons.Outlined.EmojiEmotions, "表情")
+                    }
+                    OutlinedTextField(text, { text = it }, Modifier.weight(1f), placeholder = { Text("发送消息") }, maxLines = 4)
+                    if (text.isBlank()) {
+                        IconButton(onClick = { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, enabled = pending == null) {
+                            Icon(Icons.Outlined.Image, "发送图片")
+                        }
+                        IconButton(onClick = { sharing = true }) { Icon(Icons.Outlined.Feed, "发送动态") }
+                    } else {
+                        IconButton(onClick = { vm.send(text) { text = "" } }) { Icon(Icons.AutoMirrored.Filled.Send, "发送") }
+                    }
+                }
+                if (emoji) EmojiPanel(onPick = { text += it })
+            }
+        }
+    }
+    if (sharing) {
+        ChatFeedPicker(onDismiss = { sharing = false }) { link ->
+            sharing = false
+            vm.send(link)
         }
     }
     menuFor?.let { item ->

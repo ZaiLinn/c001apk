@@ -86,6 +86,8 @@ class AppNavigator(
         val route: Any? = when {
             path.startsWith(Constants.PREFIX_FEED) ->
                 path.removePrefix(Constants.PREFIX_FEED).takeWhile { it.isDigit() }.takeIf { it.isNotEmpty() }?.let(::FeedRoute)
+            path.startsWith(PREFIX_EVENT) ->
+                path.removePrefix(PREFIX_EVENT).takeWhile { it.isDigit() }.takeIf { it.isNotEmpty() }?.let(::EventRoute)
             path.startsWith(Constants.PREFIX_USER) ->
                 return openUser(Uri.decode(path.removePrefix(Constants.PREFIX_USER).substringBefore('?')))
             path.startsWith(Constants.PREFIX_APP) -> AppRoute(path.removePrefix(Constants.PREFIX_APP).substringBefore('?'))
@@ -110,5 +112,7 @@ class AppNavigator(
         }
     }
 }
+
+private const val PREFIX_EVENT = "/event/"
 
 val LocalNavigator = staticCompositionLocalOf<AppNavigator> { error("No navigator") }
