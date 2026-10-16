@@ -8,6 +8,9 @@ import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.core.net.ApiFailure
 import com.zailinn.c001apk.ui.common.PagedList
 import com.zailinn.c001apk.ui.screens.ContentViewModel
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.async
+import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -29,7 +32,8 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
     var topReply: Datum? = null
         private set
     private var replyMe: Datum? = null
-    private var repliesStarted = false
+    /** The first reply page also needs the detail's pinned rows, so it waits for the detail. */
+    private val detailReady = CompletableDeferred<Unit>()
 
     override val list = PagedList(
         viewModelScope,
@@ -38,10 +42,18 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
             val rules = app.content.filter()
             (head + items).map(rules::filterReplyRows)
         },
-    ) { page -> app.repository.feedReplies(id, sort.value.listType, page, sort.value.fromAuthor) }
+    ) { page ->
+        // Replies are requested together with the detail instead of after it: one round trip, not two.
+        coroutineScope {
+            val replies = async { app.repository.feedReplies(id, sort.value.listType, page, sort.value.fromAuthor) }
+            detailReady.await()
+            replies.await()
+        }
+    }
 
     init {
         loadDetail()
+        list.start()
     }
 
     fun loadDetail(verify: Boolean = false) {
@@ -66,12 +78,8 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
                     replyMe = data.list("replyMeRows").firstOrNull()
                     feed.value = result
                     notice.value = if (result.isPublic) "正文可正常阅读，当前账号的点赞状态暂不可用。" else ""
-                    if (!repliesStarted) {
-                        repliesStarted = true
-                        list.start()
-                    } else {
-                        list.refresh()
-                    }
+                    // A later reload (verify) refreshes replies; the first one is already loading in parallel.
+                    if (detailReady.isCompleted) list.refresh()
                     if (app.settings.current.recordHistory) app.content.addHistory(data)
                 } else if (verify) {
                     notice.value = (result as? LoadResult.Error)?.message ?: "账号详情暂不可用，请稍后重试"
@@ -81,6 +89,7 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
                 }
             } finally {
                 loadingDetail.value = false
+                detailReady.complete(Unit)
             }
         }
     }

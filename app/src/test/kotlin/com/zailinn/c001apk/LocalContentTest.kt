@@ -40,6 +40,22 @@ class LocalContentTest {
     }
 
     @Test
+    fun savedCategoriesLoseTheDroppedTopicsOnce() = runBlocking {
+        val old = SensitiveCategory.builtIn.map { if (it.id == "lust") it.copy(tags = listOf("酷安夜话", "夜话") + it.tags) else it }
+        app.content.updateCategories { old }
+        // As saved by 2.0.2, before this cleanup existed.
+        app.settings.set(androidx.datastore.preferences.core.intPreferencesKey("filterCategoriesRevision"), 1)
+        waitFor { "酷安夜话" in app.content.filterCategories.value.single { it.id == "lust" }.tags }
+        app.content.migrateCategories()
+        waitFor { "酷安夜话" !in app.content.filterCategories.value.single { it.id == "lust" }.tags }
+        assertFalse("夜话" in app.content.filterCategories.value.single { it.id == "lust" }.tags)
+        // The user may add them back; the cleanup does not run twice.
+        app.content.updateCategory("lust") { it.copy(tags = it.tags + "酷安夜话") }
+        app.content.migrateCategories()
+        waitFor { "酷安夜话" in app.content.filterCategories.value.single { it.id == "lust" }.tags }
+    }
+
+    @Test
     fun editDeleteAndRestore() = runBlocking {
         val id = app.content.addCategory("  奢侈品 ")
         app.content.updateCategory(id) { it.copy(keywords = listOf("爱马仕")) }

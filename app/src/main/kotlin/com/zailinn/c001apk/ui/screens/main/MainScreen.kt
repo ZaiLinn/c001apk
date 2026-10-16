@@ -23,7 +23,9 @@ import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.saveable.rememberSaveableStateHolder
@@ -31,6 +33,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.unit.dp
+import com.zailinn.c001apk.ui.LocalAppSettings
 
 private data class Destination(val label: String, val icon: ImageVector, val selected: ImageVector)
 
@@ -46,10 +49,27 @@ fun MainScreen(generation: Int) {
     var tab by rememberSaveable { mutableIntStateOf(0) }
     var reselect by rememberSaveable { mutableIntStateOf(0) }
     val holder = rememberSaveableStateHolder()
+    val refreshOnReturn = LocalAppSettings.current.refreshOnReturn
+    // Counts returns to 主页 from another tab or page; HomeScreen refreshes once per new count.
+    var homeReturns by rememberSaveable { mutableIntStateOf(0) }
+    var shownBefore by rememberSaveable { mutableStateOf(false) }
+    LaunchedEffect(Unit) {
+        // A page popped back to this one: the destination is composed again with its saved state.
+        if (shownBefore && refreshOnReturn && tab == 0) homeReturns++
+        shownBefore = true
+    }
+    val goHome = {
+        if (refreshOnReturn) homeReturns++
+        tab = 0
+    }
     // Back from 关注 or 我的 returns to 主页 first.
-    BackHandler(tab != 0) { tab = 0 }
+    BackHandler(tab != 0) { goHome() }
     val select = { index: Int ->
-        if (index == tab) reselect++ else tab = index
+        when {
+            index == tab -> reselect++
+            index == 0 -> goHome()
+            else -> tab = index
+        }
     }
     BoxWithConstraints(Modifier.fillMaxSize()) {
         val wide = maxWidth > maxHeight && maxWidth >= 600.dp
@@ -87,7 +107,7 @@ fun MainScreen(generation: Int) {
                 Box(Modifier.weight(1f).fillMaxSize().padding(padding)) {
                     holder.SaveableStateProvider("$tab-$generation") {
                         when (tab) {
-                            0 -> HomeScreen(generation, reselect)
+                            0 -> HomeScreen(generation, reselect, homeReturns)
                             1 -> FollowScreen(generation, reselect)
                             else -> MineScreen(generation)
                         }

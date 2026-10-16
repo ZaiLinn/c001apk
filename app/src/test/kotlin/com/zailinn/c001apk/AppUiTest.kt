@@ -13,6 +13,7 @@ import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.zailinn.c001apk.ui.C001apkApp
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Before
 import org.junit.Rule
@@ -95,6 +96,41 @@ class AppUiTest {
         assertTrue(compose.onAllNodesWithText("第二条合成动态，带三张图").fetchSemanticsNodes().isEmpty())
         assertTrue(compose.onAllNodesWithText("已折叠", substring = true).fetchSemanticsNodes().isEmpty())
         compose.onNodeWithText("合成应用").assertIsDisplayed()
+    }
+
+    /** First-page home requests only; later pages load while scrolling. */
+    private fun homeLoads() = synchronized(transport.paths) {
+        transport.urls.count { it.contains("/v6/main/indexV8?") && Regex("[?&]page=1(&|$)").containsMatchIn(it) }
+    }
+
+    private fun returnHomeTwice() {
+        tab("关注")
+        compose.waitForIdle()
+        tab("主页")
+        compose.waitForIdle()
+        // Open a feed and come back with the system back button.
+        compose.onAllNodesWithText("合成动态正文", substring = true, useUnmergedTree = true).onFirst().performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("合成回复内容", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("合成动态正文", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+    }
+
+    @Test
+    fun returningHomeRefreshesOnlyWhenEnabled() {
+        launch()
+        val first = homeLoads()
+        returnHomeTwice()
+        assertEquals("switch off: no extra loads", first, homeLoads())
+
+        kotlinx.coroutines.runBlocking {
+            app.settings.set(com.zailinn.c001apk.data.SettingKeys.refreshOnReturn, true)
+            kotlinx.coroutines.withTimeout(5_000) { while (!app.settings.current.refreshOnReturn) kotlinx.coroutines.delay(20) }
+        }
+        compose.waitForIdle()
+        returnHomeTwice()
+        compose.waitUntil(10_000) { homeLoads() >= first + 2 }
+        assertEquals("one refresh per return", first + 2, homeLoads())
     }
 
     @Test

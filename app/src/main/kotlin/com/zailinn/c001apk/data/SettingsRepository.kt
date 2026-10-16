@@ -22,6 +22,8 @@ data class AppSettings(
     val openInBrowser: Boolean = false,
     val recordHistory: Boolean = true,
     val showEmoji: Boolean = true,
+    /** Refresh the home list when coming back to it from another page or tab. */
+    val refreshOnReturn: Boolean = false,
     val secretFollow: Boolean = false,
     /** Fold feeds and replies that match the sensitive-topic word list. */
     val sensitiveFold: Boolean = false,
@@ -46,6 +48,7 @@ object SettingKeys {
     val openInBrowser = booleanPreferencesKey("openInBrowser")
     val recordHistory = booleanPreferencesKey("recordHistory")
     val showEmoji = booleanPreferencesKey("showEmoji")
+    val refreshOnReturn = booleanPreferencesKey("refreshOnReturn")
     val secretFollow = booleanPreferencesKey("secretFollowEnabled")
     val sensitiveFold = booleanPreferencesKey("sensitiveFold")
     val sensitiveHide = booleanPreferencesKey("sensitiveHide")
@@ -107,6 +110,7 @@ class SettingsRepository(private val store: LocalStore) : UpdatePreferenceStore 
         openInBrowser = p[SettingKeys.openInBrowser] ?: false,
         recordHistory = p[SettingKeys.recordHistory] ?: true,
         showEmoji = p[SettingKeys.showEmoji] ?: true,
+        refreshOnReturn = p[SettingKeys.refreshOnReturn] ?: false,
         secretFollow = p[SettingKeys.secretFollow] ?: false,
         sensitiveFold = p[SettingKeys.sensitiveFold] ?: false,
         sensitiveHide = p[SettingKeys.sensitiveHide] ?: false,

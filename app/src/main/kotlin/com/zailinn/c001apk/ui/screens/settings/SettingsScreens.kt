@@ -25,6 +25,7 @@ import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Palette
 import androidx.compose.material.icons.outlined.PersonAddAlt
 import androidx.compose.material.icons.outlined.PrivacyTip
+import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material.icons.outlined.Storage
 import androidx.compose.material.icons.outlined.SwitchAccount
 import androidx.compose.material.icons.outlined.TextFields
@@ -269,6 +270,10 @@ private fun SectionItems(section: SettingsSection) {
                 Icons.Outlined.Feed, "账号关注内容", "筛选登录账号的关注动态，不影响本地关注",
                 listOf("全部", "用户", "话题", "数码", "应用"), settings.followType,
             ) { setInt(SettingKeys.followType, it) }
+            SwitchItem(
+                Icons.Outlined.Refresh, "返回首页时自动刷新", "从其他页面或底栏回到主页时，当前列表回到顶部并刷新",
+                settings.refreshOnReturn,
+            ) { setBool(SettingKeys.refreshOnReturn, it) }
             SwitchItem(Icons.Outlined.EmojiEmotions, "显示表情", "将内容中的酷安表情标记显示为图片", settings.showEmoji) { setBool(SettingKeys.showEmoji, it) }
         }
         SettingsSection.Privacy -> {

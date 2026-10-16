@@ -31,6 +31,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -77,7 +78,7 @@ class HomeFeedViewModel(app: AppContainer, tab: HomeTab, url: String?, title: St
 }
 
 @Composable
-fun HomeScreen(generation: Int, reselect: Int) {
+fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
     val navigator = LocalNavigator.current
     val session = LocalSession.current
     val tabs = HomeTab.entries
@@ -86,6 +87,14 @@ fun HomeScreen(generation: Int, reselect: Int) {
     var composing by remember { mutableStateOf(false) }
     val reselectTab = remember { mutableStateOf(0) }
     LaunchedEffect(reselect) { if (reselect > 0) reselectTab.value++ }
+    // "返回首页时自动刷新": each new return scrolls the current list to the top and refreshes it once.
+    var handledReturns by rememberSaveable { mutableIntStateOf(homeReturns) }
+    LaunchedEffect(homeReturns) {
+        if (homeReturns > handledReturns) {
+            handledReturns = homeReturns
+            reselectTab.value++
+        }
+    }
     // The search row slides away while reading and returns on the first scroll up; tabs stay pinned.
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     Scaffold(
