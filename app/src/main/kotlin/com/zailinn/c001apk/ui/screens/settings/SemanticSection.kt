@@ -112,7 +112,7 @@ fun SemanticSection() {
             headlineContent = { Text("相似度阈值 ${"%.2f".format(threshold)}") },
             supportingContent = {
                 Column {
-                    Text("越低折叠越多，也越容易误伤。默认 0.50")
+                    Text("越低折叠越多，也越容易误伤。默认 0.55")
                     Slider(
                         value = threshold,
                         onValueChange = { threshold = (it * 100).toInt() / 100f },

@@ -60,8 +60,8 @@ object SemanticAnchors {
         "给爸妈和孩子买东西",
     )
 
-    const val DEFAULT_THRESHOLD = 0.5f
-    const val MARGIN = 0.08f
+    const val DEFAULT_THRESHOLD = 0.55f
+    const val MARGIN = 0.1f
 }
 
 /** Result of comparing one text with the anchors; [folds] decides. */
