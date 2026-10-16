@@ -12,7 +12,7 @@ on:
   workflow_dispatch:
     inputs:
       replace:
-        description: Replace an existing Release of the same version (rebuild without a version bump)
+        description: Replace an existing Release or leftover tag of the same version (rebuild without a version bump)
         type: boolean
         default: false
 
@@ -55,6 +55,11 @@ jobs:
             echo "CHANGELOG.md has no section for $app_version"; exit 1; }
           if [ "$REPLACE" != true ] && gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
             echo "Release $TAG already exists; run with replace to publish it again"; exit 1
+          fi
+          # A tag left behind by a deleted release would pin the new release to old code.
+          if [ "$REF_TYPE" != tag ] && [ "$REPLACE" != true ] &&
+            gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
+            echo "Tag $TAG already exists; run with replace to move it to this commit"; exit 1
           fi
           printf 'tag=%s\nversion=%s\n' "$TAG" "$app_version" >> "$GITHUB_OUTPUT"
 
@@ -99,8 +104,12 @@ jobs:
           VERSION: ${{ needs.verify.outputs.version }}
           REPLACE: ${{ inputs.replace || false }}
         run: |
-          if [ "$REPLACE" = true ] && gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          if [ "$REPLACE" = true ]; then
+            if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+              gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+            elif gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG" >/dev/null 2>&1; then
+              gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$TAG"
+            fi
           fi
           # Creates the tag on this commit when the run was started from a branch.
           gh release create "$TAG" release/* \

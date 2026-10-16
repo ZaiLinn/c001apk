@@ -80,6 +80,8 @@ fun FeedScreen(id: String) {
     val articles by vm.articles.collectAsStateWithLifecycle()
     val notice by vm.notice.collectAsStateWithLifecycle()
     val sort by vm.sort.collectAsStateWithLifecycle()
+    val repliesFromWeb by vm.repliesFromWeb.collectAsStateWithLifecycle()
+    val repliesNotice by vm.repliesNotice.collectAsStateWithLifecycle()
     val favorite by vm.favorite.collectAsStateWithLifecycle()
     var replying by remember { mutableStateOf<ReplyRequest?>(null) }
     var thread by remember { mutableStateOf<Datum?>(null) }
@@ -147,6 +149,17 @@ fun FeedScreen(id: String) {
                                     icon = {},
                                 ) { Text(item.label, fontSize = 12.sp) }
                             }
+                        }
+                    }
+                    if (repliesFromWeb) {
+                        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                repliesNotice.ifEmpty { "评论接口需要验证，以下是网页版的热门评论" },
+                                Modifier.weight(1f),
+                                color = MaterialTheme.colorScheme.outline,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            TextButton(onClick = vm::loadAllReplies) { Text("验证后查看全部") }
                         }
                     }
                 }

@@ -59,10 +59,12 @@ android {
             if (hasReleaseSigning) signingConfig = signingConfigs.getByName("release")
             buildConfigField("boolean", "UPDATE_CHECK", "true")
         }
-        // Optimized like release (R8, not debuggable) but signed with the debug key,
-        // so it installs over a debug build to judge real scrolling performance.
+        // Optimized like release (R8, not debuggable) but signed with the debug key.
+        // A separate package id lets it install next to the signed release for testing.
         create("preview") {
             initWith(getByName("release"))
+            applicationIdSuffix = ".preview"
+            versionNameSuffix = "-preview"
             signingConfig = signingConfigs.getByName("debug")
             buildConfigField("boolean", "UPDATE_CHECK", "false")
             matchingFallbacks += "release"

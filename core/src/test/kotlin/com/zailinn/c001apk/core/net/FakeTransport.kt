@@ -37,7 +37,8 @@ val syntheticParams = ProtocolParams(
 class Harness(respond: (Request, Int) -> Pair<Int, String> = { _, _ -> 200 to """{"data":[]}""" }) {
     val session = SessionState()
     val transport = FakeTransport(respond)
-    val client = CoolapkClient(session, CoolapkHeaders(session, { syntheticParams }), transport = transport)
+    var now = 1_000_000L
+    val client = CoolapkClient(session, CoolapkHeaders(session, { syntheticParams }), transport = transport, clock = { now })
     val repo = CoolapkRepository(client)
 }
 
