@@ -50,6 +50,7 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.core.model.FeedArticle
 import com.zailinn.c001apk.core.model.LoadResult
+import com.zailinn.c001apk.core.net.ReplySource
 import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.cards.CardShape
 import com.zailinn.c001apk.ui.cards.FeedCard
@@ -80,7 +81,7 @@ fun FeedScreen(id: String) {
     val articles by vm.articles.collectAsStateWithLifecycle()
     val notice by vm.notice.collectAsStateWithLifecycle()
     val sort by vm.sort.collectAsStateWithLifecycle()
-    val repliesFromWeb by vm.repliesFromWeb.collectAsStateWithLifecycle()
+    val repliesSource by vm.repliesSource.collectAsStateWithLifecycle()
     val repliesNotice by vm.repliesNotice.collectAsStateWithLifecycle()
     val favorite by vm.favorite.collectAsStateWithLifecycle()
     var replying by remember { mutableStateOf<ReplyRequest?>(null) }
@@ -151,10 +152,12 @@ fun FeedScreen(id: String) {
                             }
                         }
                     }
-                    if (repliesFromWeb) {
+                    if (repliesSource != ReplySource.Api) {
                         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(
-                                repliesNotice.ifEmpty { "评论接口需要验证，以下是网页版的热门评论" },
+                                repliesNotice.ifEmpty {
+                                    if (repliesSource == ReplySource.Hot) "评论接口需要验证，以下是热门评论" else "评论接口需要验证，以下是网页版的热门评论"
+                                },
                                 Modifier.weight(1f),
                                 color = MaterialTheme.colorScheme.outline,
                                 style = MaterialTheme.typography.bodySmall,

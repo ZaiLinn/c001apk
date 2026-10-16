@@ -27,6 +27,11 @@ data class Page(val page: Int = 1, val firstItem: String? = null, val lastItem: 
     }
 }
 
+/** Where a page of feed replies came from. */
+enum class ReplySource { Api, Hot, Web }
+
+data class ReplyPage(val result: LoadResult<List<Datum>>, val source: ReplySource = ReplySource.Api)
+
 enum class ConversationAction(val path: String) { Pin("addTop"), Unpin("removeTop"), Delete("deleteChat") }
 
 /** Result of a write action: either a server message to show or the `data` field. */
@@ -70,26 +75,41 @@ class CoolapkRepository(
 
     /**
      * Replies of a feed without a captcha prompt. When the reply API demands a
-     * captcha, the first page comes from the public web page instead, which embeds
-     * the hot replies (up to a few, with their sub-replies); that result is marked
-     * public and has no further pages, and is empty when the page has none.
+     * captcha, the hot reply list, which does not, is read instead: it pages like
+     * the reply API but always in hot order. Only when that fails too does the
+     * first page come from the public web page, which embeds a few hot replies
+     * and has no further pages. Fallback results are marked public.
      */
-    suspend fun feedRepliesOrWeb(id: String, listType: String, page: Page, fromFeedAuthor: Int = 0): LoadResult<List<Datum>> =
+    suspend fun feedRepliesWithoutPrompt(id: String, listType: String, page: Page, fromFeedAuthor: Int = 0): ReplyPage =
         try {
-            toList(readApiObject(client.get("$API2/v6/feed/replyList", replyQuery(id, listType, page, fromFeedAuthor), skipCaptcha = true)))
+            ReplyPage(toList(readApiObject(client.get("$API2/v6/feed/replyList", replyQuery(id, listType, page, fromFeedAuthor), skipCaptcha = true))))
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
             val failure = ApiFailure.from(e)
-            when {
-                failure.kind != ApiFailureKind.Captcha -> LoadResult.Error(failure.message)
-                page.page > 1 -> LoadResult.Empty
-                else -> when (val web = webReplies(id)) {
-                    is LoadResult.Success -> web
-                    LoadResult.Empty -> LoadResult.Success(emptyList(), isPublic = true)
-                    else -> LoadResult.Error(failure.message)
+            if (failure.kind != ApiFailureKind.Captcha) {
+                ReplyPage(LoadResult.Error(failure.message))
+            } else {
+                val hot = hotReplies(id, page)
+                when {
+                    hot is LoadResult.Success || page.page > 1 -> ReplyPage(hot, ReplySource.Hot)
+                    else -> ReplyPage(
+                        when (val web = webReplies(id)) {
+                            is LoadResult.Success -> web
+                            LoadResult.Empty -> LoadResult.Success(emptyList(), isPublic = true)
+                            else -> LoadResult.Error(failure.message)
+                        },
+                        ReplySource.Web,
+                    )
                 }
             }
+        }
+
+    /** Hot replies of a feed, with their sub-reply previews. Not gated by the captcha. */
+    suspend fun hotReplies(id: String, page: Page): LoadResult<List<Datum>> =
+        when (val result = list { client.get("$API/v6/feed/hotReplyList", listOf("id" to id) + page.query() + ("discussMode" to "1"), skipCaptcha = true) }) {
+            is LoadResult.Success -> result.copy(isPublic = true)
+            else -> result
         }
 
     /** Replies embedded in the public web page of a feed: in practice only the hot ones. */
@@ -107,11 +127,12 @@ class CoolapkRepository(
         }
     }
 
+    /** Sub-replies of a reply. No captcha prompt: the server does not accept the proof for this list. */
     suspend fun replyToReply(id: String, page: Page) = list {
         client.get("$API/v6/feed/replyList", listOf(
             "id" to id, "listType" to "", "discussMode" to "0", "feedType" to "feed_reply",
             "blockStatus" to "0", "fromFeedAuthor" to "0",
-        ) + page.query())
+        ) + page.query(), skipCaptcha = true)
     }
 
     suspend fun userFeed(uid: String, page: Page, includeTop: Boolean = true) = list {

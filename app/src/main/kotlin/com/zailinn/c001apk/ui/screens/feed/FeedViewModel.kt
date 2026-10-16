@@ -7,6 +7,7 @@ import com.zailinn.c001apk.core.model.FeedArticle
 import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.core.net.ApiFailure
 import com.zailinn.c001apk.core.net.Page
+import com.zailinn.c001apk.core.net.ReplySource
 import com.zailinn.c001apk.ui.common.PagedList
 import com.zailinn.c001apk.ui.screens.ContentViewModel
 import kotlinx.coroutines.CompletableDeferred
@@ -33,8 +34,8 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
     var topReply: Datum? = null
         private set
     private var replyMe: Datum? = null
-    /** Replies were read from the public web page because the reply API asked for a captcha. */
-    val repliesFromWeb = MutableStateFlow(false)
+    /** Hot or web replies are shown because the reply API asked for a captcha. */
+    val repliesSource = MutableStateFlow(ReplySource.Api)
     /** Why the full reply list could not be loaded after the user asked for it. */
     val repliesNotice = MutableStateFlow("")
     /** The user asked for the full list: request the reply API with its captcha prompt. */
@@ -47,47 +48,53 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
         transform = { page, items ->
             val head = if (page == 1 && sort.value == ReplySort.Default) listOfNotNull(topReply, replyMe) else emptyList()
             val rules = app.content.filter()
-            (head + items).map(rules::filterReplyRows)
+            val headIds = head.mapNotNull { it.id }.toSet()
+            (head + items.filter { it.id == null || it.id !in headIds }).map(rules::filterReplyRows)
         },
     ) { page ->
-        if (page.page > 1 && repliesFromWeb.value) {
-            // The web page has no further pages.
-            LoadResult.Empty
-        } else {
-            // Replies are requested together with the detail instead of after it: one round trip, not two.
-            coroutineScope {
-                val replies = async { loadReplies(page) }
-                detailReady.await()
-                replies.await()
-            }
+        // Replies are requested together with the detail instead of after it: one round trip, not two.
+        coroutineScope {
+            val replies = async { loadReplies(page) }
+            detailReady.await()
+            replies.await()
         }
     }
 
     /**
-     * Without a captcha the reply API as before; when it asks for one, the web
-     * page's replies without a prompt. Only [loadAllReplies] goes through the prompt.
+     * Without a captcha the reply API as before; when it asks for one, the hot
+     * replies (or the web page's) without a prompt. Only [loadAllReplies] goes
+     * through the prompt.
      */
     private suspend fun loadReplies(page: Page): LoadResult<List<Datum>> {
         val (listType, fromAuthor) = sort.value.let { it.listType to it.fromAuthor }
+        if (page.page > 1 && !verifyReplies) {
+            when (repliesSource.value) {
+                // Keep paging the list the first page came from, without asking the reply API again.
+                ReplySource.Hot -> return app.repository.hotReplies(id, page)
+                // The web page has no further pages.
+                ReplySource.Web -> return LoadResult.Empty
+                ReplySource.Api -> Unit
+            }
+        }
         if (verifyReplies) {
             val result = app.repository.feedReplies(id, listType, page, fromAuthor)
             if (page.page > 1) return result
             if (result !is LoadResult.Error) {
-                repliesFromWeb.value = false
+                repliesSource.value = ReplySource.Api
                 repliesNotice.value = ""
                 return result
             }
             verifyReplies = false
             repliesNotice.value = result.message
         }
-        return app.repository.feedRepliesOrWeb(id, listType, page, fromAuthor).also {
-            if (page.page != 1) return@also
-            val web = it as? LoadResult.Success
-            repliesFromWeb.value = web?.isPublic == true
-            if (web?.isPublic == true && web.value.isEmpty() && repliesNotice.value.isEmpty()) {
+        val (result, source) = app.repository.feedRepliesWithoutPrompt(id, listType, page, fromAuthor)
+        if (page.page == 1) {
+            repliesSource.value = source
+            if (source == ReplySource.Web && result is LoadResult.Success && result.value.isEmpty() && repliesNotice.value.isEmpty()) {
                 repliesNotice.value = "评论接口需要验证，网页版没有可显示的热门评论"
             }
         }
+        return result
     }
 
     /** Verifies once and loads the full, pageable reply list. */
@@ -187,7 +194,8 @@ class ReplyThreadViewModel(app: AppContainer, private val origin: Datum) : Conte
     override val list = PagedList(
         viewModelScope,
         transform = { page, items -> if (page == 1) listOf(origin) + items else items },
-        fallback = { listOf(origin) },
+        // The sub-reply list asks for a captcha the server does not accept: show the embedded preview.
+        fallback = { listOf(origin) + origin.replyRows },
     ) { page -> app.repository.replyToReply(origin.id.orEmpty(), page) }
 
     fun addReply(reply: Datum, after: Datum?) {
