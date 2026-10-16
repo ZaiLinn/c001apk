@@ -18,17 +18,27 @@ class TokenUtilsTest {
         assertTrue(vectors.isNotEmpty())
         for (vector in vectors) {
             val item = vector.jsonObject
+            // The vectors pin the app code they were generated with, so they keep
+            // cross-checking the algorithm no matter which version the app ships.
             assertEquals(
                 item["token"]!!.jsonPrimitive.content,
-                TokenUtils.getTokenV3(item["device"]!!.jsonPrimitive.content, item["timestamp"]!!.jsonPrimitive.long),
+                TokenUtils.getTokenV3(
+                    item["device"]!!.jsonPrimitive.content,
+                    item["timestamp"]!!.jsonPrimitive.long,
+                    appCode = item["appCode"]!!.jsonPrimitive.content.toInt(),
+                ),
             )
         }
     }
 
     @Test
     fun signatureFollowsTimeAndAppCode() {
-        val token = TokenUtils.getTokenV3("synthetic-test-device", 1770000000)
-        assertNotEquals(token, TokenUtils.getTokenV3("synthetic-test-device", 1770000001))
+        // Pin the app code so the vectors stay independent of the shipping version.
+        val token = TokenUtils.getTokenV3("synthetic-test-device", 1770000000, appCode = 2604201)
+        // The timestamps are more than 15s apart on purpose: getTokenV3 retries the
+        // next second (up to +15) when a second yields an invalid bcrypt salt, so
+        // two adjacent seconds can resolve to the same effective time and collide.
+        assertNotEquals(token, TokenUtils.getTokenV3("synthetic-test-device", 1770000100, appCode = 2604201))
         assertNotEquals(token, TokenUtils.getTokenV3("synthetic-test-device", 1770000000, appCode = 2604202))
     }
 
@@ -41,7 +51,7 @@ class TokenUtilsTest {
     @Test
     fun generatedParamsAreComplete() {
         val params = ProtocolParams.generate()
-        assertTrue(params.userAgent.contains("+CoolMarket/16.2.0-2604201-universal"))
+        assertTrue(params.userAgent.contains("+CoolMarket/16.6.4-2609291-universal"))
         assertTrue(params.xAppDevice.isNotEmpty() && !params.xAppDevice.contains("="))
         assertTrue(params.sdkInt.toInt() in 21..34)
     }

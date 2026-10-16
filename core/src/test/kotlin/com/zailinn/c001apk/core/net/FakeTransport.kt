@@ -30,7 +30,7 @@ class FakeTransport(var respond: (Request, Int) -> Pair<Int, String> = { _, _ ->
 }
 
 val syntheticParams = ProtocolParams(
-    xAppDevice = "synthetic-test-device", versionCode = "2604201", versionName = "16.2.0",
+    xAppDevice = "synthetic-test-device", versionCode = "2609291", versionName = "16.6.4",
     apiVersion = "16", sdkInt = "33", userAgent = "SyntheticTest/1.0",
 )
 

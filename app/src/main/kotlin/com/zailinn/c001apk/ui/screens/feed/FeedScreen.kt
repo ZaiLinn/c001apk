@@ -145,6 +145,9 @@ fun FeedScreen(id: String) {
                             ReplySort.entries.forEachIndexed { index, item ->
                                 SegmentedButton(
                                     selected = sort == item,
+                                    // While replies come from the hot/web fallback the reply API's
+                                    // sorting is unavailable; disable it instead of silently ignoring taps.
+                                    enabled = repliesSource == ReplySource.Api,
                                     onClick = { vm.setSort(item) },
                                     shape = SegmentedButtonDefaults.itemShape(index, ReplySort.entries.size),
                                     icon = {},
@@ -156,7 +159,7 @@ fun FeedScreen(id: String) {
                         Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(
                                 repliesNotice.ifEmpty {
-                                    if (repliesSource == ReplySource.Hot) "评论接口需要验证，以下是热门评论" else "评论接口需要验证，以下是网页版的热门评论"
+                                    if (repliesSource == ReplySource.Hot) "评论接口需要验证，以下是热门评论，排序暂不可用" else "评论接口需要验证，以下是网页版的热门评论，排序暂不可用"
                                 },
                                 Modifier.weight(1f),
                                 color = MaterialTheme.colorScheme.outline,

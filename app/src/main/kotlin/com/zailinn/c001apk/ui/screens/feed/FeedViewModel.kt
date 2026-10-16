@@ -67,32 +67,38 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
      */
     private suspend fun loadReplies(page: Page): LoadResult<List<Datum>> {
         val (listType, fromAuthor) = sort.value.let { it.listType to it.fromAuthor }
-        if (page.page > 1 && !verifyReplies) {
-            when (repliesSource.value) {
-                // Keep paging the list the first page came from, without asking the reply API again.
-                ReplySource.Hot -> return app.repository.hotReplies(id, page)
-                // The web page has no further pages.
-                ReplySource.Web -> return LoadResult.Empty
-                ReplySource.Api -> Unit
-            }
-        }
-        if (verifyReplies) {
+        // "验证后查看全部": one prompting attempt, on the first page only. It is
+        // one-shot — once verified, the passed session is kept, so later pages and
+        // sort changes reach the full list through the non-prompting path below
+        // without popping the dialog again, and fall back silently if the server
+        // starts gating once more.
+        if (verifyReplies && page.page == 1) {
+            verifyReplies = false
             val result = app.repository.feedReplies(id, listType, page, fromAuthor)
-            if (page.page > 1) return result
             if (result !is LoadResult.Error) {
                 repliesSource.value = ReplySource.Api
                 repliesNotice.value = ""
                 return result
             }
-            verifyReplies = false
             repliesNotice.value = result.message
+            // fall through to the non-prompting fallback
+        }
+        // Keep paging the fallback the first page came from, without re-hitting the reply API.
+        if (page.page > 1) {
+            when (repliesSource.value) {
+                ReplySource.Hot -> return app.repository.hotReplies(id, page)
+                ReplySource.Web -> return LoadResult.Empty // the web page has no further pages
+                ReplySource.Api -> Unit
+            }
         }
         val (result, source) = app.repository.feedRepliesWithoutPrompt(id, listType, page, fromAuthor)
-        if (page.page == 1) {
-            repliesSource.value = source
-            if (source == ReplySource.Web && result is LoadResult.Success && result.value.isEmpty() && repliesNotice.value.isEmpty()) {
-                repliesNotice.value = "评论接口需要验证，网页版没有可显示的热门评论"
-            }
+        // Reflect the source on every page: if the server starts gating mid-scroll,
+        // the notice and the disabled sort control flip over too.
+        repliesSource.value = source
+        if (page.page == 1 && source == ReplySource.Web && result is LoadResult.Success &&
+            result.value.isEmpty() && repliesNotice.value.isEmpty()
+        ) {
+            repliesNotice.value = "评论接口需要验证，网页版没有可显示的热门评论"
         }
         return result
     }
@@ -194,8 +200,12 @@ class ReplyThreadViewModel(app: AppContainer, private val origin: Datum) : Conte
     override val list = PagedList(
         viewModelScope,
         transform = { page, items -> if (page == 1) listOf(origin) + items else items },
-        // The sub-reply list asks for a captcha the server does not accept: show the embedded preview.
-        fallback = { listOf(origin) + origin.replyRows },
+        // The sub-reply list asks for a captcha the server does not accept: show the
+        // embedded preview, filtered by the same blacklist the normal list goes through.
+        fallback = {
+            val rules = app.content.filter()
+            listOf(origin) + rules.markAll(origin.replyRows.filter { rules.accepts(it) })
+        },
     ) { page -> app.repository.replyToReply(origin.id.orEmpty(), page) }
 
     fun addReply(reply: Datum, after: Datum?) {
