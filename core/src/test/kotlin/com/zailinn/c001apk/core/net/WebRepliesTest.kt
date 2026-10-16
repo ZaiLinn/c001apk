@@ -33,12 +33,18 @@ class WebRepliesTest {
     }
 
     @Test
-    fun withoutHotRepliesTheCaptchaErrorStays() = runTest {
+    fun withoutHotRepliesTheResultIsEmptyButPublic() = runTest {
         val h = Harness { request, _ ->
             200 to if (request.url.host == "www.coolapk.com") """{"data":{"id":"7","hotReplyRows":[],"replyRows":[]}}""" else captcha
         }
         val result = h.repo.feedRepliesOrWeb("7", "lastupdate_desc", Page())
-        assertTrue(result is LoadResult.Error)
+        assertEquals(LoadResult.Success(emptyList<com.zailinn.c001apk.core.model.Datum>(), isPublic = true), result)
+    }
+
+    @Test
+    fun webPageFailureKeepsTheCaptchaError() = runTest {
+        val h = Harness { request, _ -> if (request.url.host == "www.coolapk.com") 500 to "" else 200 to captcha }
+        assertTrue(h.repo.feedRepliesOrWeb("7", "lastupdate_desc", Page()) is LoadResult.Error)
     }
 
     @Test

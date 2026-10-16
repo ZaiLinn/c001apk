@@ -1,5 +1,6 @@
 package com.zailinn.c001apk.core.net
 
+import com.zailinn.c001apk.core.model.LoadResult
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
@@ -92,6 +93,38 @@ class CaptchaRetryTest {
         h.client.get("https://api.coolapk.com/v6/feed/detail")
         assertEquals(1, prompts)
         assertEquals(2, h.transport.requests.size)
+    }
+
+    @Test
+    fun rejectedVerificationPausesPromptsInsteadOfLooping() = runTest {
+        alwaysChallenge = true
+        val h = harness()
+        var prompts = 0
+        h.client.captchaVerifier = { prompts++; "NEC:01234567:synthetic-proof" }
+        assertEquals("rejected", h.client.get("https://api.coolapk.com/v6/feed/replyList").captchaVerification)
+        // Pull to refresh, next pages, other posts: no new prompt for a while.
+        repeat(3) { assertEquals("paused", h.client.get("https://api.coolapk.com/v6/feed/replyList").captchaVerification) }
+        assertEquals(1, prompts)
+        val failure = h.repo.feedReplies("1", "lastupdate_desc", Page())
+        assertEquals(LoadResult.Error(CoolapkRepository.CAPTCHA_PAUSED), failure)
+        // After the pause one more attempt is allowed.
+        h.now += 31 * 60_000L
+        h.client.get("https://api.coolapk.com/v6/feed/replyList")
+        assertEquals(2, prompts)
+    }
+
+    @Test
+    fun cancellingPausesPromptsUntilTheAccountChanges() = runTest {
+        alwaysChallenge = true
+        val h = harness()
+        var prompts = 0
+        h.client.captchaVerifier = { prompts++; null }
+        h.client.get("https://api.coolapk.com/v6/feed/replyList")
+        h.client.get("https://api.coolapk.com/v6/feed/replyList")
+        assertEquals(1, prompts)
+        h.session.activate(AccountCredentials("10", "name", "tok"), notify = true)
+        h.client.get("https://api.coolapk.com/v6/feed/replyList")
+        assertEquals(2, prompts)
     }
 
     @Test

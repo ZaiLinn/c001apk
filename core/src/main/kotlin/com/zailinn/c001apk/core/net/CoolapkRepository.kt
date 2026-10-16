@@ -70,7 +70,7 @@ class CoolapkRepository(
      * Replies of a feed without a captcha prompt. When the reply API demands a
      * captcha, the first page comes from the public web page instead, which embeds
      * the hot replies (up to a few, with their sub-replies); that result is marked
-     * public and has no further pages. Without hot replies the captcha error stays.
+     * public and has no further pages, and is empty when the page has none.
      */
     suspend fun feedRepliesOrWeb(id: String, listType: String, page: Page, fromFeedAuthor: Int = 0): LoadResult<List<Datum>> =
         try {
@@ -82,7 +82,11 @@ class CoolapkRepository(
             when {
                 failure.kind != ApiFailureKind.Captcha -> LoadResult.Error(failure.message)
                 page.page > 1 -> LoadResult.Empty
-                else -> (webReplies(id) as? LoadResult.Success)?.takeIf { it.value.isNotEmpty() } ?: LoadResult.Error(failure.message)
+                else -> when (val web = webReplies(id)) {
+                    is LoadResult.Success -> web
+                    LoadResult.Empty -> LoadResult.Success(emptyList(), isPublic = true)
+                    else -> LoadResult.Error(failure.message)
+                }
             }
         }
 
@@ -182,6 +186,7 @@ class CoolapkRepository(
                 return LoadResult.Error(
                     when {
                         verification == "cancelled" -> "已取消验证，正文仍可阅读"
+                        (verification == "rejected" || verification == "paused") && failure.kind == ApiFailureKind.Captcha -> CAPTCHA_PAUSED
                         verification == "submitted" && failure.kind == ApiFailureKind.Captcha ->
                             "验证已完成，但服务端仍未允许读取账号信息，请稍后重试"
                         else -> failure.message
@@ -302,12 +307,25 @@ class CoolapkRepository(
 
     // region Response handling
 
-    private suspend fun data(request: suspend () -> ApiResponse): LoadResult<Datum> = try {
-        toData(readApiObject(request()))
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        LoadResult.Error(ApiFailure.from(e).message)
+    private suspend fun data(request: suspend () -> ApiResponse): LoadResult<Datum> {
+        var verification: String? = null
+        return try {
+            val response = request()
+            verification = response.captchaVerification
+            toData(readApiObject(response))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            LoadResult.Error(failureMessage(ApiFailure.from(e), verification))
+        }
+    }
+
+    /** A captcha the server keeps asking for gets an honest message instead of "verify and retry". */
+    private fun failureMessage(failure: ApiFailure, verification: String?) = when {
+        failure.kind != ApiFailureKind.Captcha -> failure.message
+        verification == "rejected" || verification == "paused" -> CAPTCHA_PAUSED
+        verification == "cancelled" -> "已取消验证"
+        else -> failure.message
     }
 
     private fun toData(body: JsonObject): LoadResult<Datum> =
@@ -316,12 +334,17 @@ class CoolapkRepository(
     private suspend fun list(
         includeConfigCard: Boolean = false,
         request: suspend () -> ApiResponse,
-    ): LoadResult<List<Datum>> = try {
-        toList(readApiObject(request()), includeConfigCard)
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        LoadResult.Error(ApiFailure.from(e).message)
+    ): LoadResult<List<Datum>> {
+        var verification: String? = null
+        return try {
+            val response = request()
+            verification = response.captchaVerification
+            toList(readApiObject(response), includeConfigCard)
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            LoadResult.Error(failureMessage(ApiFailure.from(e), verification))
+        }
     }
 
     private suspend fun toList(body: JsonObject, includeConfigCard: Boolean = false): LoadResult<List<Datum>> {
@@ -357,6 +380,8 @@ class CoolapkRepository(
     // endregion
 
     companion object {
+        const val CAPTCHA_PAUSED = "服务端暂不接受本客户端的验证结果，已暂停弹出验证，请稍后再试"
+
         /**
          * Search results group normal entities inside listCard containers. Expand
          * before filtering so child IDs, messages and pagination remain intact.

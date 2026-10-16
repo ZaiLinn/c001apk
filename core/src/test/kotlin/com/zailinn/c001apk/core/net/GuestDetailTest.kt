@@ -69,7 +69,7 @@ class GuestDetailTest {
         val h = Harness { request, _ -> 200 to if (request.url.host == "www.coolapk.com") publicFeed else captcha }
         h.client.captchaVerifier = { "NEC:414e5c9b:proof" }
         val result = h.repo.feedDetail("123", verify = true) as LoadResult.Error
-        assertTrue(result.message.contains("仍未"))
+        assertEquals(CoolapkRepository.CAPTCHA_PAUSED, result.message)
     }
 
     @Test

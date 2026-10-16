@@ -81,6 +81,7 @@ fun FeedScreen(id: String) {
     val notice by vm.notice.collectAsStateWithLifecycle()
     val sort by vm.sort.collectAsStateWithLifecycle()
     val repliesFromWeb by vm.repliesFromWeb.collectAsStateWithLifecycle()
+    val repliesNotice by vm.repliesNotice.collectAsStateWithLifecycle()
     val favorite by vm.favorite.collectAsStateWithLifecycle()
     var replying by remember { mutableStateOf<ReplyRequest?>(null) }
     var thread by remember { mutableStateOf<Datum?>(null) }
@@ -151,12 +152,15 @@ fun FeedScreen(id: String) {
                         }
                     }
                     if (repliesFromWeb) {
-                        Text(
-                            "评论接口需要验证，暂时只能显示网页版提供的热门评论，无法翻页或切换排序",
-                            Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                            color = MaterialTheme.colorScheme.outline,
-                            style = MaterialTheme.typography.bodySmall,
-                        )
+                        Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                repliesNotice.ifEmpty { "评论接口需要验证，以下是网页版的热门评论" },
+                                Modifier.weight(1f),
+                                color = MaterialTheme.colorScheme.outline,
+                                style = MaterialTheme.typography.bodySmall,
+                            )
+                            TextButton(onClick = vm::loadAllReplies) { Text("验证后查看全部") }
+                        }
                     }
                 }
             },

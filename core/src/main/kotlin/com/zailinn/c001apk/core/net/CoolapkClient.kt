@@ -26,7 +26,11 @@ class ApiResponse(
     val headers: Headers,
     val bytes: ByteArray,
     val url: HttpUrl,
-    /** `cancelled`, `incomplete` or `submitted` when a captcha challenge was met. */
+    /**
+     * When a captcha challenge was met: `cancelled`, `incomplete`, `submitted`,
+     * `rejected` (a passed verification was answered with another challenge) or
+     * `paused` (prompts are paused after a rejection or a cancel).
+     */
     val captchaVerification: String? = null,
 ) {
     val text: String by lazy { bytes.toString(Charsets.UTF_8) }
@@ -60,6 +64,7 @@ class CoolapkClient(
     baseClient: OkHttpClient = OkHttpClient(),
     /** Test seam: replaces the network after signing. */
     transport: Interceptor? = null,
+    private val clock: () -> Long = System::currentTimeMillis,
 ) {
     val http: OkHttpClient = baseClient.newBuilder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -72,6 +77,14 @@ class CoolapkClient(
     @Volatile var captchaVerifier: CaptchaVerifier? = null
     private val sessidPattern = Regex("^[A-Za-z0-9._%-]{1,256}$")
     private val verifying = AtomicBoolean(false)
+
+    /**
+     * No captcha prompts until then. Set when a submitted verification was still
+     * answered with a captcha, or one was cancelled, so pages fall back to the
+     * web version instead of asking again and again.
+     */
+    @Volatile private var promptsPausedUntil = 0L
+    @Volatile private var pausedGeneration = -1
 
     suspend fun get(
         url: String,
@@ -128,6 +141,7 @@ class CoolapkClient(
             !response.url.isHttps || response.url.host !in CoolapkHeaders.apiHosts || response.code !in 200..299
         ) return response
         val challenge = CaptchaChallenge.fromText(response.text) ?: return response
+        if (pausedGeneration == generation && clock() < promptsPausedUntil) return response.withVerification("paused")
         if (!verifying.compareAndSet(false, true)) return response
         val proof = try {
             verifier(challenge)
@@ -137,10 +151,21 @@ class CoolapkClient(
         if (proof == null || generation != session.generation || !challenge.acceptsProof(proof) ||
             snapshot != session.account
         ) {
+            if (proof == null) pausePrompts(generation, CANCEL_PAUSE_MS)
             return response.withVerification(if (proof == null) "cancelled" else "incomplete")
         }
         // Single direct retry: no verification loop or replay after transport errors.
-        return retry(proof, challenge).withVerification("submitted")
+        val result = retry(proof, challenge)
+        if (CaptchaChallenge.fromText(result.text) != null) {
+            pausePrompts(generation, REJECTED_PAUSE_MS)
+            return result.withVerification("rejected")
+        }
+        return result.withVerification("submitted")
+    }
+
+    private fun pausePrompts(generation: Int, duration: Long) {
+        pausedGeneration = generation
+        promptsPausedUntil = clock() + duration
     }
 
     private fun checkGeneration(generation: Int) {
@@ -173,6 +198,12 @@ class CoolapkClient(
         val value = response.cookies.map { it.substringBefore(';').trim() }
             .lastOrNull { it.startsWith("SESSID=") }?.removePrefix("SESSID=") ?: return
         session.sessid = if (value.isEmpty() || value == "deleted" || !sessidPattern.matches(value)) "" else "SESSID=$value"
+    }
+
+    private companion object {
+        /** The server did not accept a passed verification. */
+        const val REJECTED_PAUSE_MS = 30 * 60_000L
+        const val CANCEL_PAUSE_MS = 10 * 60_000L
     }
 }
 
