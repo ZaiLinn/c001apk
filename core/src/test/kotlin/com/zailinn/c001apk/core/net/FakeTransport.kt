@@ -14,6 +14,8 @@ class FakeTransport(var respond: (Request, Int) -> Pair<Int, String> = { _, _ ->
     val requests = mutableListOf<Request>()
     val bodies = mutableListOf<String>()
     var beforeResponse: (() -> Unit)? = null
+    /** Optional Set-Cookie header per request number. */
+    var setCookie: (Int) -> String? = { null }
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
@@ -22,6 +24,7 @@ class FakeTransport(var respond: (Request, Int) -> Pair<Int, String> = { _, _ ->
         beforeResponse?.invoke()
         val (code, body) = respond(request, requests.size)
         return Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(code).message("OK")
+            .apply { setCookie(requests.size)?.let { header("Set-Cookie", it) } }
             .body(body.toResponseBody("application/json".toMediaType())).build()
     }
 }

@@ -13,7 +13,7 @@ class SessionState {
     @Volatile var account: AccountCredentials? = null
         private set
 
-    /** `SESSID=...` issued to the active session by checkLoginInfo. */
+    /** `SESSID=...` last issued by the API; carries passed captcha verification. */
     @Volatile var sessid: String = ""
 
     /** `SESSID=...` of the account.coolapk.com password login page. */

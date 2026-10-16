@@ -70,6 +70,7 @@ class CoolapkClient(
     private val noRedirect: OkHttpClient = http.newBuilder().followRedirects(false).followSslRedirects(false).build()
 
     @Volatile var captchaVerifier: CaptchaVerifier? = null
+    private val sessidPattern = Regex("^[A-Za-z0-9._%-]{1,256}$")
     private val verifying = AtomicBoolean(false)
 
     suspend fun get(
@@ -158,7 +159,20 @@ class CoolapkClient(
             ApiResponse(it.code, it.headers, it.body?.bytes() ?: ByteArray(0), it.request.url)
         }
         if (generation != null && generation != session.generation) throw ApiFailure.cancelled
+        keepSessionCookie(request, result)
         result
+    }
+
+    /**
+     * The API issues a SESSID with each response, captcha challenges included,
+     * and a passed verification is remembered on it. Dropping it, as earlier
+     * versions did for signed-in accounts, made every page ask again.
+     */
+    private fun keepSessionCookie(request: Request, response: ApiResponse) {
+        if (!request.url.isHttps || request.url.host !in CoolapkHeaders.apiHosts) return
+        val value = response.cookies.map { it.substringBefore(';').trim() }
+            .lastOrNull { it.startsWith("SESSID=") }?.removePrefix("SESSID=") ?: return
+        session.sessid = if (value.isEmpty() || value == "deleted" || !sessidPattern.matches(value)) "" else "SESSID=$value"
     }
 }
 

@@ -88,10 +88,11 @@ class CoolapkHeaders(
                     builder.removeHeader("Cookie")
                 } else {
                     val account = session.account
+                    val sessid = session.sessid.takeIf { it.startsWith("SESSID=") }
                     val cookie = if (account != null) {
-                        "uid=${account.uid}; username=${account.username}; token=${account.token}"
+                        "uid=${account.uid}; username=${account.username}; token=${account.token}" + (sessid?.let { "; $it" } ?: "")
                     } else {
-                        session.sessid
+                        sessid.orEmpty()
                     }
                     if (cookie.isNotEmpty()) builder.header("Cookie", cookie) else builder.removeHeader("Cookie")
                 }

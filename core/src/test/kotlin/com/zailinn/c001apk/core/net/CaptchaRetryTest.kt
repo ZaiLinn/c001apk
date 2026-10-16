@@ -35,6 +35,33 @@ class CaptchaRetryTest {
     }
 
     @Test
+    fun sessionFromTheChallengeIsKeptForTheRetryAndLaterRequests() = runTest {
+        val h = harness()
+        h.session.activate(AccountCredentials("10", "name", "tok"), notify = true)
+        h.transport.setCookie = { n -> if (n == 1) "SESSID=challenge-session; path=/; domain=.coolapk.com" else null }
+        h.client.captchaVerifier = { "NEC:01234567:synthetic-proof" }
+        h.client.get("https://api.coolapk.com/v6/feed/replyList", listOf("id" to "123"))
+        h.client.get("https://api.coolapk.com/v6/feed/replyList", listOf("id" to "123", "page" to "2"))
+        val cookies = h.transport.requests.map { it.header("Cookie") }
+        assertEquals("uid=10; username=name; token=tok", cookies[0])
+        // The proof goes back on the session that was challenged, and later pages stay on it.
+        assertEquals("uid=10; username=name; token=tok; SESSID=challenge-session", cookies[1])
+        assertEquals("uid=10; username=name; token=tok; SESSID=challenge-session", cookies[2])
+    }
+
+    @Test
+    fun deletedOrMalformedSessionIsDropped() = runTest {
+        val h = Harness()
+        h.session.sessid = "SESSID=old"
+        h.transport.setCookie = { "SESSID=deleted; Max-Age=0" }
+        h.client.get("https://api.coolapk.com/v6/main/indexV8")
+        assertEquals("", h.session.sessid)
+        h.transport.setCookie = { "SESSID=bad<value>; path=/" }
+        h.client.get("https://api.coolapk.com/v6/main/indexV8")
+        assertEquals("", h.session.sessid)
+    }
+
+    @Test
     fun verifiedMultipartPostRetainsPayload() = runTest {
         val h = harness()
         h.client.captchaVerifier = { "NEC:01234567:synthetic-proof" }
