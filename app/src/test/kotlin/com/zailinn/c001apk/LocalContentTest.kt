@@ -29,7 +29,10 @@ class LocalContentTest {
         app.settings.set(stringPreferencesKey("sensitiveFoldCategories"), "couple,lust")
         app.settings.set(stringPreferencesKey("sensitiveWords"), """["内卷","#打工人#"]""")
         app.settings.set(stringPreferencesKey("semanticPhrases"), """["晒奢侈品"]""")
-        waitFor { app.content.filterCategories.value.any { it.id == LocalContent.CUSTOM_ID } }
+        // Each write emits on its own, so wait until all three lists have landed.
+        waitFor {
+            app.content.filterCategories.value.any { it.id == LocalContent.CUSTOM_ID && it.keywords.isNotEmpty() && it.examples.isNotEmpty() }
+        }
         val categories = app.content.filterCategories.value
         assertEquals(listOf("couple", "dating", "lust", "gender", "custom"), categories.map { it.id })
         assertEquals(listOf(true, false, true, false, true), categories.map { it.enabled })

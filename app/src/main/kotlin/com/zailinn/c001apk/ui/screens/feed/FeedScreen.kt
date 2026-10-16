@@ -187,7 +187,10 @@ private fun ArticleBody(data: Datum, blocks: List<FeedArticle>, actions: ItemAct
     val navigator = LocalNavigator.current
     val images = blocks.filter { it.type == "image" }.mapNotNull { it.url }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        FeedCard(data.with("message", "").withList("picArr", emptyList()), actions, detail = true, footer = false)
+        // The article's own title block repeats message_title, so the header keeps only the author line.
+        val header = data.with("message", "").withList("picArr", emptyList())
+            .let { if (blocks.any { it.type == "title" }) it.with("message_title", "") else it }
+        FeedCard(header, actions, detail = true, footer = false)
         blocks.forEach { block ->
             when (block.type) {
                 "title" -> HtmlText(block.title.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = 17.sp, bold = true)
