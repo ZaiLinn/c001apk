@@ -32,6 +32,8 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
     var topReply: Datum? = null
         private set
     private var replyMe: Datum? = null
+    /** Replies were read from the public web page because the reply API asked for a captcha. */
+    val repliesFromWeb = MutableStateFlow(false)
     /** The first reply page also needs the detail's pinned rows, so it waits for the detail. */
     private val detailReady = CompletableDeferred<Unit>()
 
@@ -43,11 +45,16 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
             (head + items).map(rules::filterReplyRows)
         },
     ) { page ->
-        // Replies are requested together with the detail instead of after it: one round trip, not two.
-        coroutineScope {
-            val replies = async { app.repository.feedReplies(id, sort.value.listType, page, sort.value.fromAuthor) }
-            detailReady.await()
-            replies.await()
+        if (page.page > 1 && repliesFromWeb.value) {
+            // The web page has no further pages.
+            LoadResult.Empty
+        } else {
+            // Replies are requested together with the detail instead of after it: one round trip, not two.
+            coroutineScope {
+                val replies = async { app.repository.feedRepliesOrWeb(id, sort.value.listType, page, sort.value.fromAuthor) }
+                detailReady.await()
+                replies.await()
+            }.also { if (page.page == 1) repliesFromWeb.value = (it as? LoadResult.Success)?.isPublic == true }
         }
     }
 

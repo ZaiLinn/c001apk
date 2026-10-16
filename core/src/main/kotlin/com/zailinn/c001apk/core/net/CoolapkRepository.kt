@@ -57,11 +57,48 @@ class CoolapkRepository(
         list { client.get(API + url, query) }
 
     suspend fun feedReplies(id: String, listType: String, page: Page, fromFeedAuthor: Int = 0) = list {
-        client.get("$API2/v6/feed/replyList", listOf(
-            "id" to id, "listType" to listType,
-        ) + page.query() + listOf(
-            "discussMode" to "1", "feedType" to "feed", "blockStatus" to "0", "fromFeedAuthor" to fromFeedAuthor.toString(),
-        ))
+        client.get("$API2/v6/feed/replyList", replyQuery(id, listType, page, fromFeedAuthor))
+    }
+
+    private fun replyQuery(id: String, listType: String, page: Page, fromFeedAuthor: Int) = listOf(
+        "id" to id, "listType" to listType,
+    ) + page.query() + listOf(
+        "discussMode" to "1", "feedType" to "feed", "blockStatus" to "0", "fromFeedAuthor" to fromFeedAuthor.toString(),
+    )
+
+    /**
+     * Replies of a feed without a captcha prompt. When the reply API demands a
+     * captcha, the first page comes from the public web page instead, which embeds
+     * the hot replies (up to a few, with their sub-replies); that result is marked
+     * public and has no further pages. Without hot replies the captcha error stays.
+     */
+    suspend fun feedRepliesOrWeb(id: String, listType: String, page: Page, fromFeedAuthor: Int = 0): LoadResult<List<Datum>> =
+        try {
+            toList(readApiObject(client.get("$API2/v6/feed/replyList", replyQuery(id, listType, page, fromFeedAuthor), skipCaptcha = true)))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val failure = ApiFailure.from(e)
+            when {
+                failure.kind != ApiFailureKind.Captcha -> LoadResult.Error(failure.message)
+                page.page > 1 -> LoadResult.Empty
+                else -> (webReplies(id) as? LoadResult.Success)?.takeIf { it.value.isNotEmpty() } ?: LoadResult.Error(failure.message)
+            }
+        }
+
+    /** Replies embedded in the public web page of a feed: in practice only the hot ones. */
+    suspend fun webReplies(id: String): LoadResult<List<Datum>> {
+        if (!Regex("^[0-9]+$").matches(id)) return LoadResult.Error("动态编号无效")
+        return when (val feed = data { client.get("${Constants.URL_COOLAPK}feed/$id") }) {
+            is LoadResult.Success -> {
+                val rows = (feed.value.list("hotReplyRows") + feed.value.list("replyRows")).distinctBy { it.id ?: it.hashCode().toString() }
+                val rules = filter()
+                val shown = rules.markAll(rows.filter { rules.accepts(it, false) })
+                if (rows.isEmpty()) LoadResult.Empty else LoadResult.Success(shown, isPublic = true)
+            }
+            is LoadResult.Error -> feed
+            else -> LoadResult.Empty
+        }
     }
 
     suspend fun replyToReply(id: String, page: Page) = list {
@@ -280,9 +317,16 @@ class CoolapkRepository(
         includeConfigCard: Boolean = false,
         request: suspend () -> ApiResponse,
     ): LoadResult<List<Datum>> = try {
-        val body = readApiObject(request())
+        toList(readApiObject(request()), includeConfigCard)
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        LoadResult.Error(ApiFailure.from(e).message)
+    }
+
+    private suspend fun toList(body: JsonObject, includeConfigCard: Boolean = false): LoadResult<List<Datum>> {
         val items = expandListCards((body["data"] as? JsonArray).orEmpty()).toList()
-        if (items.isEmpty()) {
+        return if (items.isEmpty()) {
             LoadResult.Empty
         } else {
             val rules = filter()
@@ -298,10 +342,6 @@ class CoolapkRepository(
                 ))
             }
         }
-    } catch (e: CancellationException) {
-        throw e
-    } catch (e: Exception) {
-        LoadResult.Error(ApiFailure.from(e).message)
     }
 
     private suspend fun action(request: suspend () -> ApiResponse): ActionResult {
