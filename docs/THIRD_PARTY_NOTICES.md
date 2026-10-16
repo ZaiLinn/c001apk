@@ -37,4 +37,4 @@ SDK 的接入回调另行核对了[网易易盾官方示例](https://github.com/
 | AndroidX、Jetpack Compose、Material 3、Kotlin、kotlinx | 应用框架 | Apache-2.0 |
 | [OkHttp](https://github.com/square/okhttp)、[Coil](https://github.com/coil-kt/coil)、[Telephoto](https://github.com/saket/telephoto)、[MaterialKolor](https://github.com/jordond/MaterialKolor)、[jsoup](https://jsoup.org/) | 网络、图片、缩放、配色、HTML 解析 | Apache-2.0 / MIT |
 
-酷安名称、商标及服务内容归相应权利人所有。
+酷安名称、商标、表情图片（含“牛牛”表情）及服务内容归相应权利人所有。
