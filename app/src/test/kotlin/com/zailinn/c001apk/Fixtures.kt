@@ -9,11 +9,13 @@ import okhttp3.ResponseBody.Companion.toResponseBody
 /** Synthetic Coolapk responses; no request leaves the test process. */
 class FixtureTransport : Interceptor {
     val paths = mutableListOf<String>()
+    /** Path plus query, to tell first pages from later ones. */
+    val urls = mutableListOf<String>()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val path = request.url.encodedPath
-        synchronized(paths) { paths += path }
+        synchronized(paths) { paths += path; urls += path + "?" + request.url.encodedQuery.orEmpty() }
         val body = when {
             path.endsWith("/v6/main/indexV8") -> list(
                 card("imageCarouselCard_1", entities = """[{"title":"合成轮播","url":"/feed/100","pic":"https://image.coolapk.com/c.jpg"}]"""),
