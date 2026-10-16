@@ -68,10 +68,14 @@ val CardShape = RoundedCornerShape(12.dp)
 @Composable
 fun cardColor() = MaterialTheme.colorScheme.surfaceContainerLow
 
-/** A feed in a list, or the header of the feed detail page when [detail] is set. */
+/**
+ * A feed in a list, or the header of the feed detail page when [detail] is set.
+ * Without [footer] the location, counts and topic chips are left for the caller
+ * to place with [FeedFooter], as articles do below their body.
+ */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FeedCard(data: Datum, actions: ItemActions = ItemActions(), detail: Boolean = false) {
+fun FeedCard(data: Datum, actions: ItemActions = ItemActions(), detail: Boolean = false, footer: Boolean = true) {
     val navigator = LocalNavigator.current
     val open = { data.id?.let { navigator.navigate(FeedRoute(it)) } ?: Unit }
     val pad = if (detail) 16.dp else 10.dp
@@ -101,10 +105,17 @@ fun FeedCard(data: Datum, actions: ItemActions = ItemActions(), detail: Boolean 
             if (!data.string("forwardSourceType").isNullOrEmpty()) ForwardSource(data.obj("forwardSourceFeed"), pad, detail)
             data.string("extra_url")?.takeIf { it.isNotEmpty() }?.let { ExtraLink(data, it, pad, detail) }
             data.replyRows.firstOrNull()?.takeIf { !detail }?.let { HotReply(it, open) }
-            FeedBottom(data, detail, pad, actions)
-            RelationRows(data, pad, detail)
+            if (footer) FeedFooter(data, actions, detail)
         }
     }
+}
+
+/** Location or time, reply and like counts, then topic and product chips. */
+@Composable
+fun FeedFooter(data: Datum, actions: ItemActions, detail: Boolean = true) {
+    val pad = if (detail) 16.dp else 10.dp
+    FeedBottom(data, detail, pad, actions)
+    RelationRows(data, pad, detail)
 }
 
 @Composable

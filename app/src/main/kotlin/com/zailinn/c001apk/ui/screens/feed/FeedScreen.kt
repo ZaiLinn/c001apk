@@ -53,6 +53,7 @@ import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.cards.CardShape
 import com.zailinn.c001apk.ui.cards.FeedCard
+import com.zailinn.c001apk.ui.cards.FeedFooter
 import com.zailinn.c001apk.ui.cards.ItemActions
 import com.zailinn.c001apk.ui.cards.ReplyCard
 import com.zailinn.c001apk.ui.cards.cardColor
@@ -186,7 +187,7 @@ private fun ArticleBody(data: Datum, blocks: List<FeedArticle>, actions: ItemAct
     val navigator = LocalNavigator.current
     val images = blocks.filter { it.type == "image" }.mapNotNull { it.url }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        FeedCard(data.with("message", "").withList("picArr", emptyList()), actions, detail = true)
+        FeedCard(data.with("message", "").withList("picArr", emptyList()), actions, detail = true, footer = false)
         blocks.forEach { block ->
             when (block.type) {
                 "title" -> HtmlText(block.title.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = 17.sp, bold = true)
@@ -210,6 +211,7 @@ private fun ArticleBody(data: Datum, blocks: List<FeedArticle>, actions: ItemAct
                 ) { Text(block.title.orEmpty(), Modifier.padding(10.dp)) }
             }
         }
+        Column(Modifier.padding(bottom = 12.dp)) { FeedFooter(data, actions) }
     }
 }
 
