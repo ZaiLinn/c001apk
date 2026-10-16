@@ -59,6 +59,21 @@ class LocalContentTest {
     }
 
     @Test
+    fun savedLustExampleIsReplacedOnce() = runBlocking {
+        val old = SensitiveCategory.builtIn.map {
+            if (it.id == "lust") it.copy(examples = listOf("好想有个人陪我") + it.examples.drop(1)) else it
+        }
+        app.content.updateCategories { old }
+        // As saved by 2.0.4.
+        app.settings.set(androidx.datastore.preferences.core.intPreferencesKey("filterCategoriesRevision"), 2)
+        waitFor { "好想有个人陪我" in app.content.filterCategories.value.single { it.id == "lust" }.examples }
+        app.content.migrateCategories()
+        waitFor { "好想有个人陪我" !in app.content.filterCategories.value.single { it.id == "lust" }.examples }
+        val examples = app.content.filterCategories.value.single { it.id == "lust" }.examples
+        assertEquals(1, examples.count { it == "单身好久了晚上好想有个女朋友陪" })
+    }
+
+    @Test
     fun editDeleteAndRestore() = runBlocking {
         val id = app.content.addCategory("  奢侈品 ")
         app.content.updateCategory(id) { it.copy(keywords = listOf("爱马仕")) }

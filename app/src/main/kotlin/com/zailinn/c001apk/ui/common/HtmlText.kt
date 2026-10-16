@@ -17,7 +17,6 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -26,19 +25,22 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalUriHandler
-import androidx.compose.ui.platform.UriHandler
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.AnnotatedString
-import androidx.compose.ui.text.LinkAnnotation
+import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.text.Placeholder
 import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
-import androidx.compose.ui.text.TextLinkStyles
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
-import androidx.compose.ui.text.withLink
+import androidx.compose.ui.text.withAnnotation
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
@@ -47,10 +49,14 @@ import androidx.compose.ui.unit.sp
 import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 
+private const val LINK = "url"
+
 private val emojiPattern = Regex("\\[[^\\]]+]")
 private const val PHOTO = "ic_photo.icon"
 
-private class BuiltHtml(val text: AnnotatedString, val inline: Set<String>)
+private class BuiltHtml(val text: AnnotatedString, val inline: Set<String>) {
+    val hasLinks = text.getStringAnnotations(LINK, 0, text.length).isNotEmpty()
+}
 
 /** Parsed messages by (html, emoji setting, link color); shared across cards and screens. */
 private val builtCache = object : LruCache<Triple<String, Boolean, Long>, BuiltHtml>(400) {}
@@ -103,7 +109,7 @@ fun HtmlText(
         }
     }
     val current by rememberUpdatedState(handler)
-    val uriHandler = remember { object : UriHandler { override fun openUri(uri: String) = current(uri) } }
+    val layout = remember { mutableStateOf<TextLayoutResult?>(null) }
     val built = remember(html, showEmoji, linkColor) {
         val key = Triple(html, showEmoji, linkColor.value.toLong())
         builtCache.get(key) ?: buildHtml(html, showEmoji, linkColor).also { builtCache.put(key, it) }
@@ -119,17 +125,42 @@ fun HtmlText(
             }
         }
     }
-    CompositionLocalProvider(LocalUriHandler provides uriHandler) {
-        Text(
-            built.text,
-            modifier = modifier,
-            style = TextStyle(fontSize = fontSize, lineHeight = fontSize * 1.5f, fontWeight = if (bold) FontWeight.Bold else null),
-            color = if (color == Color.Unspecified) LocalContentColor.current else color,
-            maxLines = maxLines,
-            overflow = TextOverflow.Ellipsis,
-            inlineContent = inline,
-        )
-    }
+    // Links are hit-tested per character. Compose's own link handling uses the
+    // bounding box of a link, so a topic wrapped onto the next line swallowed
+    // taps on the plain text beside it. Taps off a link fall through to the card.
+    val links = if (built.hasLinks) {
+        Modifier.pointerInput(built) {
+            awaitEachGesture {
+                val down = awaitFirstDown()
+                val url = layout.value?.let { linkAt(built.text, it, down.position) } ?: return@awaitEachGesture
+                down.consume()
+                val up = waitForUpOrCancellation() ?: return@awaitEachGesture
+                up.consume()
+                current(url)
+            }
+        }
+    } else Modifier
+    Text(
+        built.text,
+        modifier = modifier.then(links),
+        style = TextStyle(fontSize = fontSize, lineHeight = fontSize * 1.5f, fontWeight = if (bold) FontWeight.Bold else null),
+        color = if (color == Color.Unspecified) LocalContentColor.current else color,
+        maxLines = maxLines,
+        overflow = TextOverflow.Ellipsis,
+        inlineContent = inline,
+        onTextLayout = { layout.value = it },
+    )
+}
+
+/** The link under [position], only when a linked character itself is touched. */
+internal fun linkAt(text: AnnotatedString, layout: TextLayoutResult, position: Offset): String? {
+    val line = layout.getLineForVerticalPosition(position.y)
+    if (position.y < layout.getLineTop(line) || position.y > layout.getLineBottom(line)) return null
+    val offset = layout.getOffsetForPosition(position)
+    return listOf(offset, offset - 1)
+        .filter { it in 0 until layout.layoutInput.text.length && layout.getLineForOffset(it) == line }
+        .firstOrNull { val box = layout.getBoundingBox(it); position.x >= box.left && position.x <= box.right }
+        ?.let { text.getStringAnnotations(LINK, it, it + 1).firstOrNull()?.item }
 }
 
 /** Small outlined label used for markers like [楼主]. */
@@ -146,7 +177,7 @@ fun Badge(text: String) {
 
 private fun buildHtml(html: String, showEmoji: Boolean, linkColor: Color): BuiltHtml {
     val inline = mutableSetOf<String>()
-    val styles = TextLinkStyles(SpanStyle(color = linkColor))
+    val linkStyle = SpanStyle(color = linkColor)
     val text = buildAnnotatedString {
         fun appendText(value: String) {
             if (!showEmoji || !value.contains('[')) {
@@ -175,11 +206,11 @@ private fun buildHtml(html: String, showEmoji: Boolean, linkColor: Color): Built
                 HtmlPart.Break -> append('\n')
                 is HtmlPart.Text ->
                     if (part.href == null) appendText(part.value)
-                    else withLink(LinkAnnotation.Url(part.href, styles)) { appendText(part.value) }
+                    else withAnnotation(LINK, part.href) { withStyle(linkStyle) { appendText(part.value) } }
                 is HtmlPart.Image -> {
                     inline += PHOTO
                     if (part.href == null) appendInlineContent(PHOTO, "[图片]")
-                    else withLink(LinkAnnotation.Url(part.href, styles)) { appendInlineContent(PHOTO, "[图片]") }
+                    else withAnnotation(LINK, part.href) { appendInlineContent(PHOTO, "[图片]") }
                 }
             }
         }

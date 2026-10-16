@@ -106,18 +106,29 @@ class LocalContent(private val store: LocalStore) {
 
     /**
      * One-time cleanups of saved categories when shipped defaults change: 2.0.3
-     * dropped #酷安夜话# and #夜话# from 性压抑/擦边 (too broad for a whole topic).
+     * dropped #酷安夜话# and #夜话# from 性压抑/擦边 (too broad for a whole topic);
+     * 2.0.5 replaced its example "好想有个人陪我", which drew in any post about
+     * nights, sleep or company ("下夜班睡觉去了", "有纸就有床").
      */
     suspend fun migrateCategories() = store.edit { prefs ->
         val revision = prefs[intPreferencesKey(CATEGORIES_REVISION)] ?: 1
-        if (revision >= 2) return@edit
+        if (revision >= CURRENT_REVISION) return@edit
         prefs[stringPreferencesKey(FILTER_CATEGORIES)]
             ?.let { runCatching { storeJson.decodeFromString(categories, it) }.getOrNull() }
             ?.let { saved ->
-                val cleaned = saved.map { c -> if (c.id == "lust") c.copy(tags = c.tags - setOf("酷安夜话", "夜话")) else c }
+                val cleaned = saved.map { c ->
+                    if (c.id != "lust") return@map c
+                    var fixed = c
+                    if (revision < 2) fixed = fixed.copy(tags = fixed.tags - setOf("酷安夜话", "夜话"))
+                    if (revision < 3) {
+                        val examples = fixed.examples.map { if (it == DROPPED_EXAMPLE) REPLACED_EXAMPLE else it }
+                        fixed = fixed.copy(examples = examples.distinct())
+                    }
+                    fixed
+                }
                 prefs[stringPreferencesKey(FILTER_CATEGORIES)] = storeJson.encodeToString(categories, cleaned)
             }
-        prefs[intPreferencesKey(CATEGORIES_REVISION)] = 2
+        prefs[intPreferencesKey(CATEGORIES_REVISION)] = CURRENT_REVISION
     }
 
     suspend fun updateCategories(transform: (List<SensitiveCategory>) -> List<SensitiveCategory>) =
@@ -215,6 +226,9 @@ class LocalContent(private val store: LocalStore) {
         private const val LOCAL_FOLLOWS = "localFollowUsers"
         private const val FILTER_CATEGORIES = "filterCategoriesV1"
         private const val CATEGORIES_REVISION = "filterCategoriesRevision"
+        private const val CURRENT_REVISION = 3
+        private const val DROPPED_EXAMPLE = "好想有个人陪我"
+        private const val REPLACED_EXAMPLE = "单身好久了晚上好想有个女朋友陪"
         private const val LEGACY_ENABLED = "sensitiveFoldCategories"
         private const val LEGACY_WORDS = "sensitiveWords"
         private const val LEGACY_PHRASES = "semanticPhrases"
