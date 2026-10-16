@@ -52,6 +52,7 @@ import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.cards.ItemCard
+import com.zailinn.c001apk.ui.common.OnCountIncrease
 import com.zailinn.c001apk.ui.common.PagedList
 import com.zailinn.c001apk.ui.common.SearchPill
 import com.zailinn.c001apk.ui.common.PagedListView
@@ -85,16 +86,11 @@ fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
     val pager = rememberPagerState(initialPage = HomeTab.Feed.ordinal) { tabs.size }
     val scope = rememberCoroutineScope()
     var composing by remember { mutableStateOf(false) }
-    val reselectTab = remember { mutableStateOf(0) }
-    LaunchedEffect(reselect) { if (reselect > 0) reselectTab.value++ }
+    // Scroll-to-top-and-refresh requests for the visible list; saved so a rebuilt screen does not repeat one.
+    val reselectTab = rememberSaveable { mutableIntStateOf(0) }
+    OnCountIncrease(reselect) { reselectTab.intValue++ }
     // "返回首页时自动刷新": each new return scrolls the current list to the top and refreshes it once.
-    var handledReturns by rememberSaveable { mutableIntStateOf(homeReturns) }
-    LaunchedEffect(homeReturns) {
-        if (homeReturns > handledReturns) {
-            handledReturns = homeReturns
-            reselectTab.value++
-        }
-    }
+    OnCountIncrease(homeReturns) { reselectTab.intValue++ }
     // The search row slides away while reading and returns on the first scroll up; tabs stay pinned.
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     Scaffold(
@@ -118,7 +114,7 @@ fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
                         Tab(
                             selected = selected,
                             onClick = {
-                                if (selected) reselectTab.value++
+                                if (selected) reselectTab.intValue++
                                 else scope.launch { pager.animateScrollToPage(index) }
                             },
                             text = {
@@ -149,9 +145,8 @@ fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
                     }
                     val vm = appViewModel(key = "home-${tab.name}-$generation") { HomeFeedViewModel(it, tab, url, title) }
                     val listState = rememberLazyListState()
-                    val reselected by reselectTab
-                    LaunchedEffect(reselected) {
-                        if (active && reselected > 0) {
+                    OnCountIncrease(reselectTab.intValue) {
+                        if (active) {
                             listState.animateScrollToItem(0)
                             vm.list.refresh(showIndicator = true)
                         }

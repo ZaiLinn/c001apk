@@ -34,6 +34,7 @@ import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.cards.ItemCard
+import com.zailinn.c001apk.ui.common.OnCountIncrease
 import com.zailinn.c001apk.ui.common.MessageBox
 import com.zailinn.c001apk.ui.common.PagedList
 import com.zailinn.c001apk.ui.common.PagedListView
@@ -140,7 +141,7 @@ fun FollowScreen(generation: Int, reselect: Int) {
                 val type = selected
                 val vm = appViewModel(key = "follow-account-$type-$generation") { AccountFollowViewModel(it, type) }
                 val listState = rememberLazyListState()
-                LaunchedEffect(reselect) { if (reselect > 0) listState.animateScrollToItem(0) }
+                OnCountIncrease(reselect) { listState.animateScrollToItem(0) }
                 PagedListView(vm.list, listState = listState) { _, item -> ItemCard(item, vm.actions) }
             }
         }
@@ -156,7 +157,7 @@ private fun LocalFollowFeed(generation: Int, reselect: Int) {
     val users by vm.app.content.localFollows.collectAsStateWithLifecycle()
     val warning by vm.warning.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
-    LaunchedEffect(reselect) { if (reselect > 0) listState.animateScrollToItem(0) }
+    OnCountIncrease(reselect) { listState.animateScrollToItem(0) }
     Column {
         ListItem(
             headlineContent = { Text("${label}动态") },
