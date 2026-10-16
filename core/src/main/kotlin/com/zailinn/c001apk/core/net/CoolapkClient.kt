@@ -97,13 +97,16 @@ class CoolapkClient(
         val snapshot = session.account
         val options = RequestOptions(generation, skipCaptcha, expectImage)
         val client = if (followRedirects) http else noRedirect
-        fun build(extra: List<Pair<String, String>>) = Request.Builder()
+        fun build(extra: List<Pair<String, String>>, opts: RequestOptions = options) = Request.Builder()
             .url(url.toHttpUrl().newBuilder().apply { (query + extra).forEach { (k, v) -> addQueryParameter(k, v) } }.build())
-            .tag(RequestOptions::class.java, options)
+            .tag(RequestOptions::class.java, opts)
             .get().build()
         val response = execute(client, build(emptyList()), generation)
         return verifyAndRetry(response, snapshot, generation, skipCaptcha) { proof, challenge ->
-            execute(client, build(listOf(challenge.field to proof)), generation)
+            if (challenge.field.isEmpty())
+                execute(client, build(emptyList(), options.copy(validateProof = proof)), generation)
+            else
+                execute(client, build(listOf(challenge.field to proof)), generation)
         }.also { checkGeneration(generation) }
     }
 
@@ -117,12 +120,15 @@ class CoolapkClient(
         val snapshot = session.account
         val options = RequestOptions(generation, skipCaptcha)
         val httpUrl = url.toHttpUrl().newBuilder().apply { query.forEach { (k, v) -> addQueryParameter(k, v) } }.build()
-        fun build(content: Body) = Request.Builder().url(httpUrl)
-            .tag(RequestOptions::class.java, options)
+        fun build(content: Body, opts: RequestOptions = options) = Request.Builder().url(httpUrl)
+            .tag(RequestOptions::class.java, opts)
             .post(content.toRequestBody()).build()
         val response = execute(http, build(body), generation)
         return verifyAndRetry(response, snapshot, generation, skipCaptcha) { proof, challenge ->
-            execute(http, build(body.with(challenge.field, proof)), generation)
+            if (challenge.field.isEmpty())
+                execute(http, build(body, options.copy(validateProof = proof)), generation)
+            else
+                execute(http, build(body.with(challenge.field, proof)), generation)
         }.also { checkGeneration(generation) }
     }
 

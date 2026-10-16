@@ -7,6 +7,7 @@ import okhttp3.Interceptor
 import okhttp3.Request
 import okhttp3.Response
 import java.io.IOException
+import java.net.URLEncoder
 
 /** Per-request options carried as an OkHttp tag. */
 data class RequestOptions(
@@ -14,6 +15,11 @@ data class RequestOptions(
     val skipCaptcha: Boolean = false,
     /** Image download from the account site (login captcha). */
     val expectImage: Boolean = false,
+    /**
+     * A captcha proof carried as a `validate` cookie for the retry of a
+     * blank-field (validate-cookie protocol) challenge. Never persisted.
+     */
+    val validateProof: String? = null,
 )
 
 internal class SessionChangedException : IOException("账号已切换")
@@ -89,11 +95,16 @@ class CoolapkHeaders(
                 } else {
                     val account = session.account
                     val sessid = session.sessid.takeIf { it.startsWith("SESSID=") }
-                    val cookie = if (account != null) {
+                    val base = if (account != null) {
                         "uid=${account.uid}; username=${account.username}; token=${account.token}" + (sessid?.let { "; $it" } ?: "")
                     } else {
                         sessid.orEmpty()
                     }
+                    // A blank-field captcha proof rides in a `validate` cookie, shared
+                    // by the API hosts; it is per-request only and never persisted.
+                    val cookie = options?.validateProof?.let { proof ->
+                        (if (base.isEmpty()) "" else "$base; ") + "validate=" + URLEncoder.encode(proof, "UTF-8")
+                    } ?: base
                     if (cookie.isNotEmpty()) builder.header("Cookie", cookie) else builder.removeHeader("Cookie")
                 }
             }

@@ -139,6 +139,29 @@ class CaptchaRetryTest {
     }
 
     @Test
+    fun blankFieldCaptchaCarriesValidateCookieNotQueryParam() = runTest {
+        extra = """{"captchaId":"0123456789abcdef0123456789abcdef","captchaField":""}"""
+        val h = harness()
+        h.session.activate(AccountCredentials("10", "name", "tok"), notify = true)
+        h.client.captchaVerifier = { c ->
+            assertEquals("", c.field)
+            "NEC:01234567:synthetic-proof"
+        }
+        val response = h.client.get("https://api.coolapk.com/v6/feed/replyList", listOf("id" to "123"))
+        assertTrue(response.text.contains("123"))
+        assertEquals("submitted", response.captchaVerification)
+        val last = h.transport.requests.last()
+        // The proof rides in a validate cookie, not a query parameter.
+        assertNull(last.url.queryParameter("_v2_post_token"))
+        assertEquals("123", last.url.queryParameter("id"))
+        val cookie = last.header("Cookie")!!
+        assertTrue(cookie.startsWith("uid=10; username=name; token=tok"))
+        assertTrue(cookie.contains("validate=NEC%3A01234567%3Asynthetic-proof"))
+        // The first request carried no validate cookie.
+        assertTrue(!h.transport.requests.first().header("Cookie").orEmpty().contains("validate="))
+    }
+
+    @Test
     fun externalHostsNeverInvokeVerification() = runTest {
         val h = harness()
         var prompts = 0

@@ -40,7 +40,14 @@ data class CaptchaChallenge(val captchaId: String, val field: String) {
             val field = (source["captchaField"] as? JsonPrimitive)?.takeIf { it.isString }?.content
             return CaptchaChallenge(
                 if (id != null && idPattern.matches(id)) id else DEFAULT_ID,
-                if (field != null && fieldPattern.matches(field)) field else "_v2_post_token",
+                // An explicitly blank field selects the validate-cookie protocol
+                // (replyList and other GETs carry the proof as a `validate` cookie,
+                // not a form field). Absent or malformed fields keep the legacy default.
+                when {
+                    field != null && field.isBlank() -> ""
+                    field != null && fieldPattern.matches(field) -> field
+                    else -> "_v2_post_token"
+                },
             )
         }
     }
