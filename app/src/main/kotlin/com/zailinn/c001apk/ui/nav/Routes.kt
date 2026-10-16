@@ -4,6 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable data object MainRoute
 @Serializable data class FeedRoute(val id: String)
+@Serializable data class EventRoute(val id: String)
 @Serializable data class UserRoute(val uid: String)
 @Serializable data class AppRoute(val id: String)
 @Serializable data class TopicRoute(val tag: String? = null, val id: String? = null)

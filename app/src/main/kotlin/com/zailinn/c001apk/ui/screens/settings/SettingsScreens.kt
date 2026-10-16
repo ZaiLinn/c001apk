@@ -82,7 +82,7 @@ import androidx.compose.foundation.layout.BoxWithConstraints
 
 enum class SettingsSection(val title: String, val description: String, val icon: ImageVector) {
     Appearance("外观与字号", "动态取色、主题、深色模式与字体大小", Icons.Outlined.Palette),
-    Content("关注与内容", "本地关注、悄悄关注、账号关注与表情", Icons.Outlined.Feed),
+    Content("关注与内容", "本地关注、悄悄关注、返回刷新与表情", Icons.Outlined.Feed),
     Filter("内容过滤", "用户与话题黑名单、敏感话题折叠或隐藏、语义屏蔽", Icons.Outlined.FilterAlt),
     Privacy("浏览与隐私", "浏览历史、外部链接", Icons.Outlined.PrivacyTip),
     Storage("存储与更新", "图片缓存、版本与更新检查", Icons.Outlined.Storage),
@@ -266,10 +266,6 @@ private fun SectionItems(section: SettingsSection) {
                 leadingContent = { Icon(Icons.Outlined.ManageAccounts, null) },
                 modifier = Modifier.clickable { navigator.navigate(LocalFollowRoute) },
             )
-            ChoiceItem(
-                Icons.Outlined.Feed, "账号关注内容", "筛选登录账号的关注动态，不影响本地关注",
-                listOf("全部", "用户", "话题", "数码", "应用"), settings.followType,
-            ) { setInt(SettingKeys.followType, it) }
             SwitchItem(
                 Icons.Outlined.Refresh, "返回首页时自动刷新", "从其他页面或底栏回到主页时，当前列表回到顶部并刷新",
                 settings.refreshOnReturn,

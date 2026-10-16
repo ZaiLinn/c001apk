@@ -39,6 +39,25 @@ class OssUploader(private val repository: CoolapkRepository, http: OkHttpClient 
 
     /** Uploads all images and returns the comma-separated `pic` field value. */
     suspend fun upload(images: List<UploadImage>, dir: String = "feed", toUid: String? = null, progress: (Int, Int) -> Unit = { _, _ -> }): String {
+        val (files, prefix) = put(images, "image", dir, toUid, progress)
+        return files.joinToString(",") { "$prefix/$it" }
+    }
+
+    /**
+     * Uploads a private message image to the message bucket and returns the
+     * `message_pic` value, the object path with a leading slash.
+     */
+    suspend fun uploadMessageImage(image: UploadImage, toUid: String): String {
+        val (files, _) = put(listOf(image), "message", "message", toUid) { _, _ -> }
+        val name = files.single()
+        if (!name.startsWith("message/")) throw ApiFailure.invalidResponse
+        return "/$name"
+    }
+
+    /** Prepares credentials, PUTs every image and returns the object names and the image URL prefix. */
+    private suspend fun put(
+        images: List<UploadImage>, bucketType: String, dir: String, toUid: String?, progress: (Int, Int) -> Unit,
+    ): Pair<List<String>, String?> {
         val list = images.joinToString(", ", "[", "]") { image ->
             buildJsonObject {
                 put("name", image.name)
@@ -47,7 +66,7 @@ class OssUploader(private val repository: CoolapkRepository, http: OkHttpClient 
             }.toString()
         }
         val result = repository.ossUploadPrepare(buildList {
-            add("uploadBucket" to "image")
+            add("uploadBucket" to bucketType)
             add("uploadDir" to dir)
             add("is_anonymous" to "0")
             add("uploadFileList" to list)
@@ -65,7 +84,9 @@ class OssUploader(private val repository: CoolapkRepository, http: OkHttpClient 
         val bucket = info.str("bucket")
         val endpoint = info.str("endPoint")?.removePrefix("https://")?.removePrefix("http://")
         val prefix = info.str("uploadImagePrefix")
-        if (key == null || secret == null || token == null || bucket == null || endpoint == null || prefix == null) {
+        if (key == null || secret == null || token == null || bucket == null || endpoint == null ||
+            (prefix == null && bucketType == "image")
+        ) {
             throw ApiFailure.invalidResponse
         }
         files.forEachIndexed { index, fileName ->
@@ -73,7 +94,7 @@ class OssUploader(private val repository: CoolapkRepository, http: OkHttpClient 
             val objectPath = dir + fileName.replaceFirst(dir, "")
             put(images[index], "https://$bucket.$endpoint/$objectPath", objectPath, bucket, key, secret, token)
         }
-        return files.joinToString(",") { "$prefix/$it" }
+        return files to prefix
     }
 
     private suspend fun put(

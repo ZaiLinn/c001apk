@@ -27,6 +27,8 @@ data class Page(val page: Int = 1, val firstItem: String? = null, val lastItem: 
     }
 }
 
+enum class ConversationAction(val path: String) { Pin("addTop"), Unpin("removeTop"), Delete("deleteChat") }
+
 /** Result of a write action: either a server message to show or the `data` field. */
 data class ActionResult(val message: String?, val data: JsonElement?, val messageStatus: String? = null) {
     /** Publishing needs the legacy image captcha before it can be retried. */
@@ -158,6 +160,14 @@ class CoolapkRepository(
         data { client.get(API + url, query) }
 
     suspend fun userSpace(uid: String) = dataFromUrl("/v6/user/space", listOf("uid" to uid))
+
+    /** An event page (/event/<id>): title, picture, sign-up deadline, rules and a sign-up link. */
+    suspend fun eventDetail(id: String): LoadResult<Datum> =
+        if (!Regex("^[0-9]+$").matches(id)) LoadResult.Error("活动编号无效") else dataFromUrl("/v6/event/detail", listOf("id" to id))
+
+    /** Pins, unpins or deletes a private conversation; the server confirms with a count. */
+    suspend fun conversationAction(action: ConversationAction, ukey: String): ActionResult =
+        getAction("/v6/message/${action.path}", listOf("ukey" to ukey))
 
     suspend fun topicDetail(tag: String?, id: String?) = when {
         !tag.isNullOrEmpty() -> dataFromUrl("/v6/topic/newTagDetail", listOf("tag" to tag))

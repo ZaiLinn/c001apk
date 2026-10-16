@@ -68,7 +68,8 @@ import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.core.net.ApiFailure
 import com.zailinn.c001apk.core.upload.UploadImage
 import com.zailinn.c001apk.ui.common.emojiBitmap
-import com.zailinn.c001apk.ui.common.emojiMap
+import com.zailinn.c001apk.ui.common.EmojiPanel
+import com.zailinn.c001apk.ui.common.readUploadImage
 import com.zailinn.c001apk.ui.screens.appContainer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -126,7 +127,7 @@ fun ComposerSheet(
                 var pic = ""
                 if (images.isNotEmpty()) {
                     busy = "准备上传图片"
-                    val files = withContext(Dispatchers.IO) { images.mapIndexed { i, uri -> readImage(context, uri, i) } }
+                    val files = withContext(Dispatchers.IO) { images.mapIndexed { i, uri -> readUploadImage(context, uri, i) } }
                     pic = app.uploader.upload(files) { index, total -> busy = "正在上传图片 ${index + 1}/$total" }
                 }
                 busy = "正在发布"
@@ -259,32 +260,4 @@ fun ComposerSheet(
             dismissButton = { TextButton(onClick = { captcha = null }) { Text("取消") } },
         )
     }
-}
-
-@Composable
-private fun EmojiPanel(onPick: (String) -> Unit) {
-    val entries = remember { emojiMap.entries.filter { it.value.endsWith(".png") }.toList() }
-    LazyVerticalGrid(GridCells.Adaptive(44.dp), Modifier.height(240.dp)) {
-        items(entries, key = { it.key }) { (key, file) ->
-            val bitmap = emojiBitmap(file)
-            Box(Modifier.size(44.dp).clickable { onPick(key) }, contentAlignment = Alignment.Center) {
-                bitmap?.let { Image(it, key, Modifier.size(30.dp)) }
-            }
-        }
-    }
-}
-
-private fun readImage(context: android.content.Context, uri: Uri, index: Int): UploadImage {
-    val resolver = context.contentResolver
-    val bytes = resolver.openInputStream(uri)?.use { it.readBytes() } ?: error("无法读取图片")
-    val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
-    BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-    val mime = resolver.getType(uri) ?: bounds.outMimeType ?: "image/jpeg"
-    val ext = when (mime) {
-        "image/png" -> "png"
-        "image/gif" -> "gif"
-        "image/webp" -> "webp"
-        else -> "jpg"
-    }
-    return UploadImage("${System.currentTimeMillis()}_$index.$ext", bounds.outWidth, bounds.outHeight, bytes, mime)
 }

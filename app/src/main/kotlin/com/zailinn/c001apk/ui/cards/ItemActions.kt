@@ -12,6 +12,8 @@ data class ItemActions(
     val onReply: ((target: Datum, parent: Datum?) -> Unit)? = null,
     val onShowReplies: ((Datum) -> Unit)? = null,
     val onOpenMessage: ((Datum) -> Unit)? = null,
+    /** Long press on a conversation: pin, unpin or delete it. */
+    val onMessageMenu: ((Datum) -> Unit)? = null,
     /** Shown on history and favorites to remove local records. */
     val removable: Boolean = false,
 )
