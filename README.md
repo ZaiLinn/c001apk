@@ -17,7 +17,7 @@
 
 ## 简介
 
-c001apk 是一个第三方酷安客户端，只提供 Android 版。它用 Kotlin 和 Jetpack Compose 原生编写，
+c001apk 是一个第三方酷安客户端，只提供 Android 版。基于 基于 [c001apk-flutter](https://github.com/bggRGjQaUbCoE/c001apk-flutter) 继续维护，它用 Kotlin 和 Jetpack Compose 原生编写，
 界面采用 Material 3 Expressive，安装包约 4 MB，界面全中文，没有广告。
 
 ## 功能
