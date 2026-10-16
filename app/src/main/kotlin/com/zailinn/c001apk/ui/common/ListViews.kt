@@ -148,7 +148,8 @@ fun PagedListView(
         val nearEnd by remember(listState) {
             derivedStateOf {
                 val last = listState.layoutInfo.visibleItemsInfo.lastOrNull()?.index ?: 0
-                last >= listState.layoutInfo.totalItemsCount - 3
+                // Ask for the next page well before the end, so it usually arrives before it is needed.
+                last >= listState.layoutInfo.totalItemsCount - PREFETCH_DISTANCE
             }
         }
         LaunchedEffect(nearEnd, state.items.size, state.footer) { if (nearEnd) list.loadMore() }
@@ -176,3 +177,5 @@ fun PagedListView(
         }
     }
 }
+
+private const val PREFETCH_DISTANCE = 8

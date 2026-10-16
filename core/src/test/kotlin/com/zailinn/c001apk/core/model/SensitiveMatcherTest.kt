@@ -20,9 +20,11 @@ class SensitiveMatcherTest {
     @Test
     fun requestedTopicsMatchTagsAndHashText() {
         assertEquals(FoldReason("相亲恋爱", "#相亲#"), all.match(feed(""""tags":"相亲","message":"周末见了一个"""")))
-        assertEquals(FoldReason("性压抑/擦边", "#酷安夜话#"), all.match(feed(""""message":"<a href=\"/t/x\">#酷安夜话#</a> 睡不着"""")))
-        val related = feed(""""message":"聊聊","relationRows":[{"title":"酷安夜话"}]""")
-        assertEquals("#酷安夜话#", all.match(related)?.hit)
+        assertEquals(FoldReason("性压抑/擦边", "#深夜话题#"), all.match(feed(""""message":"<a href=\"/t/x\">#深夜话题#</a> 睡不着"""")))
+        val related = feed(""""message":"聊聊","relationRows":[{"title":"我在酷安晒女友"}]""")
+        assertEquals("#我在酷安晒女友#", all.match(related)?.hit)
+        // #酷安夜话# as a whole topic is no longer folded (2.0.3).
+        assertNull(all.match(feed(""""message":"#酷安夜话# 今天天气不错","tags":"酷安夜话"""")))
     }
 
     @Test

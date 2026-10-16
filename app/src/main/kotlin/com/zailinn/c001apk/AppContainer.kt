@@ -83,7 +83,10 @@ class AppContainer(
     }
 
     init {
-        runBlocking { settings.initialize() }
+        runBlocking {
+            settings.initialize()
+            content.migrateCategories()
+        }
         client.captchaVerifier = captcha::verify
         // Start loading the model early so the first pages can already use it.
         settings.current.let { semantic.matcher(it.sensitiveFilterOn && it.semanticFold, semanticConfig(it)) }

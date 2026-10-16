@@ -75,6 +75,8 @@ class UserViewModel(app: AppContainer, private var uid: String) : ContentViewMod
 
     init {
         load()
+        // A numeric uid needs no lookup, so posts load together with the profile.
+        if (uid.all(Char::isDigit) && !app.content.isUserBlocked(uid)) list.start()
     }
 
     fun load() {

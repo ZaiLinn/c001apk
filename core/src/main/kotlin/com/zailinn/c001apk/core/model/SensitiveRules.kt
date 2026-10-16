@@ -61,7 +61,7 @@ data class SensitiveCategory(
             SensitiveCategory(
                 id = "lust",
                 title = "性压抑/擦边",
-                tags = listOf("酷安夜话", "夜话", "深夜话题", "福利", "美女", "小姐姐"),
+                tags = listOf("深夜话题", "福利", "美女", "小姐姐"),
                 keywords = listOf(
                     "性压抑", "压抑太久", "憋得慌", "憋坏了", "憋不住", "好寂寞", "好空虚", "寂寞难耐",
                     "想谈恋爱", "想找女朋友", "想要女朋友", "想要个女朋友", "没有女朋友", "没女朋友", "找不到女朋友",

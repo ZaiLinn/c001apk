@@ -1,6 +1,7 @@
 package com.zailinn.c001apk.data
 
 import androidx.datastore.preferences.core.Preferences
+import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.zailinn.c001apk.core.model.ContentFilter
 import com.zailinn.c001apk.core.model.Datum
@@ -103,6 +104,22 @@ class LocalContent(private val store: LocalStore) {
         return builtIn + SensitiveCategory(CUSTOM_ID, "自定义", tags = tags.map { it.trim('#') }, keywords = keywords, examples = phrases)
     }
 
+    /**
+     * One-time cleanups of saved categories when shipped defaults change: 2.0.3
+     * dropped #酷安夜话# and #夜话# from 性压抑/擦边 (too broad for a whole topic).
+     */
+    suspend fun migrateCategories() = store.edit { prefs ->
+        val revision = prefs[intPreferencesKey(CATEGORIES_REVISION)] ?: 1
+        if (revision >= 2) return@edit
+        prefs[stringPreferencesKey(FILTER_CATEGORIES)]
+            ?.let { runCatching { storeJson.decodeFromString(categories, it) }.getOrNull() }
+            ?.let { saved ->
+                val cleaned = saved.map { c -> if (c.id == "lust") c.copy(tags = c.tags - setOf("酷安夜话", "夜话")) else c }
+                prefs[stringPreferencesKey(FILTER_CATEGORIES)] = storeJson.encodeToString(categories, cleaned)
+            }
+        prefs[intPreferencesKey(CATEGORIES_REVISION)] = 2
+    }
+
     suspend fun updateCategories(transform: (List<SensitiveCategory>) -> List<SensitiveCategory>) =
         store.edit { prefs ->
             prefs[stringPreferencesKey(FILTER_CATEGORIES)] = storeJson.encodeToString(categories, transform(readCategories(prefs)))
@@ -197,6 +214,7 @@ class LocalContent(private val store: LocalStore) {
         private const val SEARCH_HISTORY = "searchHistory"
         private const val LOCAL_FOLLOWS = "localFollowUsers"
         private const val FILTER_CATEGORIES = "filterCategoriesV1"
+        private const val CATEGORIES_REVISION = "filterCategoriesRevision"
         private const val LEGACY_ENABLED = "sensitiveFoldCategories"
         private const val LEGACY_WORDS = "sensitiveWords"
         private const val LEGACY_PHRASES = "semanticPhrases"
