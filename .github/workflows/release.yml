@@ -10,6 +10,11 @@ on:
       - '[0-9]+.[0-9]+.[0-9]+-release'
       - 'v[0-9]+.[0-9]+.[0-9]+'
   workflow_dispatch:
+    inputs:
+      replace:
+        description: Replace an existing Release of the same version (rebuild without a version bump)
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -35,6 +40,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REF_TYPE: ${{ github.ref_type }}
           TAG: ${{ github.ref_name }}
+          REPLACE: ${{ inputs.replace || false }}
         run: |
           app_version=$(sed -n 's/^c001apk.versionName=//p' gradle.properties | tr -d '\r')
           echo "$app_version" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$' || { echo "Unsupported version: $app_version"; exit 1; }
@@ -47,8 +53,8 @@ jobs:
           fi
           awk -v v="$app_version" '$0 == "## " v {on=1; next} on && /^## / {exit} on' CHANGELOG.md | grep -q '[^[:space:]]' || {
             echo "CHANGELOG.md has no section for $app_version"; exit 1; }
-          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-            echo "Release $TAG already exists; delete it first to publish again"; exit 1
+          if [ "$REPLACE" != true ] && gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "Release $TAG already exists; run with replace to publish it again"; exit 1
           fi
           printf 'tag=%s\nversion=%s\n' "$TAG" "$app_version" >> "$GITHUB_OUTPUT"
 
@@ -91,7 +97,11 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: ${{ needs.verify.outputs.tag }}
           VERSION: ${{ needs.verify.outputs.version }}
+          REPLACE: ${{ inputs.replace || false }}
         run: |
+          if [ "$REPLACE" = true ] && gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            gh release delete "$TAG" --repo "$GITHUB_REPOSITORY" --cleanup-tag --yes
+          fi
           # Creates the tag on this commit when the run was started from a branch.
           gh release create "$TAG" release/* \
             --repo "$GITHUB_REPOSITORY" \

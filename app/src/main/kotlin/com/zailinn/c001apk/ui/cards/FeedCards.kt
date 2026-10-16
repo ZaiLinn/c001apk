@@ -89,18 +89,20 @@ fun FeedCard(data: Datum, actions: ItemActions = ItemActions(), detail: Boolean 
                 onLongClick = { navigator.navigate(CopyRoute(htmlToPlain(data.message.orEmpty()))) },
             ),
     ) {
-        Column(Modifier.padding(bottom = if (detail) 12.dp else 10.dp)) {
+        Column(Modifier.padding(bottom = if (!footer) 0.dp else if (detail) 12.dp else 10.dp)) {
             FeedHeader(data, detail, actions)
             data.messageTitle?.takeIf { it.isNotEmpty() }?.let {
                 HtmlText(it, Modifier.padding(start = pad, end = pad, top = 5.dp), fontSize = 16.sp, bold = true)
             }
-            HtmlText(
-                data.message.orEmpty(),
-                Modifier.padding(start = pad, end = pad, top = 5.dp),
-                fontSize = 16.sp,
-                maxLines = if (detail) Int.MAX_VALUE else 8,
-                onClick = if (detail) null else open,
-            )
+            if (!data.message.isNullOrEmpty()) {
+                HtmlText(
+                    data.message.orEmpty(),
+                    Modifier.padding(start = pad, end = pad, top = 5.dp),
+                    fontSize = 16.sp,
+                    maxLines = if (detail) Int.MAX_VALUE else 8,
+                    onClick = if (detail) null else open,
+                )
+            }
             if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(start = pad, end = pad, top = 10.dp))
             if (!data.string("forwardSourceType").isNullOrEmpty()) ForwardSource(data.obj("forwardSourceFeed"), pad, detail)
             data.string("extra_url")?.takeIf { it.isNotEmpty() }?.let { ExtraLink(data, it, pad, detail) }
