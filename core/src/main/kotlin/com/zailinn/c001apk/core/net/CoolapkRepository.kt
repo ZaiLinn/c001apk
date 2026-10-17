@@ -127,12 +127,30 @@ class CoolapkRepository(
         }
     }
 
-    /** Sub-replies of a reply. No captcha prompt: the server does not accept the proof for this list. */
-    suspend fun replyToReply(id: String, page: Page) = list {
-        client.get("$API/v6/feed/replyList", listOf(
-            "id" to id, "listType" to "", "discussMode" to "0", "feedType" to "feed_reply",
-            "blockStatus" to "0", "fromFeedAuthor" to "0",
-        ) + page.query(), skipCaptcha = true)
+    private fun subReplyQuery(id: String, page: Page) = listOf(
+        "id" to id, "listType" to "", "discussMode" to "0", "feedType" to "feed_reply",
+        "blockStatus" to "0", "fromFeedAuthor" to "0",
+    ) + page.query()
+
+    /**
+     * Sub-replies of a reply without a captcha prompt. When the server gates the
+     * list, [ReplyPage.source] is marked [ReplySource.Web] so the caller can show
+     * the embedded preview and offer a one-shot verification; the result itself is
+     * the gating error. A non-captcha failure keeps [ReplySource.Api].
+     */
+    suspend fun subReplies(id: String, page: Page): ReplyPage =
+        try {
+            ReplyPage(toList(readApiObject(client.get("$API/v6/feed/replyList", subReplyQuery(id, page), skipCaptcha = true))))
+        } catch (e: CancellationException) {
+            throw e
+        } catch (e: Exception) {
+            val failure = ApiFailure.from(e)
+            ReplyPage(LoadResult.Error(failure.message), if (failure.kind == ApiFailureKind.Captcha) ReplySource.Web else ReplySource.Api)
+        }
+
+    /** Sub-replies of a reply through the captcha prompt; the proof rides in the validate cookie. */
+    suspend fun subRepliesVerified(id: String, page: Page) = list {
+        client.get("$API/v6/feed/replyList", subReplyQuery(id, page))
     }
 
     suspend fun userFeed(uid: String, page: Page, includeTop: Boolean = true) = list {

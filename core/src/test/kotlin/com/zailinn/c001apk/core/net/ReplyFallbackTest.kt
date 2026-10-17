@@ -109,11 +109,28 @@ class ReplyFallbackTest {
     }
 
     @Test
-    fun subRepliesDoNotPrompt() = runTest {
+    fun subRepliesDoNotPromptAndFlagGating() = runTest {
         val h = harness(captcha)
         var prompted = false
         h.client.captchaVerifier = { prompted = true; null }
-        assertTrue(h.repo.replyToReply("3", Page()) is LoadResult.Error)
+        val (result, source) = h.repo.subReplies("3", Page())
+        assertTrue(result is LoadResult.Error)
+        // Gated: the caller shows the embedded preview and offers a one-shot verification.
+        assertEquals(ReplySource.Web, source)
         assertFalse(prompted)
+    }
+
+    @Test
+    fun verifiedSubRepliesCarryValidateCookieAndLoadFullList() = runTest {
+        val replies = """{"data":[{"id":"5","entityType":"feed_reply","message":"楼中楼"}]}"""
+        val h = Harness { _, count -> 200 to if (count == 1) captcha else replies }
+        h.client.captchaVerifier = { it.proof("validate-proof") }
+        val result = h.repo.subRepliesVerified("3", Page())
+        assertTrue(result is LoadResult.Success)
+        assertEquals(listOf("5"), (result as LoadResult.Success).value.map { it.id })
+        // The proof rides in the validate cookie (blank captchaField protocol), not a query param.
+        val last = h.transport.requests.last()
+        assertTrue(last.header("Cookie").orEmpty().contains("validate=NEC%3A5fc4c10e%3Avalidate-proof"))
+        assertEquals(null, last.url.queryParameter("_v2_post_token"))
     }
 }
