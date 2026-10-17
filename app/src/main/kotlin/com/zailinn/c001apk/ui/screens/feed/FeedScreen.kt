@@ -245,6 +245,8 @@ private fun ReplyThreadSheet(origin: Datum, onDismiss: () -> Unit) {
     val session = LocalSession.current
     val navigator = LocalNavigator.current
     val vm = appViewModel(key = "thread-${origin.id}") { ReplyThreadViewModel(it, origin) }
+    val repliesSource by vm.repliesSource.collectAsStateWithLifecycle()
+    val repliesNotice by vm.repliesNotice.collectAsStateWithLifecycle()
     var replying by remember { mutableStateOf<Datum?>(null) }
     val actions = vm.actions.copy(
         onReply = { target, _ -> if (session.isLogin) replying = target else navigator.toast("登录后才能回复") },
@@ -255,6 +257,17 @@ private fun ReplyThreadSheet(origin: Datum, onDismiss: () -> Unit) {
             Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
             style = MaterialTheme.typography.titleMedium,
         )
+        if (repliesSource != ReplySource.Api) {
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    repliesNotice.ifEmpty { "楼中楼需要验证，以下是预览回复" },
+                    Modifier.weight(1f),
+                    color = MaterialTheme.colorScheme.outline,
+                    style = MaterialTheme.typography.bodySmall,
+                )
+                TextButton(onClick = vm::loadAllReplies) { Text("验证后查看全部") }
+            }
+        }
         PagedListView(vm.list, Modifier.navigationBarsPadding(), contentPadding = PaddingValues(0.dp), spacing = 0) { index, item ->
             Column {
                 ReplyCard(item, actions, nested = true, isTop = index == 0, floorUid = origin.uid)

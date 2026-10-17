@@ -197,16 +197,56 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
 
 /** Replies of one reply, with the original reply first. */
 class ReplyThreadViewModel(app: AppContainer, private val origin: Datum) : ContentViewModel(app) {
+    /** Api while the full sub-reply list shows; a fallback source once the server gates it. */
+    val repliesSource = MutableStateFlow(ReplySource.Api)
+    /** Why the full sub-reply list could not be loaded after the user asked for it. */
+    val repliesNotice = MutableStateFlow("")
+    /** The user asked for the full list: request the sub-reply API with its captcha prompt. */
+    private var verifyReplies = false
+
     override val list = PagedList(
         viewModelScope,
         transform = { page, items -> if (page == 1) listOf(origin) + items else items },
-        // The sub-reply list asks for a captcha the server does not accept: show the
+        // The sub-reply list is gated by a captcha: without a verification show the
         // embedded preview, filtered by the same blacklist the normal list goes through.
-        fallback = {
-            val rules = app.content.filter()
-            listOf(origin) + rules.markAll(origin.replyRows.filter { rules.accepts(it) })
-        },
-    ) { page -> app.repository.replyToReply(origin.id.orEmpty(), page) }
+        fallback = { preview() },
+    ) { page -> loadReplies(page) }
+
+    private fun preview(): List<Datum> {
+        val rules = app.content.filter()
+        return listOf(origin) + rules.markAll(origin.replyRows.filter { rules.accepts(it) })
+    }
+
+    /**
+     * Without a prompt the sub-reply API as before; when it gates, the embedded
+     * preview (through [PagedList]'s fallback) and a notice offering verification.
+     * Only [loadAllReplies] goes through the prompt, once, on the first page.
+     */
+    private suspend fun loadReplies(page: Page): LoadResult<List<Datum>> {
+        if (verifyReplies && page.page == 1) {
+            verifyReplies = false
+            val result = app.repository.subRepliesVerified(origin.id.orEmpty(), page)
+            if (result !is LoadResult.Error) {
+                repliesSource.value = ReplySource.Api
+                repliesNotice.value = ""
+                return result
+            }
+            repliesNotice.value = result.message
+            // fall through to the non-prompting path, which shows the preview
+        }
+        // The preview has no further pages; stay on it once the list is gated.
+        if (page.page > 1 && repliesSource.value != ReplySource.Api) return LoadResult.Empty
+        val (result, source) = app.repository.subReplies(origin.id.orEmpty(), page)
+        repliesSource.value = source
+        return result
+    }
+
+    /** Verifies once and loads the full, pageable sub-reply list. */
+    fun loadAllReplies() {
+        verifyReplies = true
+        repliesNotice.value = ""
+        list.refresh()
+    }
 
     fun addReply(reply: Datum, after: Datum?) {
         list.update { items ->

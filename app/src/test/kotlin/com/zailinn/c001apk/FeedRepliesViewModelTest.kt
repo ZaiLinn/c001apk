@@ -118,4 +118,35 @@ class FeedRepliesViewModelTest {
         assertTrue("non-blocked preview shown", "92" in ids)
         assertFalse("blocked user's preview removed", "91" in ids)
     }
+
+    @Test
+    fun subRepliesLoadFullListAfterOneVerification() {
+        val blankCaptcha =
+            """{"messageStatus":"err_request_captcha_v2","messageExtra":"{\"captchaId\":\"5fc4c10eccd64d178982bc560da43a91\",\"captchaField\":\"\"}","message":"需要验证码"}"""
+        // Gated until the request carries the validate cookie the verification produced.
+        val transport = Interceptor { chain ->
+            val req = chain.request()
+            val gated = req.url.encodedPath.endsWith("/v6/feed/replyList") &&
+                !req.header("Cookie").orEmpty().contains("validate=")
+            val body = if (gated) blankCaptcha else """{"data":[${replyFeed(5, 14)}]}"""
+            Response.Builder().request(req).protocol(Protocol.HTTP_1_1).code(200).message("OK")
+                .body(body.toResponseBody("application/json".toMediaType())).build()
+        }
+        val app = AppContainer(ApplicationProvider.getApplicationContext(), "test-${UUID.randomUUID()}", transport)
+        app.client.captchaVerifier = { it.proof("validate-proof") }
+        val origin = Datum(
+            Json.parseToJsonElement(
+                """{"entityType":"feed_reply","id":"3","uid":"11","username":"原回复","message":"原回复","replyRows":[]}"""
+            ).jsonObject
+        )
+        val vm = ReplyThreadViewModel(app, origin)
+        vm.list.start()
+        // Default: gated, preview offered, no full list, no auto prompt.
+        waitFor { vm.repliesSource.value == ReplySource.Web }
+        assertFalse("sub-reply must not auto-prompt", vm.list.items.any { it.id == "5" })
+        // Opt in: one verification, then the full sub-reply list.
+        vm.loadAllReplies()
+        waitFor { vm.repliesSource.value == ReplySource.Api && vm.list.items.any { it.id == "5" } }
+        assertEquals(ReplySource.Api, vm.repliesSource.value)
+    }
 }

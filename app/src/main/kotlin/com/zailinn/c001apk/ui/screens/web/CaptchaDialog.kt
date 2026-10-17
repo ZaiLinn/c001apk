@@ -5,22 +5,28 @@ import android.webkit.JavascriptInterface
 import android.webkit.WebResourceRequest
 import android.webkit.WebView
 import android.webkit.WebViewClient
-import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.Refresh
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.Scaffold
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
-import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
@@ -62,43 +68,42 @@ fun CaptchaDialog(pending: CaptchaCoordinator.Pending) {
     var web by remember { mutableStateOf<WebView?>(null) }
     val html = remember(pending) { captchaHtml(pending.challenge.captchaId) }
     Dialog(onDismissRequest = { pending.complete(null) }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
-        Scaffold(
-            topBar = {
-                TopAppBar(
-                    title = { Text("人机验证") },
-                    navigationIcon = { IconButton(onClick = { pending.complete(null) }) { Icon(Icons.Filled.Close, "取消") } },
-                    actions = {
-                        IconButton(onClick = { web?.loadDataWithBaseURL(BASE_URL, html, "text/html", "utf-8", null) }) {
-                            Icon(Icons.Outlined.Refresh, "重新加载")
+        // Centered card, not a full page: the NetEase embed is ~320 px wide.
+        Surface(shape = MaterialTheme.shapes.extraLarge, tonalElevation = 6.dp, modifier = Modifier.widthIn(max = 360.dp).padding(16.dp)) {
+            Column {
+                Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text("人机验证", Modifier.weight(1f), style = MaterialTheme.typography.titleMedium)
+                    IconButton(onClick = { web?.loadDataWithBaseURL(BASE_URL, html, "text/html", "utf-8", null) }) {
+                        Icon(Icons.Outlined.Refresh, "重新加载")
+                    }
+                    IconButton(onClick = { pending.complete(null) }) { Icon(Icons.Filled.Close, "取消") }
+                }
+                AndroidView(
+                    factory = { context ->
+                        WebView(context).apply {
+                            settings.javaScriptEnabled = true
+                            settings.userAgentString = app.settings.current.protocol.userAgent.ifEmpty { settings.userAgentString }
+                            settings.javaScriptCanOpenWindowsAutomatically = false
+                            setBackgroundColor(0)
+                            addJavascriptInterface(object {
+                                @JavascriptInterface
+                                fun verified(validate: String?) {
+                                    val proof = pending.challenge.proof(validate) ?: return
+                                    post { pending.complete(proof) }
+                                }
+                            }, "C001apkCaptcha")
+                            webViewClient = object : WebViewClient() {
+                                // The captcha never needs to navigate the top-level page away.
+                                override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = request.isForMainFrame
+                            }
+                            loadDataWithBaseURL(BASE_URL, html, "text/html", "utf-8", null)
+                            web = this
                         }
                     },
+                    modifier = Modifier.fillMaxWidth().height(340.dp),
+                    onRelease = { it.destroy() },
                 )
-            },
-        ) { padding ->
-            AndroidView(
-                factory = { context ->
-                    WebView(context).apply {
-                        settings.javaScriptEnabled = true
-                        settings.userAgentString = app.settings.current.protocol.userAgent.ifEmpty { settings.userAgentString }
-                        settings.javaScriptCanOpenWindowsAutomatically = false
-                        addJavascriptInterface(object {
-                            @JavascriptInterface
-                            fun verified(validate: String?) {
-                                val proof = pending.challenge.proof(validate) ?: return
-                                post { pending.complete(proof) }
-                            }
-                        }, "C001apkCaptcha")
-                        webViewClient = object : WebViewClient() {
-                            // The captcha never needs to navigate the top-level page away.
-                            override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest) = request.isForMainFrame
-                        }
-                        loadDataWithBaseURL(BASE_URL, html, "text/html", "utf-8", null)
-                        web = this
-                    }
-                },
-                modifier = Modifier.padding(padding).fillMaxSize(),
-                onRelease = { it.destroy() },
-            )
+            }
         }
     }
 }
