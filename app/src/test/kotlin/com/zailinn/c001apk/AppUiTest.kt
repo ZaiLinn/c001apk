@@ -10,6 +10,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.longClick
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.zailinn.c001apk.ui.C001apkApp
@@ -62,6 +64,21 @@ class AppUiTest {
         compose.onNodeWithText("动态").assertIsDisplayed()
         assertTrue(transport.paths.any { it.endsWith("/v6/main/indexV8") })
         shot("home")
+    }
+
+    @Test
+    fun longPressHomeTabOpensTabEditor() {
+        launch()
+        compose.onNode(hasText("热门") and androidx.compose.ui.test.hasClickAction())
+            .performTouchInput { longClick() }
+        compose.onNodeWithText("首页标签").assertIsDisplayed()
+        shot("home-tab-editor")
+        compose.onNodeWithText("保存").performClick()
+        // The long press only opened the editor; the feed tab stayed selected.
+        compose.onNodeWithText("第二条合成动态，带三张图").assertIsDisplayed()
+        compose.waitUntil(5_000) { app.settings.current.homeTabs.isNotEmpty() }
+        assertEquals(com.zailinn.c001apk.ui.screens.main.HomeTab.entries.map { it.name }, app.settings.current.homeTabs)
+        shot("home-tabs")
     }
 
     @Test

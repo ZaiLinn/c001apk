@@ -1,6 +1,15 @@
 package com.zailinn.c001apk.ui.screens.main
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.pointerInput
+import com.zailinn.c001apk.data.SettingKeys
+import com.zailinn.c001apk.ui.screens.appContainer
+import com.zailinn.c001apk.ui.screens.settings.HomeTabsDialog
+import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -95,6 +104,7 @@ fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
     val pager = rememberPagerState(initialPage = tabs.indexOf(HomeTab.Feed).coerceAtLeast(0)) { tabs.size }
     val scope = rememberCoroutineScope()
     var composing by remember { mutableStateOf(false) }
+    var editingTabs by remember { mutableStateOf(false) }
     // Scroll-to-top-and-refresh requests for the visible list; saved so a rebuilt screen does not repeat one.
     val reselectTab = rememberSaveable { mutableIntStateOf(0) }
     OnCountIncrease(reselect) { reselectTab.intValue++ }
@@ -117,6 +127,7 @@ fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
                         val selected = pager.currentPage == index
                         Tab(
                             selected = selected,
+                            modifier = Modifier.onLongPress { editingTabs = true },
                             onClick = {
                                 if (selected) reselectTab.intValue++
                                 else scope.launch { pager.animateScrollToPage(index) }
@@ -161,6 +172,32 @@ fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
         }
     }
     if (composing) ComposerSheet(onDismiss = { composing = false })
+    // Long-pressing any tab opens the same editor as 设置 → 关注与内容 → 首页标签.
+    if (editingTabs) {
+        val app = appContainer()
+        HomeTabsDialog(tabs, onDismiss = { editingTabs = false }) { edited ->
+            scope.launch { app.settings.set(SettingKeys.homeTabs, edited.joinToString(",") { it.name }) }
+        }
+    }
+}
+
+/**
+ * Long press seen before the tab's own click handling; the release after it is
+ * consumed so the tab does not also switch or refresh.
+ */
+private fun Modifier.onLongPress(action: () -> Unit) = pointerInput(Unit) {
+    awaitEachGesture {
+        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val released = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            waitForUpOrCancellation(PointerEventPass.Initial)
+        }
+        if (released != null) return@awaitEachGesture
+        action()
+        do {
+            val event = awaitPointerEvent(PointerEventPass.Initial)
+            event.changes.forEach { it.consume() }
+        } while (event.changes.any { it.pressed })
+    }
 }
 
 class HomeTopicViewModel(private val app: AppContainer, private val tab: HomeTab) : ViewModel() {

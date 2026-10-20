@@ -261,7 +261,7 @@ private fun SectionItems(section: SettingsSection) {
             var tabsDialog by remember { mutableStateOf(false) }
             ListItem(
                 headlineContent = { Text("首页标签") },
-                supportingContent = { Text("显示、隐藏或调整顺序 · ${HomeTab.visible(settings.homeTabs).joinToString("、") { it.label }}") },
+                supportingContent = { Text("显示、隐藏或调整顺序，也可长按首页任意标签打开 · ${HomeTab.visible(settings.homeTabs).joinToString("、") { it.label }}") },
                 leadingContent = { Icon(Icons.Outlined.Tab, null) },
                 modifier = Modifier.clickable { tabsDialog = true },
             )
@@ -392,7 +392,7 @@ private fun cacheSize(context: android.content.Context): String {
 
 /** Visible tabs first in their order, hidden ones after; at least one tab stays visible. */
 @Composable
-private fun HomeTabsDialog(visible: List<HomeTab>, onDismiss: () -> Unit, onSave: (List<HomeTab>) -> Unit) {
+fun HomeTabsDialog(visible: List<HomeTab>, onDismiss: () -> Unit, onSave: (List<HomeTab>) -> Unit) {
     var order by remember { mutableStateOf(visible + HomeTab.entries.filter { it !in visible }) }
     var shown by remember { mutableStateOf(visible.toSet()) }
     fun move(index: Int, by: Int) {
