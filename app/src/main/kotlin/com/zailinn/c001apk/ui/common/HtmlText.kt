@@ -143,7 +143,7 @@ fun HtmlText(
     Text(
         built.text,
         modifier = modifier.then(links),
-        style = TextStyle(fontSize = fontSize, lineHeight = fontSize * 1.5f, fontWeight = if (bold) FontWeight.Bold else null),
+        style = TextStyle(fontSize = fontSize, lineHeight = fontSize * 1.5f, fontWeight = if (bold) FontWeight.Bold else MaterialTheme.typography.bodyLarge.fontWeight),
         color = if (color == Color.Unspecified) LocalContentColor.current else color,
         maxLines = maxLines,
         overflow = TextOverflow.Ellipsis,

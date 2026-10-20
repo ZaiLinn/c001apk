@@ -4,6 +4,7 @@ import android.os.Build
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.material3.MaterialExpressiveTheme
 import androidx.compose.material3.MotionScheme
+import androidx.compose.material3.Typography
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
 import androidx.compose.runtime.Composable
@@ -12,6 +13,8 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.Density
 import com.materialkolor.dynamicColorScheme
 import com.zailinn.c001apk.data.AppSettings
@@ -34,7 +37,24 @@ fun isAppInDarkTheme(settings: AppSettings): Boolean = when (settings.themeMode)
     else -> isSystemInDarkTheme()
 }
 
-/** Material 3 Expressive theme with dynamic or seed colors and the app font scale. */
+/**
+ * Text already uses the system font; this only thickens it. The +100 per level
+ * is applied to every style, so titles stay bolder than body text.
+ */
+fun typographyFor(weightLevel: Int): Typography {
+    val base = Typography()
+    if (weightLevel <= 0) return base
+    fun TextStyle.heavier() = copy(fontWeight = FontWeight(((fontWeight ?: FontWeight.Normal).weight + 100 * weightLevel).coerceAtMost(900)))
+    return base.copy(
+        displayLarge = base.displayLarge.heavier(), displayMedium = base.displayMedium.heavier(), displaySmall = base.displaySmall.heavier(),
+        headlineLarge = base.headlineLarge.heavier(), headlineMedium = base.headlineMedium.heavier(), headlineSmall = base.headlineSmall.heavier(),
+        titleLarge = base.titleLarge.heavier(), titleMedium = base.titleMedium.heavier(), titleSmall = base.titleSmall.heavier(),
+        bodyLarge = base.bodyLarge.heavier(), bodyMedium = base.bodyMedium.heavier(), bodySmall = base.bodySmall.heavier(),
+        labelLarge = base.labelLarge.heavier(), labelMedium = base.labelMedium.heavier(), labelSmall = base.labelSmall.heavier(),
+    )
+}
+
+/** Material 3 Expressive theme with dynamic or seed colors, the app font scale and weight. */
 @Composable
 fun C001apkTheme(settings: AppSettings, content: @Composable () -> Unit) {
     val dark = isAppInDarkTheme(settings)
@@ -48,7 +68,8 @@ fun C001apkTheme(settings: AppSettings, content: @Composable () -> Unit) {
             else -> dynamicColorScheme(seedColor = seed, isDark = dark)
         }
     }
-    MaterialExpressiveTheme(colorScheme = colorScheme, motionScheme = MotionScheme.expressive()) {
+    val typography = remember(settings.fontWeightLevel) { typographyFor(settings.fontWeightLevel) }
+    MaterialExpressiveTheme(colorScheme = colorScheme, motionScheme = MotionScheme.expressive(), typography = typography) {
         val density = LocalDensity.current
         CompositionLocalProvider(
             LocalDensity provides Density(density.density, density.fontScale * settings.fontScale),
