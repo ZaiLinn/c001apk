@@ -326,6 +326,59 @@ class CoolapkRepository(
         client.post("$API/v6/account/requestValidate", body = Body.Multipart(listOf("type" to "err_request_captcha", "code" to code)))
     }
 
+    // Collections (收藏夹). Success bodies carry only `data`; failures such as
+    // "该内容已存在" come with a status and are raised by [action].
+
+    /** The account's collections, default one included; with [feedId], `isBeCollected` marks those holding it. */
+    suspend fun collections(feedId: String? = null) = list {
+        client.get("$API/v6/collection/list", buildList {
+            add("uid" to "")
+            feedId?.let { add("id" to it); add("type" to "feed") }
+            add("showDefault" to "1")
+            add("page" to "1")
+        })
+    }
+
+    /** Adds a feed to a collection or takes it out; `data` holds the new `favnum` and `collect`. */
+    suspend fun setCollected(collectionId: String, feedId: String, collected: Boolean) = action {
+        client.post(
+            "$API/v6/collection/addItem",
+            body = Body.Form(listOf(
+                "id" to if (collected) collectionId else "",
+                "cancelId" to if (collected) "" else collectionId,
+                "targetId" to feedId,
+                "type" to "feed",
+            )),
+        )
+    }
+
+    /** `data` is the new collection. No cover: uploading one is not supported yet. */
+    suspend fun createCollection(title: String, description: String, open: Boolean) = action {
+        client.post(
+            "$API/v6/collection/create",
+            body = Body.Multipart(listOf(
+                "isOpen" to if (open) "1" else "0", "pic" to "", "description" to description, "title" to title, "sourceId" to "",
+            )),
+        )
+    }
+
+    /** Keeps the current cover in [pic]. */
+    suspend fun updateCollection(id: String, title: String, description: String, pic: String, open: Boolean) = action {
+        client.post(
+            "$API/v6/collection/update",
+            body = Body.Form(listOf(
+                "id" to id, "title" to title, "description" to description, "pic" to pic, "isOpen" to if (open) "1" else "0",
+            )),
+        )
+    }
+
+    suspend fun deleteCollection(id: String) =
+        action { client.post("$API/v6/collection/delete", body = Body.Form(listOf("id" to id))) }
+
+    /** Removes deleted or hidden items; the server does it in the background. */
+    suspend fun clearInvalidCollectionItems(id: String) =
+        action { client.post("$API/v6/collection/removeUnUseItem", body = Body.Form(listOf("colId" to id))) }
+
     suspend fun sendMessage(uid: String, fields: List<Pair<String, String>>) =
         action { client.post("$API/v6/message/send", listOf("uid" to uid), Body.Multipart(fields)) }
 

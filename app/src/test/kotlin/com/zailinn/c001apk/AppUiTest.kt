@@ -4,6 +4,7 @@ import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasText
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onFirst
 import androidx.compose.ui.test.onNodeWithContentDescription
@@ -179,6 +180,33 @@ class AppUiTest {
         compose.onNodeWithText("共 2 回复").assertIsDisplayed()
         compose.onNodeWithText("嵌套合成回复", substring = true, useUnmergedTree = true).assertIsDisplayed()
         shot("feed")
+    }
+
+    @Test
+    fun feedCanBeCollectedIntoACloudCollection() {
+        launch()
+        kotlinx.coroutines.runBlocking { app.accounts.saveLogin("10", "synthetic", "synthetic-token") }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("合成动态正文", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.onAllNodesWithText("合成动态正文", substring = true, useUnmergedTree = true).onFirst().performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("更多").fetchSemanticsNodes().isNotEmpty() }
+        // The top bar's menu, not a reply's.
+        val menus = compose.onAllNodesWithContentDescription("更多")
+        val top = menus.fetchSemanticsNodes().withIndex().minBy { it.value.boundsInRoot.top }.index
+        menus[top].performClick()
+        compose.onNodeWithText("本地收藏").assertIsDisplayed()
+        compose.onNodeWithText("收藏到收藏夹").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("合成收藏夹").fetchSemanticsNodes().isNotEmpty() }
+        shot("collection-picker")
+        compose.onNodeWithText("合成收藏夹").performClick()
+        compose.waitUntil(5_000) { synchronized(transport.posts) { transport.posts.any { it.first.endsWith("/v6/collection/addItem") } } }
+        val body = synchronized(transport.posts) { transport.posts.first { it.first.endsWith("/v6/collection/addItem") }.second }
+        assertEquals(mapOf("id" to "2", "cancelId" to "", "targetId" to "100", "type" to "feed"), form(body))
+        assertTrue(transport.urls.any { it.startsWith("/v6/collection/list?") && "id=100" in it && "type=feed" in it })
+    }
+
+    private fun form(body: String) = body.split("&").filter { it.isNotEmpty() }.associate {
+        val (k, v) = (it.split("=", limit = 2) + "").take(2)
+        java.net.URLDecoder.decode(k, "UTF-8") to java.net.URLDecoder.decode(v, "UTF-8")
     }
 
     @Test

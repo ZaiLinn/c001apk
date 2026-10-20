@@ -14,6 +14,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.filled.Star
 import androidx.compose.material.icons.outlined.Block
+import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.Info
@@ -65,6 +66,7 @@ import com.zailinn.c001apk.ui.common.StatusBox
 import com.zailinn.c001apk.ui.common.htmlToPlain
 import com.zailinn.c001apk.ui.nav.CopyRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
+import com.zailinn.c001apk.ui.screens.collection.CollectionPickerSheet
 import com.zailinn.c001apk.ui.screens.appViewModel
 import com.zailinn.c001apk.ui.screens.compose.ComposeTarget
 import com.zailinn.c001apk.ui.screens.compose.ComposerSheet
@@ -88,6 +90,7 @@ fun FeedScreen(id: String) {
     var thread by remember { mutableStateOf<Datum?>(null) }
     var menu by remember { mutableStateOf(false) }
     var showNotice by remember { mutableStateOf(false) }
+    var collecting by remember { mutableStateOf(false) }
     val data = (feed as? LoadResult.Success)?.value
 
     val reply: (Datum?, Datum?) -> Unit = { target, parent ->
@@ -106,7 +109,11 @@ fun FeedScreen(id: String) {
                             leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) })
                         DropdownMenuItem({ Text("分享") }, { menu = false; navigator.share("https://www.coolapk1s.com/feed/$id") },
                             leadingIcon = { Icon(Icons.Outlined.Share, null) })
-                        DropdownMenuItem({ Text(if (favorite) "取消收藏" else "收藏") }, { menu = false; vm.toggleFavorite() },
+                        if (session.isLogin) {
+                            DropdownMenuItem({ Text("收藏到收藏夹") }, { menu = false; collecting = true },
+                                leadingIcon = { Icon(Icons.Outlined.CollectionsBookmark, null) })
+                        }
+                        DropdownMenuItem({ Text(if (favorite) "取消本地收藏" else "本地收藏") }, { menu = false; vm.toggleFavorite() },
                             leadingIcon = { Icon(if (favorite) Icons.Filled.Star else Icons.Outlined.StarBorder, null) })
                         DropdownMenuItem({ Text("屏蔽作者") }, { menu = false; vm.blockAuthor() },
                             leadingIcon = { Icon(Icons.Outlined.Block, null) })
@@ -188,6 +195,7 @@ fun FeedScreen(id: String) {
         )
     }
     thread?.let { origin -> ReplyThreadSheet(origin, onDismiss = { thread = null }) }
+    if (collecting) CollectionPickerSheet(id, onDismiss = { collecting = false })
     if (showNotice) {
         AlertDialog(
             onDismissRequest = { showNotice = false },

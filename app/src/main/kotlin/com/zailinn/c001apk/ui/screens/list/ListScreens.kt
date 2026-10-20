@@ -1,6 +1,11 @@
 package com.zailinn.c001apk.ui.screens.list
 
+import androidx.compose.material.icons.outlined.Add
+import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Delete
+import androidx.compose.material.icons.outlined.Edit
+import com.zailinn.c001apk.ui.screens.collection.CollectionEditDialog
+import com.zailinn.c001apk.ui.screens.collection.createCollection
 import androidx.compose.material.icons.outlined.PushPin
 import com.zailinn.c001apk.ui.screens.runAction
 import com.zailinn.c001apk.ui.common.SheetAction
@@ -170,9 +175,17 @@ fun UserListScreen(type: String, uid: String?, title: String?) {
         "COLLECTION" -> "我的收藏"
         else -> ""
     }
-    Scaffold(topBar = { SimpleTopBar(heading) }) { padding ->
+    var creating by remember { mutableStateOf(false) }
+    Scaffold(
+        topBar = {
+            SimpleTopBar(heading) {
+                if (type == "COLLECTION") IconButton(onClick = { creating = true }) { Icon(Icons.Outlined.Add, "新建收藏夹") }
+            }
+        },
+    ) { padding ->
         Column(Modifier.padding(padding)) {
             when (type) {
+                "COLLECTION" -> MyCollections(creating, onCreated = { creating = false })
                 "FOLLOW" -> TabbedPages(listOf("用户", "话题", "数码", "应用")) { index ->
                     when (index) {
                         0 -> UserListContent("FOLLOW", owner)
@@ -184,7 +197,7 @@ fun UserListScreen(type: String, uid: String?, title: String?) {
                 "REPLY" -> TabbedPages(listOf("我的回复", "我收到的回复")) { index ->
                     UserListContent(if (index == 0) "REPLY" else "REPLYME", owner)
                 }
-                else -> UserListContent(type, if (type == "COLLECTION") null else owner, id = if (type == "COLLECTION_ITEM") uid else null)
+                else -> UserListContent(type, owner, id = if (type == "COLLECTION_ITEM") uid else null)
             }
         }
     }
@@ -201,7 +214,6 @@ private fun UserListContent(type: String, uid: String?, id: String? = null) {
         "LIKE" -> "/v6/user/likeList"
         "REPLY" -> "/v6/user/replyList"
         "REPLYME" -> "/v6/user/replyToMeList"
-        "COLLECTION" -> "/v6/collection/list"
         else -> "/v6/collection/itemList"
     }
     val unique = type !in setOf("FOLLOW", "FAN", "USER_FOLLOW")
@@ -210,12 +222,74 @@ private fun UserListContent(type: String, uid: String?, id: String? = null) {
             repository.dataListFromUrl(url, buildList {
                 if (type == "FEED") { add("showAnonymous" to "0"); add("isIncludeTop" to "1") }
                 if (type == "COLLECTION_ITEM") id?.let { add("id" to it) } else uid?.let { add("uid" to it) }
-                if (type == "COLLECTION") add("showDefault" to "0")
                 addAll(page.query())
             })
         }
     }
     PagedListView(vm.list) { _, item -> ItemCard(item, vm.actions) }
+}
+
+/** The account's collections; new ones from the top bar, the rest from a long press. */
+@Composable
+private fun MyCollections(creating: Boolean, onCreated: () -> Unit) {
+    val vm = appViewModel(key = "userlist-COLLECTION-mine") { app ->
+        com.zailinn.c001apk.ui.screens.SimpleListViewModel(app) { page ->
+            repository.dataListFromUrl("/v6/collection/list", listOf("showDefault" to "0") + page.query())
+        }
+    }
+    val app = vm.app
+    val scope = rememberCoroutineScope()
+    var menuFor by remember { mutableStateOf<Datum?>(null) }
+    var editing by remember { mutableStateOf<Datum?>(null) }
+    var deleting by remember { mutableStateOf<Datum?>(null) }
+    PagedListView(vm.list) { _, item -> ItemCard(item, vm.actions.copy(onCollectionMenu = { menuFor = it })) }
+    if (creating) {
+        CollectionEditDialog("新建收藏夹", onDismiss = onCreated) { title, description, open ->
+            scope.launch { if (app.createCollection(title, description, open) != null) vm.list.refresh(showIndicator = true) }
+        }
+    }
+    menuFor?.let { item ->
+        ActionSheet(
+            listOfNotNull(
+                SheetAction(Icons.Outlined.Edit, "编辑收藏夹") { editing = item },
+                SheetAction(Icons.Outlined.CleaningServices, "清理失效内容") {
+                    scope.launch { app.runAction { app.repository.clearInvalidCollectionItems(item.id.orEmpty()) }?.dataText?.let(app::toast) }
+                },
+                // The default collection cannot be removed.
+                SheetAction(Icons.Outlined.Delete, "删除收藏夹", danger = true) { deleting = item }.takeIf { item.int("isDefault") != 1 },
+            ),
+            onDismiss = { menuFor = null },
+        )
+    }
+    editing?.let { item ->
+        CollectionEditDialog("编辑收藏夹", item, onDismiss = { editing = null }) { title, description, open ->
+            scope.launch {
+                app.runAction {
+                    app.repository.updateCollection(item.id.orEmpty(), title, description, item.string("cover_pic").orEmpty(), open)
+                } ?: return@launch
+                app.toast("已保存")
+                vm.list.refresh(showIndicator = true)
+            }
+        }
+    }
+    deleting?.let { item ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("删除收藏夹？") },
+            text = { Text("「${item.title.orEmpty()}」及其中的收藏记录将被删除，收藏的内容本身不受影响") },
+            confirmButton = {
+                TextButton(onClick = {
+                    deleting = null
+                    scope.launch {
+                        val result = app.runAction { app.repository.deleteCollection(item.id.orEmpty()) } ?: return@launch
+                        vm.list.update { list -> list.filter { it.id != item.id } }
+                        app.toast(result.dataText ?: "已删除")
+                    }
+                }) { Text("删除") }
+            },
+            dismissButton = { TextButton(onClick = { deleting = null }) { Text("取消") } },
+        )
+    }
 }
 
 @Composable
