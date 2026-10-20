@@ -97,6 +97,8 @@ import com.zailinn.c001apk.ui.nav.ContentFilterRoute
 import com.zailinn.c001apk.ui.nav.LocalFollowRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.ParamsRoute
+import com.zailinn.c001apk.ui.nav.DeviceIdentityRoute
+import com.zailinn.c001apk.core.protocol.OfficialDeviceIdentity
 import com.zailinn.c001apk.ui.nav.SettingsSectionRoute
 import com.zailinn.c001apk.ui.screens.appContainer
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
@@ -323,12 +325,14 @@ private fun SectionItems(section: SettingsSection) {
         SettingsSection.Filter -> Unit
         SettingsSection.Storage -> StorageItems()
         SettingsSection.Protocol -> {
-            var editing by remember { mutableStateOf(false) }
             ListItem(
-                headlineContent = { Text("设备标识（SZLM ID）") },
-                supportingContent = { Text("用于客户端请求，修改后可能影响接口访问\n${settings.protocol.szlmId.ifEmpty { "未设置" }}") },
+                headlineContent = { Text("导入官方设备标识") },
+                supportingContent = {
+                    val id = settings.protocol.szlmId
+                    Text("从官方酷安复制数盟 ID（SZLM ID），可减少人机验证 · ${if (id.isEmpty()) "未导入" else OfficialDeviceIdentity.mask(id)}")
+                },
                 leadingContent = { Icon(Icons.Outlined.DeveloperMode, null) },
-                modifier = Modifier.clickable { editing = true },
+                modifier = Modifier.clickable { navigator.navigate(DeviceIdentityRoute) },
             )
             ListItem(
                 headlineContent = { Text("协议参数") },
@@ -336,13 +340,6 @@ private fun SectionItems(section: SettingsSection) {
                 leadingContent = { Icon(Icons.Outlined.DeveloperMode, null) },
                 modifier = Modifier.clickable { navigator.navigate(ParamsRoute) },
             )
-            if (editing) {
-                EditDialog("设备标识（SZLM ID）", settings.protocol.szlmId, onDismiss = { editing = false }) { value ->
-                    // Clearing the SZLM ID, which was the device ID, starts a fresh random one.
-                    val cleared = value.isEmpty() && settings.protocol.szlmId.isNotEmpty()
-                    scope.launch { app.settings.saveProtocol(settings.protocol.copy(szlmId = value).withDevice(newId = cleared)) }
-                }
-            }
         }
     }
 }
