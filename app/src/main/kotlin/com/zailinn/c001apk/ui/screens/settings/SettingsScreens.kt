@@ -98,7 +98,6 @@ import com.zailinn.c001apk.ui.nav.LocalFollowRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.ParamsRoute
 import com.zailinn.c001apk.ui.nav.DeviceIdentityRoute
-import com.zailinn.c001apk.core.protocol.OfficialDeviceIdentity
 import com.zailinn.c001apk.ui.nav.SettingsSectionRoute
 import com.zailinn.c001apk.ui.screens.appContainer
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
@@ -329,7 +328,7 @@ private fun SectionItems(section: SettingsSection) {
                 headlineContent = { Text("导入官方设备标识") },
                 supportingContent = {
                     val id = settings.protocol.szlmId
-                    Text("从官方酷安复制数盟 ID（SZLM ID），可减少人机验证 · ${if (id.isEmpty()) "未导入" else OfficialDeviceIdentity.mask(id)}")
+                    Text("从官方酷安复制数盟 ID（SZLM ID），可减少人机验证 · ${if (id.isEmpty()) "未导入" else "已导入"}")
                 },
                 leadingContent = { Icon(Icons.Outlined.DeveloperMode, null) },
                 modifier = Modifier.clickable { navigator.navigate(DeviceIdentityRoute) },
@@ -595,7 +594,15 @@ fun ParamsScreen() {
             item { SectionTitle("客户端") }
             items(versions) { Field(it) }
             item { ListItem(headlineContent = { Text("用户代理（User-Agent）") }, supportingContent = { Text(params.userAgent) }) }
-            item { ListItem(headlineContent = { Text("设备编码（X-App-Device）") }, supportingContent = { Text(params.xAppDevice) }) }
+            item {
+                // It carries the SZLM ID, so it stays hidden until tapped.
+                var shown by remember { mutableStateOf(false) }
+                ListItem(
+                    headlineContent = { Text("设备编码（X-App-Device）") },
+                    supportingContent = { Text(if (shown) params.xAppDevice else "已隐藏，点按显示") },
+                    modifier = Modifier.clickable { shown = !shown },
+                )
+            }
         }
     }
     editing?.let { (title, value, update) ->

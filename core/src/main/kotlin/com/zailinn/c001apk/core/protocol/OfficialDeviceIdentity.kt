@@ -17,7 +17,7 @@ object OfficialDeviceIdentity {
     /** The SZLM ID in [text]; throws [IllegalArgumentException] with a message for the user. */
     fun parse(text: String): String {
         require(text.length <= 32768) { "复制内容过长，请重新从官方酷安复制" }
-        val matches = field.findAll(text.replace("﻿", "")).toList()
+        val matches = field.findAll(text.replace("\uFEFF", "")).toList()
         require(matches.size == 1) { "未识别到 ShuzlmID。请在官方页面累计点击“复制 OAID”5 次，再粘贴完整内容" }
         val id = matches.single().groupValues[1].trim()
         require(id.lowercase() !in setOf("", "null", "undefined") && value.matches(id)) {
@@ -25,7 +25,4 @@ object OfficialDeviceIdentity {
         }
         return id
     }
-
-    /** Head and tail only, for showing which ID is saved without exposing it. */
-    fun mask(id: String): String = if (id.length <= 12) "${id.take(2)}…" else "${id.take(6)}…${id.takeLast(4)}"
 }

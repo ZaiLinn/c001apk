@@ -15,7 +15,7 @@ class OfficialDeviceIdentityTest {
     @Test
     fun readsOnlyTheShuzlmField() {
         assertEquals("DUsyntheticSZLM0123456789abcdef", OfficialDeviceIdentity.parse(copied))
-        assertEquals("DUsyntheticSZLM0123456789abcdef", OfficialDeviceIdentity.parse("﻿shuzlmid：DUsyntheticSZLM0123456789abcdef\r\n"))
+        assertEquals("DUsyntheticSZLM0123456789abcdef", OfficialDeviceIdentity.parse("\uFEFFshuzlmid：DUsyntheticSZLM0123456789abcdef\r\n"))
     }
 
     @Test
@@ -29,10 +29,5 @@ class OfficialDeviceIdentityTest {
         )) {
             assertThrows(text, IllegalArgumentException::class.java) { OfficialDeviceIdentity.parse(text) }
         }
-    }
-
-    @Test
-    fun maskHidesTheMiddle() {
-        assertEquals("DUsynt…cdef", OfficialDeviceIdentity.mask("DUsyntheticSZLM0123456789abcdef"))
     }
 }
