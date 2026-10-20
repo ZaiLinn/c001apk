@@ -14,6 +14,8 @@ data class ItemActions(
     val onOpenMessage: ((Datum) -> Unit)? = null,
     /** Long press on a conversation: pin, unpin or delete it. */
     val onMessageMenu: ((Datum) -> Unit)? = null,
+    /** Long press on one of the account's collections: edit, clean up or delete it. */
+    val onCollectionMenu: ((Datum) -> Unit)? = null,
     /** Shown on history and favorites to remove local records. */
     val removable: Boolean = false,
 )

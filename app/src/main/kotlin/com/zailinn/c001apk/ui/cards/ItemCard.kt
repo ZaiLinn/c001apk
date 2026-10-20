@@ -32,7 +32,7 @@ fun ItemCard(data: Datum, actions: ItemActions = ItemActions(), onSurface: Boole
         "apk", "product", "user", "topic", "contacts", "recentHistory", "productBrand" -> EntityCard(data, onSurface)
         "notification" -> NotificationCard(data, actions)
         "message" -> MessageCard(data, actions)
-        "collection" -> CollectionCard(data)
+        "collection" -> CollectionCard(data, actions)
         else -> when (data.entityTemplate) {
             "noMoreDataCard" -> TextCard(data.title.orEmpty(), end = true)
             else -> Unsupported()

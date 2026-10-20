@@ -294,12 +294,17 @@ fun TextCard(text: String, end: Boolean = false) {
     }
 }
 
+/** A collection; on the account's own list a long press opens its menu. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun CollectionCard(data: Datum) {
+fun CollectionCard(data: Datum, actions: ItemActions = ItemActions()) {
     val navigator = LocalNavigator.current
     Surface(
-        color = cardColor(), shape = CardShape, modifier = Modifier.fillMaxWidth(),
-        onClick = { data.id?.let { navigator.navigate(UserListRoute("COLLECTION_ITEM", uid = it, title = data.title)) } },
+        color = cardColor(), shape = CardShape,
+        modifier = Modifier.fillMaxWidth().clip(CardShape).combinedClickable(
+            onClick = { data.id?.let { navigator.navigate(UserListRoute("COLLECTION_ITEM", uid = it, title = data.title)) } },
+            onLongClick = actions.onCollectionMenu?.let { { it(data) } },
+        ),
     ) {
         Row(Modifier.padding(10.dp), verticalAlignment = Alignment.CenterVertically) {
             NetworkImage(data.string("cover_pic"), Modifier.size(53.dp, 40.dp).clip(RoundedCornerShape(8.dp)))

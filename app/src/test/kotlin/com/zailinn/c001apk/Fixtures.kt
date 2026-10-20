@@ -11,11 +11,17 @@ class FixtureTransport : Interceptor {
     val paths = mutableListOf<String>()
     /** Path plus query, to tell first pages from later ones. */
     val urls = mutableListOf<String>()
+    /** Request bodies of POSTs, by path. */
+    val posts = mutableListOf<Pair<String, String>>()
 
     override fun intercept(chain: Interceptor.Chain): Response {
         val request = chain.request()
         val path = request.url.encodedPath
         synchronized(paths) { paths += path; urls += path + "?" + request.url.encodedQuery.orEmpty() }
+        if (request.method == "POST") {
+            val text = request.body?.let { okio.Buffer().also(it::writeTo).readUtf8() }.orEmpty()
+            synchronized(posts) { posts += path to text }
+        }
         val body = when {
             path.endsWith("/v6/main/indexV8") -> list(
                 card("imageCarouselCard_1", entities = """[{"title":"合成轮播","url":"/feed/100","pic":"https://image.coolapk.com/c.jpg"}]"""),
@@ -33,6 +39,11 @@ class FixtureTransport : Interceptor {
             path.endsWith("/v6/topic/newTagDetail") -> """{"data":{"id":"7","entityType":"topic","title":"合成话题","logo":"",
                 "hot_num_txt":"1万","commentnum_txt":"20","tabList":[{"title":"热门","url":"/page?url=hot","pageName":"hot"},
                 {"title":"最新","url":"/page?url=new","pageName":"new"}],"selectedTab":"hot"}}"""
+            path.endsWith("/v6/collection/list") -> list(
+                """{"entityType":"collection","id":"1","title":"默认收藏","item_num":"3","isBeCollected":1,"isDefault":1}""",
+                """{"entityType":"collection","id":"2","title":"合成收藏夹","item_num":"0","isBeCollected":0}""",
+            )
+            path.endsWith("/v6/collection/addItem") -> """{"data":{"favnum":2,"collect":1}}"""
             else -> """{"data":[]}"""
         }
         return Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK")
