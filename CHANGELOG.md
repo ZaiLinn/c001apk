@@ -4,7 +4,7 @@
 
 ### 设备标识
 
-- **导入官方设备标识**：“设置 → 协议与设备 → 导入官方设备标识”。点击“酷安 OAID 界面”直接打开官方酷安的“检查日志和测试”页，在“复制 OAID”上慢慢点 5 次后回来点“粘贴并识别”，自动从复制的整段文本中识别出数盟 ID（ShuzlmID），点击“保存并应用”即可。只使用数盟 ID，不会保存 OAID、AndroidID、UUID 等其他字段；机型等设备参数与登录状态保持不变。未安装官方酷安或打不开时会给出提示，也可以手动输入或清除。图文说明见 [导入官方设备标识](https://github.com/ZaiLinn/c001apk/blob/main/docs/DEVICE_ID_IMPORT.md)。导入方法来自 [TG-Twilight/c001apk](https://github.com/TG-Twilight/c001apk)，感谢！
+- **导入官方设备标识**：“设置 → 协议与设备 → 导入官方设备标识”。点击“酷安 OAID 界面”直接打开官方酷安的“检查日志和测试”页，在“复制 OAID”上慢慢点 5 次后回来点“粘贴并识别”，自动从复制的整段文本中识别出数盟 ID（ShuzlmID），点击“保存并应用”即可。只使用数盟 ID，不会保存 OAID、AndroidID、UUID 等其他字段；机型等设备参数与登录状态保持不变。未安装官方酷安或打不开时会给出提示，也可以手动输入或清除。图文说明见 [导入官方设备标识](https://github.com/TG-Twilight/c001apk/blob/main/docs/DEVICE_ID_IMPORT.md)。导入方法来自 [TG-Twilight/c001apk](https://github.com/TG-Twilight/c001apk)，感谢！
 - **数盟 ID 默认隐藏**：识别出的和已保存的数盟 ID 都不再明文显示，点击眼睛图标才会显示；手动输入时不预填已保存的 ID；“协议参数”中的设备编码也默认隐藏，点按才显示。只在点击“粘贴并识别”时读取剪贴板，识别后输入框自动清空，可再次粘贴。
 
 ### 错误提示
