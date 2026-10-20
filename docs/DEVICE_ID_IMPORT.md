@@ -44,4 +44,6 @@ c001apk 只保存识别出的数盟 ID，用它替换请求设备编码的第一
 
 数盟 ID 只保存在本机、用于发给酷安的请求。不要把复制的整段文本、真实 ID 或含标识的截图发到 Issue、群聊或公开仓库，也不要使用别人的标识。
 
-导入流程参考了 [TG-Twilight/c001apk](https://github.com/TG-Twilight/c001apk) 的做法。
+## 致谢
+
+导入方法与流程来自 [TG-Twilight/c001apk](https://github.com/TG-Twilight/c001apk) 的整理与实测，感谢！

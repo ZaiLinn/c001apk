@@ -141,7 +141,8 @@ fun DeviceIdentityScreen() {
             Text("减少重复人机验证", style = MaterialTheme.typography.titleMedium)
             Text(
                 "从官方酷安导入数盟 ID（SZLM ID），用于本应用的请求，可减少部分内容的人机验证。" +
-                    "这是临时方案，有效期由服务端决定，仍可能要求验证。",
+                    "这是临时方案，有效期由服务端决定，仍可能要求验证。" +
+                    "导入方法来自 TG-Twilight/c001apk，感谢其整理与验证。",
             )
             Text(
                 "1. 点击下方“酷安 OAID 界面”，打开官方酷安的“检查日志和测试”页。\n" +
