@@ -59,6 +59,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Switch
@@ -82,7 +83,11 @@ import com.zailinn.c001apk.BuildConfig
 import com.zailinn.c001apk.core.protocol.Constants
 import com.zailinn.c001apk.core.update.UpdateResult
 import com.zailinn.c001apk.core.update.UpdateStatus
+import com.zailinn.c001apk.core.protocol.ProtocolParams
+import com.zailinn.c001apk.data.PROTOCOL_GENERATED
+import com.zailinn.c001apk.data.PROTOCOL_LOCAL
 import com.zailinn.c001apk.data.SettingKeys
+import com.zailinn.c001apk.data.androidDevice
 import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.common.SectionTitle
@@ -333,7 +338,9 @@ private fun SectionItems(section: SettingsSection) {
             )
             if (editing) {
                 EditDialog("设备标识（SZLM ID）", settings.protocol.szlmId, onDismiss = { editing = false }) { value ->
-                    scope.launch { app.settings.saveProtocol(settings.protocol.copy(szlmId = value).withDevice()) }
+                    // Clearing the SZLM ID, which was the device ID, starts a fresh random one.
+                    val cleared = value.isEmpty() && settings.protocol.szlmId.isNotEmpty()
+                    scope.launch { app.settings.saveProtocol(settings.protocol.copy(szlmId = value).withDevice(newId = cleared)) }
                 }
             }
         }
@@ -526,49 +533,76 @@ fun EditDialog(title: String, initial: String, onDismiss: () -> Unit, onSave: (S
     )
 }
 
-/** Protocol parameters; device fields regenerate the device code, version fields only the user agent. */
+/**
+ * Protocol parameters. The device model and system come from this phone or
+ * from a generated real model; editing them by hand counts as generated.
+ */
 @Composable
 fun ParamsScreen() {
     val app = appContainer()
-    val params = LocalAppSettings.current.protocol
+    val settings = LocalAppSettings.current
+    val params = settings.protocol
+    val local = settings.protocolSource == PROTOCOL_LOCAL
     val scope = rememberCoroutineScope()
-    var editing by remember { mutableStateOf<Triple<String, String, (String) -> com.zailinn.c001apk.core.protocol.ProtocolParams>?>(null) }
-    fun item(title: String, value: String, device: Boolean, update: (String) -> com.zailinn.c001apk.core.protocol.ProtocolParams) =
-        Triple(title, value) { v: String -> update(v).withUserAgent().let { if (device) it.withDevice() else it } }
-    val fields = listOf(
-        item("客户端版本名称", params.versionName, false) { params.copy(versionName = it) },
-        item("API 版本", params.apiVersion, false) { params.copy(apiVersion = it) },
-        item("客户端版本号", params.versionCode, false) { params.copy(versionCode = it) },
-        item("制造商", params.manufacturer, true) { params.copy(manufacturer = it) },
-        item("品牌", params.brand, true) { params.copy(brand = it) },
-        item("型号", params.model, true) { params.copy(model = it) },
-        item("系统构建号", params.buildNumber, true) { params.copy(buildNumber = it) },
-        item("SDK 版本", params.sdkInt, false) { params.copy(sdkInt = it) },
-        item("Android 版本", params.androidVersion, false) { params.copy(androidVersion = it) },
+    var editing by remember { mutableStateOf<Triple<String, String, (String) -> Unit>?>(null) }
+    fun version(title: String, value: String, update: (String) -> ProtocolParams) = Triple<String, String, (String) -> Unit>(title, value) { v ->
+        scope.launch { app.settings.saveProtocol(update(v).withUserAgent()) }
+    }
+    fun device(title: String, value: String, update: (String) -> ProtocolParams) = Triple<String, String, (String) -> Unit>(title, value) { v ->
+        scope.launch { app.settings.saveProtocol(update(v).withUserAgent().withDevice(), PROTOCOL_GENERATED) }
+    }
+    val versions = listOf(
+        version("客户端版本名称", params.versionName) { params.copy(versionName = it) },
+        version("API 版本", params.apiVersion) { params.copy(apiVersion = it) },
+        version("客户端版本号", params.versionCode) { params.copy(versionCode = it) },
+    )
+    val devices = listOf(
+        device("制造商", params.manufacturer) { params.copy(manufacturer = it) },
+        device("品牌", params.brand) { params.copy(brand = it) },
+        device("型号", params.model) { params.copy(model = it) },
+        device("系统构建号", params.buildNumber) { params.copy(buildNumber = it) },
+        device("SDK 版本", params.sdkInt) { params.copy(sdkInt = it) },
+        device("Android 版本", params.androidVersion) { params.copy(androidVersion = it) },
+    )
+    @Composable
+    fun Field(field: Triple<String, String, (String) -> Unit>) = ListItem(
+        headlineContent = { Text(field.first) }, supportingContent = { Text(field.second) },
+        modifier = Modifier.clickable { editing = field },
     )
     Scaffold(topBar = { SimpleTopBar("协议参数") }) { padding ->
         LazyColumn(Modifier.padding(padding)) {
-            items(fields) { (title, value, update) ->
-                ListItem(
-                    headlineContent = { Text(title) }, supportingContent = { Text(value) },
-                    modifier = Modifier.clickable { editing = Triple(title, value, update) },
-                )
-            }
-            item { ListItem(headlineContent = { Text("用户代理（User-Agent）") }, supportingContent = { Text(params.userAgent) }) }
-            item { ListItem(headlineContent = { Text("设备编码（X-App-Device）") }, supportingContent = { Text(params.xAppDevice) }) }
+            item { SectionTitle("设备参数") }
             item {
                 ListItem(
-                    headlineContent = { Text("重新生成参数", color = MaterialTheme.colorScheme.primary) },
-                    supportingContent = { Text("随机生成新的设备与客户端参数") },
-                    modifier = Modifier.clickable { scope.launch { app.settings.regenerateProtocol(); app.toast("已重新生成") } },
+                    headlineContent = { Text("使用本机") },
+                    supportingContent = { Text("使用这台手机的型号与系统版本，系统升级后自动更新 · ${androidDevice().brand} ${androidDevice().model}") },
+                    leadingContent = { RadioButton(local, null) },
+                    modifier = Modifier.clickable {
+                        scope.launch { app.settings.useLocalDevice(); app.toast("已使用本机参数") }
+                    },
                 )
             }
+            item {
+                ListItem(
+                    headlineContent = { Text("重新生成参数") },
+                    supportingContent = {
+                        Text(if (local) "随机换成另一款真实机型，并生成新的设备标识" else "已使用生成的参数，再次点按换一款机型")
+                    },
+                    leadingContent = { RadioButton(!local, null) },
+                    modifier = Modifier.clickable {
+                        scope.launch { app.settings.regenerateProtocol(); app.toast("已重新生成") }
+                    },
+                )
+            }
+            items(devices) { Field(it) }
+            item { SectionTitle("客户端") }
+            items(versions) { Field(it) }
+            item { ListItem(headlineContent = { Text("用户代理（User-Agent）") }, supportingContent = { Text(params.userAgent) }) }
+            item { ListItem(headlineContent = { Text("设备编码（X-App-Device）") }, supportingContent = { Text(params.xAppDevice) }) }
         }
     }
     editing?.let { (title, value, update) ->
-        EditDialog(title, value, onDismiss = { editing = null }) { input ->
-            if (input.isNotEmpty()) scope.launch { app.settings.saveProtocol(update(input)) }
-        }
+        EditDialog(title, value, onDismiss = { editing = null }) { input -> if (input.isNotEmpty()) update(input) }
     }
 }
 
