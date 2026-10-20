@@ -241,6 +241,19 @@ class AppUiTest {
     }
 
     @Test
+    fun appOpensOnTheChosenHomeTab() {
+        kotlinx.coroutines.runBlocking {
+            app.settings.set(com.zailinn.c001apk.data.SettingKeys.homeStartTab, "Hot")
+            kotlinx.coroutines.withTimeout(5_000) { while (app.settings.current.homeStartTab != "Hot") kotlinx.coroutines.delay(20) }
+        }
+        compose.setContent { C001apkApp(app, deepLink = null) {} }
+        // 热门 reads /page/dataList; 动态 (indexV8) is not the open page.
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("数据列表合成动态").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("数据列表合成动态").assertIsDisplayed()
+        assertTrue(transport.urls.any { it.startsWith("/v6/page/dataList?") && "V9_HOME_TAB_RANKING" in it })
+    }
+
+    @Test
     fun imageOpensViewerAndTopicTabLoads() {
         launch()
         // Card center on the first feed is its image: opens the viewer (List<String> route argument).

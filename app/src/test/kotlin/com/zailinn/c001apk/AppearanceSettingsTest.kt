@@ -15,6 +15,13 @@ class AppearanceSettingsTest {
     }
 
     @Test
+    fun startTabFallsBackToFeedThenTheFirstVisible() {
+        assertEquals(HomeTab.Hot, HomeTab.start(HomeTab.entries, "Hot"))
+        assertEquals(HomeTab.Feed, HomeTab.start(listOf(HomeTab.Apps, HomeTab.Feed), "Hot"))
+        assertEquals(HomeTab.Topic, HomeTab.start(listOf(HomeTab.Topic, HomeTab.Coolpic), "Hot"))
+    }
+
+    @Test
     fun fontWeightLevelThickensEveryStyle() {
         val standard = typographyFor(0)
         val bold = typographyFor(2)
