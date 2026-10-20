@@ -1,5 +1,6 @@
 package com.zailinn.c001apk.data
 
+import android.os.Build
 import androidx.datastore.preferences.core.Preferences
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.floatPreferencesKey
@@ -7,6 +8,7 @@ import androidx.datastore.preferences.core.intPreferencesKey
 import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import com.zailinn.c001apk.core.protocol.Constants
+import com.zailinn.c001apk.core.protocol.DeviceProfile
 import com.zailinn.c001apk.core.protocol.ProtocolParams
 import com.zailinn.c001apk.core.semantic.SemanticAnchors
 import com.zailinn.c001apk.core.update.UpdatePreferenceStore
@@ -37,7 +39,25 @@ data class AppSettings(
     val semanticFold: Boolean = false,
     val semanticThreshold: Float = SemanticAnchors.DEFAULT_THRESHOLD,
     val installTime: String = "",
+    /** Where the device model and system come from: [PROTOCOL_LOCAL] or [PROTOCOL_GENERATED]. */
+    val protocolSource: Int = PROTOCOL_LOCAL,
     val protocol: ProtocolParams = ProtocolParams(),
+)
+
+/** This phone's own model and system, followed after system updates. */
+const val PROTOCOL_LOCAL = 0
+
+/** A generated real phone model, or parameters edited by hand. */
+const val PROTOCOL_GENERATED = 1
+
+/** The model and system of the phone running the app. */
+fun androidDevice() = DeviceProfile(
+    manufacturer = Build.MANUFACTURER,
+    brand = Build.BRAND,
+    model = Build.MODEL,
+    buildNumber = Build.DISPLAY,
+    sdkInt = Build.VERSION.SDK_INT.toString(),
+    androidVersion = Build.VERSION.RELEASE,
 )
 
 /** Either switch turns sensitive-topic matching on; hiding wins over folding. */
@@ -61,6 +81,7 @@ object SettingKeys {
     val semanticFold = booleanPreferencesKey("semanticFold")
     val semanticThreshold = floatPreferencesKey("semanticThreshold")
     val installTime = stringPreferencesKey("installTime")
+    val protocolSource = intPreferencesKey("protocolSource")
 
     val versionName = stringPreferencesKey("versionName")
     val versionCode = stringPreferencesKey("versionCode")
@@ -76,19 +97,41 @@ object SettingKeys {
     val szlmId = stringPreferencesKey("szlmId")
 }
 
-class SettingsRepository(private val store: LocalStore) : UpdatePreferenceStore {
+class SettingsRepository(
+    private val store: LocalStore,
+    private val localDevice: () -> DeviceProfile = ::androidDevice,
+) : UpdatePreferenceStore {
     val settings: StateFlow<AppSettings> = store.state(::read)
     val current: AppSettings get() = settings.value
 
-    /** First launch creates a synthetic device; later launches keep it stable. */
+    /**
+     * First launch takes this phone's model and system with a new device ID.
+     * Later launches keep the ID; in [PROTOCOL_LOCAL] mode, which existing
+     * installs also start in, the model and system follow the phone.
+     */
     suspend fun initialize() {
         if (store.prefs.value[SettingKeys.installTime].isNullOrEmpty()) {
             store.edit { it[SettingKeys.installTime] = System.currentTimeMillis().toString() }
-            saveProtocol(ProtocolParams.generate())
+            saveProtocol(ProtocolParams.fromProfile(localDevice()), PROTOCOL_LOCAL)
+        } else if (current.protocolSource == PROTOCOL_LOCAL && current.protocol.profile != localDevice()) {
+            useLocalDevice()
         }
     }
 
-    suspend fun saveProtocol(params: ProtocolParams) = store.edit {
+    /** Uses this phone's model and system; the device ID stays. */
+    suspend fun useLocalDevice() = saveProtocol(current.protocol.withProfile(localDevice()), PROTOCOL_LOCAL)
+
+    /** A different real phone model with a new device ID (the SZLM ID, if set, is kept). */
+    suspend fun regenerateProtocol() {
+        val currentModel = current.protocol.profile
+        var params: ProtocolParams
+        do params = ProtocolParams.generate(current.protocol.szlmId) while (params.profile == currentModel)
+        saveProtocol(params, PROTOCOL_GENERATED)
+    }
+
+    /** [source] null keeps the current one; editing device fields by hand passes [PROTOCOL_GENERATED]. */
+    suspend fun saveProtocol(params: ProtocolParams, source: Int? = null) = store.edit {
+        source?.let { value -> it[SettingKeys.protocolSource] = value }
         it[SettingKeys.versionName] = params.versionName
         it[SettingKeys.versionCode] = params.versionCode
         it[SettingKeys.apiVersion] = params.apiVersion
@@ -102,8 +145,6 @@ class SettingsRepository(private val store: LocalStore) : UpdatePreferenceStore 
         it[SettingKeys.xAppDevice] = params.xAppDevice
         it[SettingKeys.szlmId] = params.szlmId
     }
-
-    suspend fun regenerateProtocol() = saveProtocol(ProtocolParams.generate(current.protocol.szlmId))
 
     suspend fun <T> set(key: Preferences.Key<T>, value: T) = store.edit { it[key] = value }
 
@@ -125,6 +166,7 @@ class SettingsRepository(private val store: LocalStore) : UpdatePreferenceStore 
         semanticFold = p[SettingKeys.semanticFold] ?: false,
         semanticThreshold = p[SettingKeys.semanticThreshold] ?: SemanticAnchors.DEFAULT_THRESHOLD,
         installTime = p[SettingKeys.installTime].orEmpty(),
+        protocolSource = p[SettingKeys.protocolSource] ?: PROTOCOL_LOCAL,
         protocol = ProtocolParams(
             versionName = p[SettingKeys.versionName] ?: Constants.VERSION_NAME,
             versionCode = p[SettingKeys.versionCode] ?: Constants.VERSION_CODE,

@@ -53,6 +53,33 @@ class TokenUtilsTest {
         val params = ProtocolParams.generate()
         assertTrue(params.userAgent.contains("+CoolMarket/16.6.4-2609291-universal"))
         assertTrue(params.xAppDevice.isNotEmpty() && !params.xAppDevice.contains("="))
-        assertTrue(params.sdkInt.toInt() in 21..34)
+        assertTrue(params.profile in RealDevices.profiles)
+    }
+
+    @Test
+    fun deviceIdSurvivesProfileChangesUntilANewOneIsAsked() {
+        val params = ProtocolParams.generate(random = kotlin.random.Random(1))
+        val id = params.deviceId!!
+        assertEquals(32, id.length)
+        val local = DeviceProfile("Xiaomi", "Redmi", "24069RA21C", "AQ3A.240627.003", "35", "15")
+        val moved = params.withProfile(local)
+        assertEquals(id, moved.deviceId)
+        assertEquals(local, moved.profile)
+        assertTrue(moved.userAgent.contains("(#Build; Redmi; 24069RA21C; AQ3A.240627.003; 15)"))
+        // No made-up MAC address in the device code.
+        assertEquals("$id; ; ; ; Xiaomi; Redmi; 24069RA21C; AQ3A.240627.003; null", decode(moved.xAppDevice))
+        assertNotEquals(id, moved.withDevice(newId = true).deviceId)
+        assertEquals("SZLM", moved.copy(szlmId = "SZLM").withDevice().deviceId)
+    }
+
+    @Test
+    fun realDevicesHaveMatchingSdkAndRelease() {
+        val sdkOf = mapOf("13" to "33", "14" to "34", "15" to "35")
+        for (device in RealDevices.profiles) assertEquals(device.toString(), sdkOf[device.androidVersion], device.sdkInt)
+    }
+
+    private fun decode(code: String): String {
+        val reversed = code.reversed()
+        return String(java.util.Base64.getDecoder().decode(reversed + "=".repeat((4 - reversed.length % 4) % 4)))
     }
 }
