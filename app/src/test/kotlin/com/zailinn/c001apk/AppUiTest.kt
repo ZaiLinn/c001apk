@@ -11,6 +11,8 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTextClearance
+import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
 import androidx.test.core.app.ApplicationProvider
@@ -193,6 +195,8 @@ class AppUiTest {
         val menus = compose.onAllNodesWithContentDescription("更多")
         val top = menus.fetchSemanticsNodes().withIndex().minBy { it.value.boundsInRoot.top }.index
         menus[top].performClick()
+        // The dropdown opens in a popup; wait for it before checking its items.
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("收藏到收藏夹").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("本地收藏").assertIsDisplayed()
         compose.onNodeWithText("收藏到收藏夹").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("合成收藏夹").fetchSemanticsNodes().isNotEmpty() }
@@ -207,6 +211,27 @@ class AppUiTest {
     private fun form(body: String) = body.split("&").filter { it.isNotEmpty() }.associate {
         val (k, v) = (it.split("=", limit = 2) + "").take(2)
         java.net.URLDecoder.decode(k, "UTF-8") to java.net.URLDecoder.decode(v, "UTF-8")
+    }
+
+    @Test
+    fun officialDeviceIdIsRecognisedFromTheCopiedText() {
+        launch()
+        tab("我的")
+        compose.onNodeWithContentDescription("设置").performClick()
+        compose.onNodeWithText("协议与设备").performClick()
+        compose.onNodeWithText("导入官方设备标识").performClick()
+        compose.onNodeWithText("粘贴官方复制的完整文本").performTextInput("OAID: 0b5c6a8e-1f2d-4c3b-9a7e-6d5f4e3c2b1a")
+        compose.onNodeWithText("未识别到 ShuzlmID", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("粘贴官方复制的完整文本").performTextClearance()
+        compose.onNodeWithText("粘贴官方复制的完整文本")
+            .performTextInput("设备ID: 0123456789abcdef\nShuzlmID: DUsyntheticSZLM0123456789abcdef\nAndroidID: fedcba9876543210")
+        compose.onNodeWithText("已识别数盟 ID：DUsynt…cdef", substring = true).assertIsDisplayed()
+        shot("device-identity")
+        val model = app.settings.current.protocol.model
+        compose.onNodeWithText("保存并应用").performClick()
+        compose.waitUntil(5_000) { app.settings.current.protocol.szlmId == "DUsyntheticSZLM0123456789abcdef" }
+        assertEquals("DUsyntheticSZLM0123456789abcdef", app.settings.current.protocol.deviceId)
+        assertEquals(model, app.settings.current.protocol.model)
     }
 
     @Test

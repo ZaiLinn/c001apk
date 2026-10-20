@@ -13,6 +13,8 @@
         android:maxSdkVersion="28" />
 
     <queries>
+        <!-- 导入官方设备标识 checks that the official app is installed. -->
+        <package android:name="com.coolapk.market" />
         <intent>
             <action android:name="android.intent.action.VIEW" />
             <category android:name="android.intent.category.BROWSABLE" />

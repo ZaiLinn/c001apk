@@ -129,6 +129,15 @@ class SettingsRepository(
         saveProtocol(params, PROTOCOL_GENERATED)
     }
 
+    /**
+     * Uses [id] as the device ID, keeping the model. Clearing it, when it was
+     * the device ID, starts a fresh random one.
+     */
+    suspend fun setSzlmId(id: String) {
+        val params = current.protocol
+        saveProtocol(params.copy(szlmId = id).withDevice(newId = id.isEmpty() && params.szlmId.isNotEmpty()))
+    }
+
     /** [source] null keeps the current one; editing device fields by hand passes [PROTOCOL_GENERATED]. */
     suspend fun saveProtocol(params: ProtocolParams, source: Int? = null) = store.edit {
         source?.let { value -> it[SettingKeys.protocolSource] = value }
