@@ -5,6 +5,7 @@ import androidx.compose.material.icons.outlined.PushPin
 import com.zailinn.c001apk.ui.screens.runAction
 import com.zailinn.c001apk.ui.common.SheetAction
 import com.zailinn.c001apk.ui.common.ActionSheet
+import com.zailinn.c001apk.ui.common.FillingTabRow
 import com.zailinn.c001apk.core.net.ConversationAction
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -17,8 +18,6 @@ import androidx.compose.material.icons.outlined.ClearAll
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.PrimaryScrollableTabRow
-import androidx.compose.material3.PrimaryTabRow
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -112,7 +111,7 @@ fun CarouselScreen(url: String, title: String) {
 }
 
 @Composable
-fun TabbedPages(titles: List<String>, scrollable: Boolean = titles.size > 4, initial: Int = 0, page: @Composable (Int) -> Unit) {
+fun TabbedPages(titles: List<String>, initial: Int = 0, page: @Composable (Int) -> Unit) {
     val pager = rememberPagerState(initialPage = initial.coerceIn(0, (titles.size - 1).coerceAtLeast(0))) { titles.size }
     val scope = rememberCoroutineScope()
     val tabs = @Composable {
@@ -120,7 +119,7 @@ fun TabbedPages(titles: List<String>, scrollable: Boolean = titles.size > 4, ini
             Tab(selected = pager.currentPage == index, onClick = { scope.launch { pager.animateScrollToPage(index) } }, text = { Text(text) })
         }
     }
-    if (scrollable) PrimaryScrollableTabRow(pager.currentPage) { tabs() } else PrimaryTabRow(pager.currentPage) { tabs() }
+    FillingTabRow(pager.currentPage, titles.size) { tabs() }
     HorizontalPager(pager, Modifier.fillMaxSize(), key = { it }) { page(it) }
 }
 

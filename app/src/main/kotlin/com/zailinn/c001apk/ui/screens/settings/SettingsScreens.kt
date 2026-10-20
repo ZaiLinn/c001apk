@@ -32,6 +32,14 @@ import androidx.compose.material.icons.outlined.TextFields
 import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.VisibilityOff
+import androidx.compose.material.icons.outlined.FormatBold
+import androidx.compose.material.icons.outlined.KeyboardArrowDown
+import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.Tab
+import androidx.compose.material3.Checkbox
+import androidx.compose.material3.IconButton
+import androidx.compose.ui.Alignment
+import com.zailinn.c001apk.ui.screens.main.HomeTab
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -81,8 +89,8 @@ import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.BoxWithConstraints
 
 enum class SettingsSection(val title: String, val description: String, val icon: ImageVector) {
-    Appearance("外观与字号", "动态取色、主题、深色模式与字体大小", Icons.Outlined.Palette),
-    Content("关注与内容", "本地关注、悄悄关注、返回刷新与表情", Icons.Outlined.Feed),
+    Appearance("外观与字号", "动态取色、主题、深色模式、字体大小与粗细", Icons.Outlined.Palette),
+    Content("关注与内容", "首页标签、本地关注、悄悄关注、返回刷新与表情", Icons.Outlined.Feed),
     Filter("内容过滤", "用户与话题黑名单、敏感话题折叠或隐藏、语义屏蔽", Icons.Outlined.FilterAlt),
     Privacy("浏览与隐私", "浏览历史、外部链接", Icons.Outlined.PrivacyTip),
     Storage("存储与更新", "图片缓存、版本与更新检查", Icons.Outlined.Storage),
@@ -219,6 +227,9 @@ private fun SectionItems(section: SettingsSection) {
                 leadingContent = { Icon(Icons.Outlined.TextFields, null) },
                 modifier = Modifier.clickable { fontDialog = true },
             )
+            ChoiceItem(
+                Icons.Outlined.FormatBold, "字体粗细", "使用系统字体，可整体加粗", listOf("标准", "中等", "加粗"), settings.fontWeightLevel,
+            ) { setInt(SettingKeys.fontWeightLevel, it) }
             if (fontDialog) {
                 var value by remember { mutableFloatStateOf(settings.fontScale) }
                 AlertDialog(
@@ -246,6 +257,19 @@ private fun SectionItems(section: SettingsSection) {
             }
         }
         SettingsSection.Content -> {
+            SectionTitle("首页")
+            var tabsDialog by remember { mutableStateOf(false) }
+            ListItem(
+                headlineContent = { Text("首页标签") },
+                supportingContent = { Text("显示、隐藏或调整顺序 · ${HomeTab.visible(settings.homeTabs).joinToString("、") { it.label }}") },
+                leadingContent = { Icon(Icons.Outlined.Tab, null) },
+                modifier = Modifier.clickable { tabsDialog = true },
+            )
+            if (tabsDialog) {
+                HomeTabsDialog(HomeTab.visible(settings.homeTabs), onDismiss = { tabsDialog = false }) { tabs ->
+                    scope.launch { app.settings.set(SettingKeys.homeTabs, tabs.joinToString(",") { it.name }) }
+                }
+            }
             SectionTitle("关注")
             val label = if (session.isLogin) "悄悄关注" else "本地关注"
             if (session.isLogin) {
@@ -364,6 +388,39 @@ private fun cacheSize(context: android.content.Context): String {
         bytes >= 1 shl 20 -> "%.2f MB".format(bytes / (1 shl 20).toDouble())
         else -> "%.2f KB".format(bytes / 1024.0)
     }
+}
+
+/** Visible tabs first in their order, hidden ones after; at least one tab stays visible. */
+@Composable
+private fun HomeTabsDialog(visible: List<HomeTab>, onDismiss: () -> Unit, onSave: (List<HomeTab>) -> Unit) {
+    var order by remember { mutableStateOf(visible + HomeTab.entries.filter { it !in visible }) }
+    var shown by remember { mutableStateOf(visible.toSet()) }
+    fun move(index: Int, by: Int) {
+        order = order.toMutableList().apply { add(index + by, removeAt(index)) }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("首页标签") },
+        text = {
+            Column {
+                order.forEachIndexed { index, tab ->
+                    val checked = tab in shown
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Checkbox(
+                            checked = checked,
+                            onCheckedChange = { shown = if (it) shown + tab else shown - tab },
+                            enabled = !checked || shown.size > 1,
+                        )
+                        Text(tab.label, Modifier.weight(1f))
+                        IconButton(onClick = { move(index, -1) }, enabled = index > 0) { Icon(Icons.Outlined.KeyboardArrowUp, "上移") }
+                        IconButton(onClick = { move(index, 1) }, enabled = index < order.lastIndex) { Icon(Icons.Outlined.KeyboardArrowDown, "下移") }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onDismiss(); onSave(order.filter { it in shown }) }) { Text("保存") } },
+        dismissButton = { TextButton(onClick = { onDismiss(); onSave(HomeTab.entries) }) { Text("恢复默认") } },
+    )
 }
 
 @Composable

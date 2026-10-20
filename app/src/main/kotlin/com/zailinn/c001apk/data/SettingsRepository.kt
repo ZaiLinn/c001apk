@@ -18,6 +18,10 @@ data class AppSettings(
     /** 0 follow system, 1 light, 2 dark. */
     val themeMode: Int = 0,
     val fontScale: Float = 1f,
+    /** Added to every text style weight: 0 standard, 1 medium (+100), 2 bold (+200). */
+    val fontWeightLevel: Int = 0,
+    /** Visible home tabs in order, as [com.zailinn.c001apk.ui.screens.main.HomeTab] names; empty means the default set. */
+    val homeTabs: List<String> = emptyList(),
     val followType: Int = 0,
     val openInBrowser: Boolean = false,
     val recordHistory: Boolean = true,
@@ -44,6 +48,8 @@ object SettingKeys {
     val staticColor = intPreferencesKey("staticColor")
     val themeMode = intPreferencesKey("selectedTheme")
     val fontScale = floatPreferencesKey("fontScale")
+    val fontWeightLevel = intPreferencesKey("fontWeightLevel")
+    val homeTabs = stringPreferencesKey("homeTabs")
     val followType = intPreferencesKey("followType")
     val openInBrowser = booleanPreferencesKey("openInBrowser")
     val recordHistory = booleanPreferencesKey("recordHistory")
@@ -106,6 +112,8 @@ class SettingsRepository(private val store: LocalStore) : UpdatePreferenceStore 
         staticColor = p[SettingKeys.staticColor] ?: 0,
         themeMode = p[SettingKeys.themeMode] ?: 0,
         fontScale = p[SettingKeys.fontScale] ?: 1f,
+        fontWeightLevel = p[SettingKeys.fontWeightLevel] ?: 0,
+        homeTabs = p[SettingKeys.homeTabs]?.split(',')?.filter { it.isNotBlank() }.orEmpty(),
         followType = p[SettingKeys.followType] ?: 0,
         openInBrowser = p[SettingKeys.openInBrowser] ?: false,
         recordHistory = p[SettingKeys.recordHistory] ?: true,

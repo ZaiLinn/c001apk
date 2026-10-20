@@ -197,7 +197,7 @@ fun SearchResultScreen(keyword: String, title: String?, pageType: String?, pageP
             if (types.size == 1) {
                 PagedListView(feedVm.list) { _, item -> ItemCard(item, feedVm.actions) }
             } else {
-                TabbedPages(types.map { it.first }, scrollable = true) { index ->
+                TabbedPages(types.map { it.first }) { index ->
                     val vm = if (index == 0) feedVm else appViewModel(key = "search-${types[index].second}-$keyword") {
                         SearchViewModel(it, types[index].second, keyword, pageType, pageParam)
                     }

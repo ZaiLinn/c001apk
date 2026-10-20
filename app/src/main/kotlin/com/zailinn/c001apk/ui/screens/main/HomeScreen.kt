@@ -23,7 +23,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.PrimaryScrollableTabRow
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
@@ -50,8 +49,10 @@ import androidx.lifecycle.viewModelScope
 import com.zailinn.c001apk.AppContainer
 import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.core.model.LoadResult
+import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.cards.ItemCard
+import com.zailinn.c001apk.ui.common.FillingTabRow
 import com.zailinn.c001apk.ui.common.OnCountIncrease
 import com.zailinn.c001apk.ui.common.PagedList
 import com.zailinn.c001apk.ui.common.SearchPill
@@ -66,7 +67,15 @@ import com.zailinn.c001apk.ui.screens.list.DataListContent
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
-enum class HomeTab(val label: String) { Apps("应用"), Feed("动态"), Hot("热门"), Topic("话题"), Product("数码"), Coolpic("酷图") }
+enum class HomeTab(val label: String) {
+    Apps("应用"), Feed("动态"), Hot("热门"), Topic("话题"), Product("数码"), Coolpic("酷图");
+
+    companion object {
+        /** Saved tab names in order; unknown names are dropped, and nothing left means every tab. */
+        fun visible(names: List<String>): List<HomeTab> =
+            names.mapNotNull { name -> entries.firstOrNull { it.name == name } }.distinct().ifEmpty { entries }
+    }
+}
 
 class HomeFeedViewModel(app: AppContainer, tab: HomeTab, url: String?, title: String?) : ContentViewModel(app) {
     override val list = PagedList(viewModelScope) { page ->
@@ -82,8 +91,8 @@ class HomeFeedViewModel(app: AppContainer, tab: HomeTab, url: String?, title: St
 fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
     val navigator = LocalNavigator.current
     val session = LocalSession.current
-    val tabs = HomeTab.entries
-    val pager = rememberPagerState(initialPage = HomeTab.Feed.ordinal) { tabs.size }
+    val tabs = HomeTab.visible(LocalAppSettings.current.homeTabs)
+    val pager = rememberPagerState(initialPage = tabs.indexOf(HomeTab.Feed).coerceAtLeast(0)) { tabs.size }
     val scope = rememberCoroutineScope()
     var composing by remember { mutableStateOf(false) }
     // Scroll-to-top-and-refresh requests for the visible list; saved so a rebuilt screen does not repeat one.
@@ -103,12 +112,7 @@ fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
                     colors = TopAppBarDefaults.topAppBarColors(scrolledContainerColor = MaterialTheme.colorScheme.surface),
                     windowInsets = TopAppBarDefaults.windowInsets,
                 )
-                PrimaryScrollableTabRow(
-                    selectedTabIndex = pager.currentPage,
-                    edgePadding = 8.dp,
-                    minTabWidth = 56.dp,
-                    divider = {},
-                ) {
+                FillingTabRow(pager.currentPage.coerceAtMost(tabs.lastIndex), tabs.size, divider = {}) {
                     tabs.forEachIndexed { index, tab ->
                         val selected = pager.currentPage == index
                         Tab(
@@ -127,12 +131,12 @@ fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
             }
         },
         floatingActionButton = {
-            if (session.isLogin && pager.currentPage == HomeTab.Feed.ordinal) {
+            if (session.isLogin && tabs.getOrNull(pager.currentPage) == HomeTab.Feed) {
                 FloatingActionButton(onClick = { composing = true }) { Icon(Icons.Filled.Add, "发布动态") }
             }
         },
     ) { padding ->
-        HorizontalPager(pager, Modifier.padding(padding).fillMaxSize(), key = { it }) { page ->
+        HorizontalPager(pager, Modifier.padding(padding).fillMaxSize(), key = { tabs[it].name }) { page ->
             val active = pager.currentPage == page
             when (val tab = tabs[page]) {
                 HomeTab.Apps -> AppListContent()
