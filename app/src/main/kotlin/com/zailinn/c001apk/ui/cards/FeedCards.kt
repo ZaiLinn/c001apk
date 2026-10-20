@@ -44,6 +44,10 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
+import androidx.compose.runtime.CompositionLocalProvider
+import androidx.compose.material3.LocalMinimumInteractiveComponentSize
+import androidx.compose.ui.unit.Dp
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.zailinn.c001apk.core.model.Datum
@@ -116,8 +120,12 @@ fun FeedCard(data: Datum, actions: ItemActions = ItemActions(), detail: Boolean 
 @Composable
 fun FeedFooter(data: Datum, actions: ItemActions, detail: Boolean = true) {
     val pad = if (detail) 16.dp else 10.dp
-    FeedBottom(data, detail, pad, actions)
-    RelationRows(data, pad, detail)
+    // The count buttons and chips sit in a dense row; the 48dp touch-target
+    // padding Material adds around them left tall gaps above and below.
+    CompositionLocalProvider(LocalMinimumInteractiveComponentSize provides Dp.Unspecified) {
+        FeedBottom(data, detail, pad, actions)
+        RelationRows(data, pad, detail)
+    }
 }
 
 @Composable
@@ -263,7 +271,11 @@ private fun FeedBottom(data: Datum, detail: Boolean, pad: androidx.compose.ui.un
 @Composable
 fun CountButton(icon: androidx.compose.ui.graphics.vector.ImageVector, value: String, active: Boolean = false, onClick: (() -> Unit)? = null) {
     val color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-    TextButton(onClick = { onClick?.invoke() }, enabled = true) {
+    TextButton(
+        onClick = { onClick?.invoke() },
+        modifier = Modifier.height(36.dp),
+        contentPadding = PaddingValues(horizontal = 10.dp),
+    ) {
         Icon(icon, null, Modifier.size(16.dp), tint = color)
         Spacer(Modifier.width(4.dp))
         Text(formatCount(value), color = color, style = MaterialTheme.typography.bodyMedium)
@@ -291,7 +303,7 @@ private fun RelationRows(data: Datum, pad: androidx.compose.ui.unit.Dp, detail: 
     val rows = listOfNotNull(data.targetRow) + data.relationRows
     if (rows.isEmpty()) return
     FlowRow(
-        Modifier.padding(start = pad, end = pad, top = 10.dp),
+        Modifier.padding(start = pad, end = pad, top = 4.dp),
         horizontalArrangement = Arrangement.spacedBy(5.dp),
         verticalArrangement = Arrangement.spacedBy(5.dp),
     ) {
