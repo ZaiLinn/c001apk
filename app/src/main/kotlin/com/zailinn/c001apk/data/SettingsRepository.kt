@@ -24,6 +24,8 @@ data class AppSettings(
     val fontWeightLevel: Int = 0,
     /** Visible home tabs in order, as [com.zailinn.c001apk.ui.screens.main.HomeTab] names; empty means the default set. */
     val homeTabs: List<String> = emptyList(),
+    /** The home tab shown when the app opens, as a HomeTab name. */
+    val homeStartTab: String = "Feed",
     val followType: Int = 0,
     val openInBrowser: Boolean = false,
     val recordHistory: Boolean = true,
@@ -70,6 +72,7 @@ object SettingKeys {
     val fontScale = floatPreferencesKey("fontScale")
     val fontWeightLevel = intPreferencesKey("fontWeightLevel")
     val homeTabs = stringPreferencesKey("homeTabs")
+    val homeStartTab = stringPreferencesKey("homeStartTab")
     val followType = intPreferencesKey("followType")
     val openInBrowser = booleanPreferencesKey("openInBrowser")
     val recordHistory = booleanPreferencesKey("recordHistory")
@@ -164,6 +167,7 @@ class SettingsRepository(
         fontScale = p[SettingKeys.fontScale] ?: 1f,
         fontWeightLevel = p[SettingKeys.fontWeightLevel] ?: 0,
         homeTabs = p[SettingKeys.homeTabs]?.split(',')?.filter { it.isNotBlank() }.orEmpty(),
+        homeStartTab = p[SettingKeys.homeStartTab] ?: "Feed",
         followType = p[SettingKeys.followType] ?: 0,
         openInBrowser = p[SettingKeys.openInBrowser] ?: false,
         recordHistory = p[SettingKeys.recordHistory] ?: true,

@@ -33,6 +33,7 @@ import androidx.compose.material.icons.outlined.EmojiEmotions
 import androidx.compose.material.icons.outlined.Feed
 import androidx.compose.material.icons.outlined.FormatColorFill
 import androidx.compose.material.icons.outlined.History
+import androidx.compose.material.icons.outlined.Home
 import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.ManageAccounts
 import androidx.compose.material.icons.outlined.Palette
@@ -228,6 +229,7 @@ private fun SectionItems(section: SettingsSection) {
     val scope = rememberCoroutineScope()
     val setBool = rememberSetter<Boolean>()
     val setInt = rememberSetter<Int>()
+    val setString = rememberSetter<String>()
     when (section) {
         SettingsSection.Appearance -> {
             SwitchItem(Icons.Outlined.Palette, "动态取色", "根据系统配色调整应用主题", settings.dynamicColor) { setBool(SettingKeys.dynamicColor, it) }
@@ -282,6 +284,11 @@ private fun SectionItems(section: SettingsSection) {
                 leadingContent = { Icon(Icons.Outlined.Tab, null) },
                 modifier = Modifier.clickable { tabsDialog = true },
             )
+            val shownTabs = HomeTab.visible(settings.homeTabs)
+            ChoiceItem(
+                Icons.Outlined.Home, "默认打开", "打开应用时首页停留的标签", shownTabs.map { it.label },
+                shownTabs.indexOf(HomeTab.start(shownTabs, settings.homeStartTab)),
+            ) { setString(SettingKeys.homeStartTab, shownTabs[it].name) }
             if (tabsDialog) {
                 HomeTabsDialog(HomeTab.visible(settings.homeTabs), onDismiss = { tabsDialog = false }) { tabs ->
                     scope.launch { app.settings.set(SettingKeys.homeTabs, tabs.joinToString(",") { it.name }) }

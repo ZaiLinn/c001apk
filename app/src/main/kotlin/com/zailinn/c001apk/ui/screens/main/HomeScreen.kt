@@ -83,6 +83,10 @@ enum class HomeTab(val label: String) {
         /** Saved tab names in order; unknown names are dropped, and nothing left means every tab. */
         fun visible(names: List<String>): List<HomeTab> =
             names.mapNotNull { name -> entries.firstOrNull { it.name == name } }.distinct().ifEmpty { entries }
+
+        /** The tab to open on: the chosen one if visible, else 动态, else the first. */
+        fun start(tabs: List<HomeTab>, name: String): HomeTab =
+            tabs.firstOrNull { it.name == name } ?: tabs.firstOrNull { it == Feed } ?: tabs.first()
     }
 }
 
@@ -100,8 +104,9 @@ class HomeFeedViewModel(app: AppContainer, tab: HomeTab, url: String?, title: St
 fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
     val navigator = LocalNavigator.current
     val session = LocalSession.current
-    val tabs = HomeTab.visible(LocalAppSettings.current.homeTabs)
-    val pager = rememberPagerState(initialPage = tabs.indexOf(HomeTab.Feed).coerceAtLeast(0)) { tabs.size }
+    val settings = LocalAppSettings.current
+    val tabs = HomeTab.visible(settings.homeTabs)
+    val pager = rememberPagerState(initialPage = tabs.indexOf(HomeTab.start(tabs, settings.homeStartTab))) { tabs.size }
     val scope = rememberCoroutineScope()
     var composing by remember { mutableStateOf(false) }
     var editingTabs by remember { mutableStateOf(false) }
