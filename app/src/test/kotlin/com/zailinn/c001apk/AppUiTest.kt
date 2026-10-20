@@ -225,13 +225,20 @@ class AppUiTest {
         compose.onNodeWithText("粘贴官方复制的完整文本").performTextClearance()
         compose.onNodeWithText("粘贴官方复制的完整文本")
             .performTextInput("设备ID: 0123456789abcdef\nShuzlmID: DUsyntheticSZLM0123456789abcdef\nAndroidID: fedcba9876543210")
-        compose.onNodeWithText("已识别数盟 ID：DUsynt…cdef", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("已识别数盟 ID", substring = true).assertIsDisplayed()
+        // Hidden by default; the input stays for another paste.
+        compose.onNodeWithText("DUsyntheticSZLM0123456789abcdef", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("粘贴官方复制的完整文本").assertIsDisplayed()
         shot("device-identity")
         val model = app.settings.current.protocol.model
         compose.onNodeWithText("保存并应用").performClick()
         compose.waitUntil(5_000) { app.settings.current.protocol.szlmId == "DUsyntheticSZLM0123456789abcdef" }
         assertEquals("DUsyntheticSZLM0123456789abcdef", app.settings.current.protocol.deviceId)
         assertEquals(model, app.settings.current.protocol.model)
+        compose.onNodeWithText("已导入数盟 ID", substring = true).assertIsDisplayed()
+        compose.onNodeWithText("DUsyntheticSZLM0123456789abcdef").assertDoesNotExist()
+        compose.onAllNodesWithContentDescription("显示数盟 ID").onFirst().performClick()
+        compose.onNodeWithText("DUsyntheticSZLM0123456789abcdef").assertIsDisplayed()
     }
 
     @Test

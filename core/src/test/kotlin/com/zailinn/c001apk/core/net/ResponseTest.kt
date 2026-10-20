@@ -70,12 +70,15 @@ class ResponseTest {
     @Test
     fun businessErrorsShowTheServerReason() = runTest {
         val missing = repo(body = """{"status":-1,"error":-1,"message":"用户不存在","messageStatus":-1}""").dataFromUrl("/x")
-        assertEquals("用户不存在", (missing as LoadResult.Error).message)
-        // Markup is dropped; messages without readable text fall back to the generic one.
+        assertEquals("用户不存在（错误码 -1）", (missing as LoadResult.Error).message)
+        // Markup is dropped; messages without readable text fall back to the generic one with their code.
         val tagged = repo(body = """{"status":-1,"message":"<b>该用户已注销</b>"}""").dataFromUrl("/x")
-        assertEquals("该用户已注销", (tagged as LoadResult.Error).message)
+        assertEquals("该用户已注销（错误码 -1）", (tagged as LoadResult.Error).message)
         val code = repo(body = """{"status":-1,"message":"err_unknown_42"}""").dataFromUrl("/x")
-        assertEquals("服务器未能完成请求，请稍后重试", (code as LoadResult.Error).message)
+        assertEquals("服务器未能完成请求，请稍后重试（错误码 -1 · err_unknown_42）", (code as LoadResult.Error).message)
+        // A reason sent in a string data field is shown too.
+        val inData = repo(body = """{"status":-1,"message":"","data":"检测到当前版本存在异常(-419)"}""").dataFromUrl("/x")
+        assertEquals("检测到当前版本存在异常(-419)（错误码 -1）", (inData as LoadResult.Error).message)
     }
 
     @Test

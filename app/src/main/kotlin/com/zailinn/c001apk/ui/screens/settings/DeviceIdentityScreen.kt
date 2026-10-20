@@ -15,10 +15,13 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.ContentPaste
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -31,8 +34,11 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.zailinn.c001apk.core.protocol.OfficialDeviceIdentity
 import com.zailinn.c001apk.ui.LocalAppSettings
@@ -46,6 +52,27 @@ const val DEVICE_ID_GUIDE = "https://github.com/ZaiLinn/c001apk/blob/main/docs/D
 @Composable
 private fun Heading(text: String) =
     Text(text, Modifier.padding(top = 8.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+
+@Composable
+private fun VisibilityToggle(visible: Boolean, onChange: (Boolean) -> Unit) =
+    IconButton(onClick = { onChange(!visible) }) {
+        Icon(if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, if (visible) "隐藏数盟 ID" else "显示数盟 ID")
+    }
+
+/** A saved or recognised ID, hidden until the eye is tapped. */
+@Composable
+private fun HiddenId(id: String) {
+    var visible by remember(id) { mutableStateOf(false) }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        Text(
+            if (visible) id else "•".repeat(12),
+            Modifier.weight(1f),
+            style = MaterialTheme.typography.bodyMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        VisibilityToggle(visible) { visible = it }
+    }
+}
 
 private enum class OpenResult { Opened, NotInstalled, Failed }
 
@@ -137,17 +164,18 @@ fun DeviceIdentityScreen() {
             )
 
             Heading("粘贴并识别")
-            if (pending == null) {
-                OutlinedTextField(
-                    text, ::recognise, Modifier.fillMaxWidth(),
-                    label = { Text("粘贴官方复制的完整文本") },
-                    placeholder = { Text("需包含 ShuzlmID 一行，识别后自动隐藏") },
-                    minLines = 3, maxLines = 6,
-                    isError = error != null,
-                    supportingText = error?.let { message -> { Text(message) } },
-                )
-            } else {
-                Text("已识别数盟 ID：${OfficialDeviceIdentity.mask(pending!!)}，复制内容已隐藏。点击保存后生效。", color = MaterialTheme.colorScheme.primary)
+            // Always available for pasting; recognised text is cleared from it at once.
+            OutlinedTextField(
+                text, ::recognise, Modifier.fillMaxWidth(),
+                label = { Text("粘贴官方复制的完整文本") },
+                placeholder = { Text("需包含 ShuzlmID 一行，识别后自动清空") },
+                minLines = 3, maxLines = 6,
+                isError = error != null,
+                supportingText = error?.let { message -> { Text(message) } },
+            )
+            pending?.let { id ->
+                Text("已识别数盟 ID，复制内容已清空。点击“保存并应用”后生效。", color = MaterialTheme.colorScheme.primary)
+                HiddenId(id)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
@@ -164,8 +192,9 @@ fun DeviceIdentityScreen() {
             Heading("当前状态")
             Text(
                 if (saved.isEmpty()) "尚未导入数盟 ID，正在使用本应用生成的设备标识。"
-                else "已保存数盟 ID：${OfficialDeviceIdentity.mask(saved)}。机型等其他设备参数保持不变。",
+                else "已导入数盟 ID，机型等其他设备参数保持不变。",
             )
+            if (saved.isNotEmpty()) HiddenId(saved)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = { manual = true }) { Text("手动输入") }
                 if (saved.isNotEmpty()) TextButton(onClick = { clearing = true }) { Text("清除") }
@@ -192,7 +221,25 @@ fun DeviceIdentityScreen() {
         )
     }
     if (manual) {
-        EditDialog("设备标识（SZLM ID）", saved, onDismiss = { manual = false }) { value -> save(value) }
+        // Starts empty so the saved ID is never shown in the clear.
+        var value by remember { mutableStateOf("") }
+        var visible by remember { mutableStateOf(false) }
+        AlertDialog(
+            onDismissRequest = { manual = false },
+            title = { Text("手动输入数盟 ID") },
+            text = {
+                OutlinedTextField(
+                    value, { value = it.trim() }, singleLine = true,
+                    placeholder = { Text("只填 ShuzlmID 后面的值") },
+                    visualTransformation = if (visible) VisualTransformation.None else PasswordVisualTransformation(),
+                    trailingIcon = { VisibilityToggle(visible) { visible = it } },
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = { manual = false; save(value) }, enabled = value.isNotEmpty()) { Text("保存") }
+            },
+            dismissButton = { TextButton(onClick = { manual = false }) { Text("取消") } },
+        )
     }
     if (clearing) {
         AlertDialog(

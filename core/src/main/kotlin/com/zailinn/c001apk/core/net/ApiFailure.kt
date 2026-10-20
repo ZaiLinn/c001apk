@@ -27,6 +27,8 @@ class ApiFailure(
     val kind: ApiFailureKind,
     override val message: String,
     val httpStatus: Int? = null,
+    /** The server's status or code and marker, as shown after a business failure. */
+    val errorCode: String? = null,
 ) : Exception(message) {
     companion object {
         fun http(status: Int?) = ApiFailure(
@@ -92,21 +94,30 @@ fun checkApiObject(body: JsonObject): JsonObject {
         (error != null && error !in setOf("", "0", "false")) ||
         ((data == null || data == JsonNull) && message.isNotEmpty() && code == null && businessStatus == null)
     if (failed) {
+        // The status or code, plus a non-readable marker such as err_xxx, so a
+        // failure can be told apart even when the server gives no reason.
+        val number = (businessStatus ?: code)?.toString() ?: error?.takeIf { it.toIntOrNull() != null }
+        val tag = marker.ifEmpty { message.trim().takeIf { serverReason(it) == null && it.length in 1..40 && ' ' !in it }.orEmpty() }
+            .takeIf { it.isNotEmpty() && it != number }
+        val errorCode = listOfNotNull(number, tag).joinToString(" · ").ifEmpty { null }
+        fun coded(text: String) = errorCode?.let { "$text（错误码 $it）" } ?: text
+        // Some failures carry their reason in a string `data` rather than `message`.
+        val reason = serverReason(message) ?: (data as? JsonPrimitive)?.takeIf { it.isString }?.content?.let(::serverReason)
         throw when {
             businessStatus == -10 || clues.contains("网络环境") -> ApiFailure(
-                ApiFailureKind.RiskControl, "服务端检测到网络环境异常，请检查代理、DNS 或网络过滤设置后重试",
+                ApiFailureKind.RiskControl, coded("服务端检测到网络环境异常，请检查代理、DNS 或网络过滤设置后重试"), errorCode = errorCode,
             )
             marker == "err_request_need_upgrade_new_version" -> ApiFailure(
-                ApiFailureKind.ClientUpgrade, "当前客户端协议未被服务端接受，请更新客户端后重试",
+                ApiFailureKind.ClientUpgrade, coded("当前客户端协议未被服务端接受，请更新客户端后重试"), errorCode = errorCode,
             )
             clues.contains("captcha") || clues.contains("验证码") ->
-                ApiFailure(ApiFailureKind.Captcha, "请求需要验证码验证，请完成验证后重试")
+                ApiFailure(ApiFailureKind.Captcha, "请求需要验证码验证，请完成验证后重试", errorCode = errorCode)
             clues.contains("login") || clues.contains("auth") || clues.contains("登录") || code == 401 ->
-                ApiFailure(ApiFailureKind.Authentication, "登录状态已失效或需要登录，请重新登录")
+                ApiFailure(ApiFailureKind.Authentication, coded("登录状态已失效或需要登录，请重新登录"), errorCode = errorCode)
             clues.contains("rate_limit") || clues.contains("频繁") || code == 429 ->
-                ApiFailure(ApiFailureKind.RateLimit, "请求过于频繁，请稍后重试")
+                ApiFailure(ApiFailureKind.RateLimit, coded("请求过于频繁，请稍后重试"), errorCode = errorCode)
             // The server's own reason, such as 用户不存在 or a privacy notice, says more than a generic text.
-            else -> ApiFailure(ApiFailureKind.Business, serverReason(message) ?: "服务器未能完成请求，请稍后重试")
+            else -> ApiFailure(ApiFailureKind.Business, coded(reason ?: "服务器未能完成请求，请稍后重试"), errorCode = errorCode)
         }
     }
     if (!body.containsKey("data")) {

@@ -41,7 +41,7 @@ class CollectionTest {
             h.repo.setCollected("2", "99", collected = true)
             fail("refusal should throw")
         } catch (e: Exception) {
-            assertEquals("该内容已存在", ApiFailure.from(e).message)
+            assertEquals("该内容已存在（错误码 -5）", ApiFailure.from(e).message)
         }
     }
 }
