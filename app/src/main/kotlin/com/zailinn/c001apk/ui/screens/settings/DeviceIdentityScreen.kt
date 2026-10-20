@@ -60,21 +60,6 @@ private fun VisibilityToggle(visible: Boolean, onChange: (Boolean) -> Unit) =
         Icon(if (visible) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, if (visible) "隐藏数盟 ID" else "显示数盟 ID")
     }
 
-/** A saved or recognised ID, hidden until the eye is tapped. */
-@Composable
-private fun HiddenId(id: String) {
-    var visible by remember(id) { mutableStateOf(false) }
-    Row(verticalAlignment = Alignment.CenterVertically) {
-        Text(
-            if (visible) id else "•".repeat(12),
-            Modifier.weight(1f),
-            style = MaterialTheme.typography.bodyMedium,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        VisibilityToggle(visible) { visible = it }
-    }
-}
-
 private enum class OpenResult { Opened, NotInstalled, Failed }
 
 /** Opens the official app's 检查日志和测试 page, never this app's own coolmarket handler. */
@@ -174,9 +159,8 @@ fun DeviceIdentityScreen() {
                 isError = error != null,
                 supportingText = error?.let { message -> { Text(message) } },
             )
-            pending?.let { id ->
+            pending?.let {
                 Text("已识别数盟 ID，复制内容已清空。点击“保存并应用”后生效。", color = MaterialTheme.colorScheme.primary)
-                HiddenId(id)
             }
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 OutlinedButton(onClick = {
@@ -195,7 +179,6 @@ fun DeviceIdentityScreen() {
                 if (saved.isEmpty()) "尚未导入数盟 ID，正在使用本应用生成的设备标识。"
                 else "已导入数盟 ID，机型等其他设备参数保持不变。",
             )
-            if (saved.isNotEmpty()) HiddenId(saved)
             Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 TextButton(onClick = { manual = true }) { Text("手动输入") }
                 if (saved.isNotEmpty()) TextButton(onClick = { clearing = true }) { Text("清除") }
