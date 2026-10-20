@@ -47,7 +47,8 @@ import com.zailinn.c001apk.ui.screens.appContainer
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
 import kotlinx.coroutines.launch
 
-const val DEVICE_ID_GUIDE = "https://github.com/ZaiLinn/c001apk/blob/main/docs/DEVICE_ID_IMPORT.md"
+/** Illustrated guide by TG-Twilight, whose import method this page follows. */
+const val DEVICE_ID_GUIDE = "https://github.com/TG-Twilight/c001apk/blob/main/docs/DEVICE_ID_IMPORT.md"
 
 @Composable
 private fun Heading(text: String) =
@@ -164,13 +165,12 @@ fun DeviceIdentityScreen() {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
 
-            Heading("粘贴并识别")
             // Always available for pasting; recognised text is cleared from it at once.
             OutlinedTextField(
                 text, ::recognise, Modifier.fillMaxWidth(),
                 label = { Text("粘贴官方复制的完整文本") },
                 placeholder = { Text("需包含 ShuzlmID 一行，识别后自动清空") },
-                minLines = 3, maxLines = 6,
+                maxLines = 3,
                 isError = error != null,
                 supportingText = error?.let { message -> { Text(message) } },
             )
