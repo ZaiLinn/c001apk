@@ -38,6 +38,7 @@ c001apk 是一个第三方酷安客户端，只提供 Android 版。基于 [c001
 
 **个性化**
 - 动态取色或固定配色、深色模式、字体大小与粗细
+- 从官方酷安导入数盟 ID，减少人机验证（设置 → 协议与设备）
 - 首页标签可隐藏和拖动排序（长按首页任意标签即可编辑）
 - 浏览历史、本地收藏，可选返回首页时自动刷新
 
@@ -81,6 +82,7 @@ Android 版本和复现步骤，不要附带密码、Cookie、Token 或私信内
 
 - 源自 [bggRGjQaUbCoE/c001apk-flutter](https://github.com/bggRGjQaUbCoE/c001apk-flutter)
 - 协议调研参考 [daimiaopeng/coolapk-desktop](https://github.com/daimiaopeng/coolapk-desktop)
+- 导入官方设备标识（数盟 ID）的方法来自 [TG-Twilight/c001apk](https://github.com/TG-Twilight/c001apk)
 
 本项目采用 [GNU AGPL v3](LICENSE) 许可，第三方来源见 [第三方声明](docs/THIRD_PARTY_NOTICES.md)。
 本项目与酷安官方无隶属关系，酷安名称、商标及服务内容归相应权利人所有。
