@@ -61,7 +61,7 @@ class FixtureTransport : Interceptor {
             return """{"entityType":"feed","id":"$id","entityId":"$id","uid":"10","username":"合成作者","userAvatar":"",
                 "userInfo":{"uid":10,"username":"合成作者"},"message":"$message","picArr":[$picArr],"dateline":${System.currentTimeMillis() / 1000 - 3600},
                 "infoHtml":"1小时前","device_title":"合成手机","replynum":"2","likenum":"8","userAction":{"like":0},
-                "feedTypeName":"动态","ip_location":"上海"${if (detail) ",\"message_raw_output\":\"null\"" else ""}}"""
+                "feedTypeName":"动态","ip_location":"上海","relationRows":[{"id":"p1","title":"合成数码","logo":"","url":"/product/1"}]${if (detail) ",\"message_raw_output\":\"null\"" else ""}}"""
         }
 
         fun reply(id: Int, message: String, nested: Boolean = false): String {
