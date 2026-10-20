@@ -1,6 +1,19 @@
 package com.zailinn.c001apk.ui.screens.settings
 
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectVerticalDragGestures
+import androidx.compose.runtime.key
+import androidx.compose.runtime.mutableIntStateOf
+import androidx.compose.ui.zIndex
+import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.geometry.Offset
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -33,11 +46,9 @@ import androidx.compose.material.icons.outlined.TravelExplore
 import androidx.compose.material.icons.outlined.Update
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material.icons.outlined.FormatBold
-import androidx.compose.material.icons.outlined.KeyboardArrowDown
-import androidx.compose.material.icons.outlined.KeyboardArrowUp
+import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.Tab
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.IconButton
 import androidx.compose.ui.Alignment
 import com.zailinn.c001apk.ui.screens.main.HomeTab
 import androidx.compose.material3.AlertDialog
@@ -390,30 +401,84 @@ private fun cacheSize(context: android.content.Context): String {
     }
 }
 
-/** Visible tabs first in their order, hidden ones after; at least one tab stays visible. */
+/**
+ * Visible tabs first in their order, hidden ones after; at least one tab stays
+ * visible. Rows are reordered by dragging the handle, or the row after a long press.
+ */
 @Composable
 fun HomeTabsDialog(visible: List<HomeTab>, onDismiss: () -> Unit, onSave: (List<HomeTab>) -> Unit) {
     var order by remember { mutableStateOf(visible + HomeTab.entries.filter { it !in visible }) }
     var shown by remember { mutableStateOf(visible.toSet()) }
-    fun move(index: Int, by: Int) {
-        order = order.toMutableList().apply { add(index + by, removeAt(index)) }
+    var dragging by remember { mutableStateOf<HomeTab?>(null) }
+    var offset by remember { mutableFloatStateOf(0f) }
+    var rowHeight by remember { mutableIntStateOf(0) }
+    // Finger positions are in root coordinates: the lifted row moves under the
+    // finger, so its own coordinates would hide part of the movement.
+    var startY by remember { mutableFloatStateOf(0f) }
+    var shift by remember { mutableFloatStateOf(0f) }
+    fun start(tab: HomeTab, y: Float) {
+        dragging = tab
+        startY = y
+        shift = 0f
+        offset = 0f
+    }
+    // Swap with a neighbour once the row is dragged past half of it; the swap
+    // moves the row by one row height, which the offset gives back.
+    fun move(tab: HomeTab, y: Float) {
+        offset = y - startY - shift
+        val index = order.indexOf(tab)
+        val half = rowHeight / 2f
+        if (half <= 0f) return
+        if (offset > half && index < order.lastIndex) {
+            order = order.toMutableList().apply { add(index + 1, removeAt(index)) }
+            shift += rowHeight
+            offset -= rowHeight
+        } else if (offset < -half && index > 0) {
+            order = order.toMutableList().apply { add(index - 1, removeAt(index)) }
+            shift -= rowHeight
+            offset += rowHeight
+        }
+    }
+    fun stop() {
+        dragging = null
+        offset = 0f
     }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("首页标签") },
         text = {
             Column {
-                order.forEachIndexed { index, tab ->
-                    val checked = tab in shown
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        Checkbox(
-                            checked = checked,
-                            onCheckedChange = { shown = if (it) shown + tab else shown - tab },
-                            enabled = !checked || shown.size > 1,
-                        )
-                        Text(tab.label, Modifier.weight(1f))
-                        IconButton(onClick = { move(index, -1) }, enabled = index > 0) { Icon(Icons.Outlined.KeyboardArrowUp, "上移") }
-                        IconButton(onClick = { move(index, 1) }, enabled = index < order.lastIndex) { Icon(Icons.Outlined.KeyboardArrowDown, "下移") }
+                Text("拖动排序，勾选的标签显示在首页", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                order.forEach { tab ->
+                    key(tab) {
+                        val checked = tab in shown
+                        val lifted = dragging == tab
+                        Row(
+                            Modifier
+                                .onSizeChanged { rowHeight = it.height }
+                                .zIndex(if (lifted) 1f else 0f)
+                                .graphicsLayer { translationY = if (lifted) offset else 0f }
+                                .background(
+                                    if (lifted) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent,
+                                    MaterialTheme.shapes.medium,
+                                )
+                                .reorderDrag(tab, afterLongPress = true, { start(tab, it) }, { move(tab, it) }, ::stop),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Checkbox(
+                                checked = checked,
+                                onCheckedChange = { shown = if (it) shown + tab else shown - tab },
+                                enabled = !checked || shown.size > 1,
+                            )
+                            Text(tab.label, Modifier.weight(1f))
+                            Icon(
+                                Icons.Outlined.DragHandle, "拖动${tab.label}",
+                                Modifier
+                                    .reorderDrag(tab, afterLongPress = false, { start(tab, it) }, { move(tab, it) }, ::stop)
+                                    .padding(12.dp),
+                                tint = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
                     }
                 }
             }
@@ -421,6 +486,32 @@ fun HomeTabsDialog(visible: List<HomeTab>, onDismiss: () -> Unit, onSave: (List<
         confirmButton = { TextButton(onClick = { onDismiss(); onSave(order.filter { it in shown }) }) { Text("保存") } },
         dismissButton = { TextButton(onClick = { onDismiss(); onSave(HomeTab.entries) }) { Text("恢复默认") } },
     )
+}
+
+/** Drag reporting the finger's y in root coordinates: on the handle at once, elsewhere after a long press. */
+@Composable
+private fun Modifier.reorderDrag(
+    key: Any,
+    afterLongPress: Boolean,
+    onStart: (Float) -> Unit,
+    onMove: (Float) -> Unit,
+    onStop: () -> Unit,
+): Modifier {
+    val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    return onGloballyPositioned { coordinates[0] = it }.pointerInput(key, afterLongPress) {
+        fun rootY(position: Offset) = coordinates[0]?.takeIf { it.isAttached }?.localToRoot(position)?.y ?: position.y
+        if (afterLongPress) {
+            detectDragGesturesAfterLongPress({ onStart(rootY(it)) }, onStop, onStop) { change, _ ->
+                change.consume()
+                onMove(rootY(change.position))
+            }
+        } else {
+            detectVerticalDragGestures({ onStart(rootY(it)) }, onStop, onStop) { change, _ ->
+                change.consume()
+                onMove(rootY(change.position))
+            }
+        }
+    }
 }
 
 @Composable

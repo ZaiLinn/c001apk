@@ -73,11 +73,18 @@ class AppUiTest {
             .performTouchInput { longClick() }
         compose.onNodeWithText("首页标签").assertIsDisplayed()
         shot("home-tab-editor")
+        // Drag 应用 two rows down by its handle.
+        compose.onNodeWithContentDescription("拖动应用").performTouchInput {
+            down(center)
+            // The icon is half as tall as its 48dp row: move two rows and a bit.
+            repeat(20) { moveBy(androidx.compose.ui.geometry.Offset(0f, height * 4.4f / 20)) }
+            up()
+        }
         compose.onNodeWithText("保存").performClick()
         // The long press only opened the editor; the feed tab stayed selected.
         compose.onNodeWithText("第二条合成动态，带三张图").assertIsDisplayed()
         compose.waitUntil(5_000) { app.settings.current.homeTabs.isNotEmpty() }
-        assertEquals(com.zailinn.c001apk.ui.screens.main.HomeTab.entries.map { it.name }, app.settings.current.homeTabs)
+        assertEquals(listOf("Feed", "Hot", "Apps", "Topic", "Product", "Coolpic"), app.settings.current.homeTabs)
         shot("home-tabs")
     }
 
