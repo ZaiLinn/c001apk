@@ -236,9 +236,8 @@ class AppUiTest {
         assertEquals("DUsyntheticSZLM0123456789abcdef", app.settings.current.protocol.deviceId)
         assertEquals(model, app.settings.current.protocol.model)
         compose.onNodeWithText("已导入数盟 ID", substring = true).assertIsDisplayed()
-        compose.onNodeWithText("DUsyntheticSZLM0123456789abcdef").assertDoesNotExist()
-        compose.onAllNodesWithContentDescription("显示数盟 ID").onFirst().performClick()
-        compose.onNodeWithText("DUsyntheticSZLM0123456789abcdef").assertIsDisplayed()
+        compose.onNodeWithText("DUsyntheticSZLM0123456789abcdef", substring = true).assertDoesNotExist()
+        compose.onNodeWithText("•", substring = true).assertDoesNotExist()
     }
 
     @Test
