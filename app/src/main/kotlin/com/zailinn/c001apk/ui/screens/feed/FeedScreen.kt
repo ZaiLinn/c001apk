@@ -70,6 +70,7 @@ import com.zailinn.c001apk.ui.screens.appViewModel
 import com.zailinn.c001apk.ui.screens.compose.ComposeTarget
 import com.zailinn.c001apk.ui.screens.compose.ComposerSheet
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
+import com.zailinn.c001apk.ui.theme.TextSizes
 
 private data class ReplyRequest(val target: Datum?, val parent: Datum?)
 
@@ -160,7 +161,7 @@ fun FeedScreen(id: String) {
                                     onClick = { vm.setSort(item) },
                                     shape = SegmentedButtonDefaults.itemShape(index, ReplySort.entries.size),
                                     icon = {},
-                                ) { Text(item.label, fontSize = 12.sp) }
+                                ) { Text(item.label, fontSize = TextSizes.Tag) }
                             }
                         }
                     }
@@ -222,12 +223,12 @@ private fun ArticleBody(data: Datum, blocks: List<FeedArticle>, actions: ItemAct
         blocks.forEach { block ->
             when (block.type) {
                 "title" -> HtmlText(block.title.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = 17.sp, bold = true, selectable = true)
-                "text" -> HtmlText(block.message.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = 16.sp, selectable = true)
+                "text" -> HtmlText(block.message.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = TextSizes.Body, selectable = true)
                 "image" -> Column(Modifier.padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     val url = block.url.orEmpty()
                     ImageGridWithIndex(url, images)
                     block.description?.takeIf { it.isNotEmpty() }?.let {
-                        Text(it, fontSize = 14.sp, color = MaterialTheme.colorScheme.outline, textAlign = TextAlign.Center)
+                        Text(it, fontSize = TextSizes.Nested, color = MaterialTheme.colorScheme.outline, textAlign = TextAlign.Center)
                     }
                 }
                 "shareUrl" -> Surface(

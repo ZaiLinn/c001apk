@@ -61,9 +61,9 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
-import androidx.compose.ui.unit.sp
 import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.nav.LocalNavigator
+import com.zailinn.c001apk.ui.theme.TextSizes
 
 private const val LINK = "url"
 
@@ -107,7 +107,7 @@ fun emojiBitmap(file: String): ImageBitmap? {
 fun HtmlText(
     html: String,
     modifier: Modifier = Modifier,
-    fontSize: TextUnit = 15.sp,
+    fontSize: TextUnit = TextSizes.Body,
     bold: Boolean = false,
     maxLines: Int = Int.MAX_VALUE,
     color: Color = Color.Unspecified,
@@ -299,7 +299,7 @@ fun Badge(text: String) {
         text,
         Modifier.border(1.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp)).padding(horizontal = 3.dp),
         color = MaterialTheme.colorScheme.primary,
-        style = MaterialTheme.typography.labelSmall,
+        fontSize = TextSizes.Tag,
         fontWeight = FontWeight.Bold,
     )
 }

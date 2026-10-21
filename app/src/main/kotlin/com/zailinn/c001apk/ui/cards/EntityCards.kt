@@ -68,6 +68,7 @@ import com.zailinn.c001apk.ui.nav.CopyRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.UserListRoute
 import com.zailinn.c001apk.ui.nav.UserRoute
+import com.zailinn.c001apk.ui.theme.TextSizes
 import kotlinx.coroutines.delay
 
 private fun Datum.anyUserInfo() = userInfo ?: obj("fUserInfo")
@@ -116,7 +117,7 @@ fun EntityCard(data: Datum, onSurface: Boolean = false) {
                 Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
                     stats.joinToString("  "),
-                    fontSize = 14.sp, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis,
                 )
             }
         }
@@ -174,7 +175,7 @@ fun IconLinkGridCard(items: List<Datum>) {
                                 ) {
                                     RoundedImage(item.pic, 30.dp, 8.dp)
                                     Spacer(Modifier.height(4.dp))
-                                    Text(item.title.orEmpty(), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                                    Text(item.title.orEmpty(), fontSize = TextSizes.Tag, maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 }
                             }
                             repeat(5 - row.size) { Spacer(Modifier.weight(1f)) }
@@ -244,7 +245,7 @@ fun ImageSquareScrollCard(items: List<Datum>) {
                     item.title.orEmpty(),
                     Modifier.align(Alignment.Center).padding(4.dp),
                     color = androidx.compose.ui.graphics.Color.White,
-                    fontSize = 13.sp,
+                    fontSize = TextSizes.Meta,
                     textAlign = TextAlign.Center,
                     maxLines = 2,
                 )
@@ -266,7 +267,7 @@ fun IconScrollCard(data: Datum) {
                 ) {
                     Avatar(item.userAvatar ?: item.logo ?: item.pic, 54.dp)
                     Spacer(Modifier.height(5.dp))
-                    Text(item.username ?: item.title.orEmpty(), fontSize = 12.sp, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                    Text(item.username ?: item.title.orEmpty(), fontSize = TextSizes.Tag, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 }
             }
         }
@@ -283,7 +284,7 @@ fun ImageTextScrollCard(data: Datum) {
                 Surface(color = cardColor(), shape = CardShape, onClick = { navigator.openLink(item.url.orEmpty(), item.title) }) {
                     Column(Modifier.width(220.dp)) {
                         NetworkImage(item.pic, Modifier.fillMaxWidth().aspectRatio(2.22f))
-                        Text("${item.title.orEmpty()}\n", Modifier.padding(8.dp), maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 14.sp)
+                        Text("${item.title.orEmpty()}\n", Modifier.padding(8.dp), maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = TextSizes.Nested)
                     }
                 }
             }
@@ -318,7 +319,7 @@ fun CollectionCard(data: Datum, actions: ItemActions = ItemActions()) {
                 Text(
                     listOf(data.text("is_open_title"), "${data.text("follow_num")}人关注", "${data.text("item_num")}个内容")
                         .filter { it.isNotEmpty() }.joinToString("  "),
-                    fontSize = 13.sp, color = MaterialTheme.colorScheme.outline,
+                    fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.outline,
                 )
             }
         }
@@ -367,10 +368,10 @@ fun NotificationCard(data: Datum, actions: ItemActions) {
                     Avatar(data.string("fromUserAvatar"), 36.dp) { navigator.openUser(fromUid) }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f).padding(end = 24.dp)) {
-                        HtmlText(data.string("fromusername").orEmpty())
-                        HtmlText(note, fontSize = 14.sp, picArr = data.picArr)
+                        HtmlText(data.string("fromusername").orEmpty(), fontSize = TextSizes.Name)
+                        HtmlText(note, fontSize = TextSizes.Nested, picArr = data.picArr)
                         if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(top = 6.dp))
-                        Text(fromToday(data.dateline), fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
+                        Text(fromToday(data.dateline), fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.outline)
                     }
                 }
                 IconButton(onClick = { menu = true }, Modifier.align(Alignment.TopEnd)) {
@@ -412,15 +413,15 @@ fun MessageCard(data: Datum, actions: ItemActions) {
                     Text(data.string("messageUsername").orEmpty(), Modifier.weight(1f, fill = false), maxLines = 1, overflow = TextOverflow.Ellipsis)
                     if (data.int("isTop") == 1) {
                         Spacer(Modifier.width(6.dp))
-                        Text("置顶", fontSize = 12.sp, color = MaterialTheme.colorScheme.primary)
+                        Text("置顶", fontSize = TextSizes.Tag, color = MaterialTheme.colorScheme.primary)
                     }
                     Spacer(Modifier.weight(1f))
-                    Text(fromToday(data.dateline), fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
+                    Text(fromToday(data.dateline), fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.outline)
                 }
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         htmlToPlain(data.message.orEmpty()), Modifier.weight(1f),
-                        maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 14.sp, color = MaterialTheme.colorScheme.outline,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.outline,
                     )
                     val unread = data.int("unreadNum") ?: 0
                     if (unread > 0) Badge { Text("$unread") }

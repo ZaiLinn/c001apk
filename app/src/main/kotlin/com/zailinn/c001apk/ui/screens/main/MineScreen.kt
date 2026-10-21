@@ -45,7 +45,6 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.zailinn.c001apk.AppContainer
@@ -70,6 +69,7 @@ import com.zailinn.c001apk.ui.nav.UserListRoute
 import com.zailinn.c001apk.ui.nav.UserRoute
 import com.zailinn.c001apk.ui.screens.ContentViewModel
 import com.zailinn.c001apk.ui.screens.appViewModel
+import com.zailinn.c001apk.ui.theme.TextSizes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -260,9 +260,9 @@ private fun ProfileHeader(avatar: String?, name: String, level: Int, exp: Int, n
                 Text(name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Spacer(Modifier.height(6.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
-                    Text("Lv.$level", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+                    Text("Lv.$level", color = MaterialTheme.colorScheme.primary, fontSize = TextSizes.Meta)
                     Spacer(Modifier.width(8.dp))
-                    Text("$exp/$nextExp", color = MaterialTheme.colorScheme.outline, fontSize = 13.sp)
+                    Text("$exp/$nextExp", color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta)
                 }
                 Spacer(Modifier.height(6.dp))
                 LinearWavyProgressIndicator(progress = { (exp.toFloat() / nextExp.coerceAtLeast(1)).coerceIn(0f, 1f) }, Modifier.fillMaxWidth())
@@ -281,7 +281,7 @@ private fun CardRow(items: List<Triple<String, String?, ImageVector?>>, surface:
                         if (icon != null) Icon(icon, null, tint = MaterialTheme.colorScheme.primary)
                         if (value != null) Text(value, style = MaterialTheme.typography.titleMedium)
                         Spacer(Modifier.height(4.dp))
-                        Text(label, fontSize = 13.sp, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(label, fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }

@@ -21,6 +21,7 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
 import com.zailinn.c001apk.ui.nav.LocalNavigator
+import com.zailinn.c001apk.ui.theme.TextSizes
 import kotlin.math.max
 
 private val Space = 5.dp
@@ -77,7 +78,7 @@ private fun ImageCell(url: String, modifier: Modifier, long: Boolean = false, on
                 Modifier.align(Alignment.BottomEnd).padding(4.dp)
                     .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
                 color = Color.White,
-                style = MaterialTheme.typography.labelSmall,
+                fontSize = TextSizes.Tag,
             )
         }
     }

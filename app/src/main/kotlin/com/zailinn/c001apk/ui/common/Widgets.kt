@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
+import com.zailinn.c001apk.ui.theme.TextSizes
 import java.text.SimpleDateFormat
 import java.util.Calendar
 import java.util.Date
@@ -64,7 +65,7 @@ fun IconText(icon: ImageVector, text: String, modifier: Modifier = Modifier, col
     Row(modifier, verticalAlignment = Alignment.CenterVertically) {
         Icon(icon, null, Modifier.size(14.dp), tint = color)
         Spacer(Modifier.width(2.dp))
-        Text(text, color = color, style = MaterialTheme.typography.bodySmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        Text(text, color = color, fontSize = TextSizes.Meta, maxLines = 1, overflow = TextOverflow.Ellipsis)
     }
 }
 

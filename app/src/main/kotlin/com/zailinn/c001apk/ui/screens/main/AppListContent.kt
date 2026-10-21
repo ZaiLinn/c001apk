@@ -30,7 +30,6 @@ import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -47,6 +46,7 @@ import com.zailinn.c001apk.ui.common.fromToday
 import com.zailinn.c001apk.ui.nav.AppRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.appViewModel
+import com.zailinn.c001apk.ui.theme.TextSizes
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -155,7 +155,7 @@ fun AppListContent() {
                                 Text(item.title.orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis)
                                 Text(
                                     "${item.text("apkversionname")}(${item.text("apkversioncode")}) · ${item.text("apksize")} · ${fromToday(item.long("lastupdate"))}",
-                                    fontSize = 13.sp, color = MaterialTheme.colorScheme.outline,
+                                    fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.outline,
                                 )
                             }
                         }
@@ -174,7 +174,7 @@ fun AppListContent() {
                             Text(app.name, maxLines = 1, overflow = TextOverflow.Ellipsis)
                             Text(
                                 "${app.packageName}\n${app.versionName}(${app.versionCode})",
-                                fontSize = 13.sp, color = MaterialTheme.colorScheme.outline,
+                                fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.outline,
                             )
                         }
                     }

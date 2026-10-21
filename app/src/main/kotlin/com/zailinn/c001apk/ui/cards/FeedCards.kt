@@ -50,7 +50,6 @@ import androidx.compose.material3.LocalMinimumInteractiveComponentSize
 import androidx.compose.ui.unit.Dp
 import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.common.ActionSheet
@@ -70,6 +69,7 @@ import com.zailinn.c001apk.ui.nav.CopyRoute
 import com.zailinn.c001apk.ui.nav.FeedRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.UserRoute
+import com.zailinn.c001apk.ui.theme.TextSizes
 
 val CardShape = RoundedCornerShape(12.dp)
 
@@ -102,13 +102,13 @@ fun FeedCard(data: Datum, actions: ItemActions = ItemActions(), detail: Boolean 
             Column(Modifier.padding(bottom = if (!footer) 0.dp else if (detail) 12.dp else 10.dp)) {
                 FeedHeader(data, detail, actions)
                 data.messageTitle?.takeIf { it.isNotEmpty() }?.let {
-                    HtmlText(it, Modifier.padding(start = pad, end = pad, top = 5.dp), fontSize = 16.sp, bold = true, selectable = detail)
+                    HtmlText(it, Modifier.padding(start = pad, end = pad, top = 5.dp), fontSize = TextSizes.Body, bold = true, selectable = detail)
                 }
                 if (!data.message.isNullOrEmpty()) {
                     HtmlText(
                         data.message.orEmpty(),
                         Modifier.padding(start = pad, end = pad, top = 5.dp),
-                        fontSize = 16.sp,
+                        fontSize = TextSizes.Body,
                         maxLines = if (detail) Int.MAX_VALUE else 8,
                         onClick = if (detail) null else open,
                         selectable = detail,
@@ -149,11 +149,11 @@ private fun FeedHeader(data: Datum, detail: Boolean, actions: ItemActions) {
             Avatar(data.userAvatar ?: data.userInfo?.userAvatar, 36.dp) { navigator.openUser(data.uid, data.isAnonymous) }
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
-                Text(data.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 15.sp)
+                Text(data.displayName, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = TextSizes.Name)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     val info = if (detail) fromToday(data.dateline) else htmlToPlain(data.string("infoHtml").orEmpty())
                     if (info.isNotEmpty()) {
-                        Text(info, color = MaterialTheme.colorScheme.outline, fontSize = 13.sp, maxLines = 1)
+                        Text(info, color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta, maxLines = 1)
                         Spacer(Modifier.width(10.dp))
                     }
                     data.string("device_title")?.takeIf { it.isNotEmpty() }?.let {
@@ -166,7 +166,7 @@ private fun FeedHeader(data: Datum, detail: Boolean, actions: ItemActions) {
             Text(
                 "置顶",
                 Modifier.border(1.25.dp, MaterialTheme.colorScheme.primary, RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
-                color = MaterialTheme.colorScheme.primary, fontSize = 12.sp,
+                color = MaterialTheme.colorScheme.primary, fontSize = TextSizes.Tag,
             )
         }
         if (!detail) {
@@ -239,7 +239,7 @@ private fun ExtraLink(data: Datum, url: String, pad: androidx.compose.ui.unit.Dp
             Spacer(Modifier.width(10.dp))
             Column(Modifier.weight(1f)) {
                 Text(data.string("extra_title").orEmpty(), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(url, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
+                Text(url, maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.outline)
             }
         }
     }
@@ -258,7 +258,7 @@ private fun HotReply(reply: Datum, open: () -> Unit) {
         HtmlText(
             """<a href="/u/${reply.uid}">${reply.displayName}</a>: ${reply.message.orEmpty()}$picLink""",
             Modifier.padding(10.dp),
-            fontSize = 14.sp,
+            fontSize = TextSizes.Nested,
             maxLines = 4,
             picArr = pics,
             onShowReplies = open,
@@ -270,7 +270,7 @@ private fun HotReply(reply: Datum, open: () -> Unit) {
 private fun FeedBottom(data: Datum, detail: Boolean, pad: androidx.compose.ui.unit.Dp, actions: ItemActions) {
     Row(Modifier.padding(start = pad, end = pad, top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         val left = if (detail) data.string("ip_location")?.takeIf { it.isNotEmpty() }?.let { "发布于 $it" }.orEmpty() else fromToday(data.dateline)
-        Text(left, Modifier.weight(1f), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium, maxLines = 1)
+        Text(left, Modifier.weight(1f), color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta, maxLines = 1)
         data.string("replynum")?.let { CountButton(Icons.AutoMirrored.Outlined.Message, it) }
         data.string("likenum")?.let { LikeButton(data, actions) }
     }
@@ -286,7 +286,7 @@ fun CountButton(icon: androidx.compose.ui.graphics.vector.ImageVector, value: St
     ) {
         Icon(icon, null, Modifier.size(16.dp), tint = color)
         Spacer(Modifier.width(4.dp))
-        Text(formatCount(value), color = color, style = MaterialTheme.typography.bodyMedium)
+        Text(formatCount(value), color = color, fontSize = TextSizes.Meta)
     }
 }
 
@@ -333,7 +333,7 @@ fun MiniChip(logo: String?, title: String, url: String, onSurface: Boolean = fal
                 RoundedImage(logo, 18.dp, 4.dp)
                 Spacer(Modifier.width(4.dp))
             }
-            Text(title, fontSize = 13.sp, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.primary)
+            Text(title, fontSize = TextSizes.Tag, maxLines = 1, overflow = TextOverflow.Ellipsis, color = MaterialTheme.colorScheme.primary)
         }
     }
 }
@@ -373,12 +373,12 @@ fun ReplyCard(
                     Avatar(data.userAvatar ?: data.userInfo?.userAvatar, 30.dp) { navigator.openUser(data.uid, data.isAnonymous) }
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
-                        HtmlText(replyTitle(data, nested, isTop, feedUid, floorUid), Modifier.padding(end = 28.dp))
+                        HtmlText(replyTitle(data, nested, isTop, feedUid, floorUid), Modifier.padding(end = 28.dp), fontSize = TextSizes.Name)
                         HtmlText(data.message.orEmpty(), picArr = data.picArr, selectable = true)
                         if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(top = 10.dp))
                         data.obj("feed")?.takeIf { !isFeedReply && !nested }?.let { SourceFeed(it) }
                         Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Text(fromToday(data.dateline), Modifier.weight(1f), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
+                            Text(fromToday(data.dateline), Modifier.weight(1f), color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta)
                             CountButton(Icons.AutoMirrored.Outlined.Message, data.string("replynum") ?: "0")
                             LikeButton(data, actions)
                         }
@@ -430,7 +430,7 @@ private fun SourceFeed(feed: Datum) {
             }
             Column {
                 Text("@${feed.username.orEmpty()}", maxLines = 1, overflow = TextOverflow.Ellipsis)
-                Text(htmlToPlain(feed.message.orEmpty()), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
+                Text(htmlToPlain(feed.message.orEmpty()), maxLines = 1, overflow = TextOverflow.Ellipsis, fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.outline)
             }
         }
     }
@@ -455,7 +455,7 @@ private fun NestedReplies(parent: Datum, actions: ItemActions, more: Int) {
                     Modifier.fillMaxWidth()
                         .combinedClickable(onClick = { actions.onReply?.invoke(reply, parent) }, onLongClick = { if (!press.active) menuFor = reply })
                         .padding(horizontal = 8.dp, vertical = 4.dp),
-                    fontSize = 14.sp,
+                    fontSize = TextSizes.Nested,
                     picArr = reply.picArr,
                     onShowReplies = { actions.onShowReplies?.invoke(parent) },
                 )
@@ -468,7 +468,7 @@ private fun NestedReplies(parent: Datum, actions: ItemActions, more: Int) {
                     .combinedClickable(onClick = { actions.onShowReplies?.invoke(parent) })
                     .padding(horizontal = 8.dp, vertical = 6.dp),
                 color = MaterialTheme.colorScheme.primary,
-                fontSize = 14.sp,
+                fontSize = TextSizes.Nested,
             )
         }
     }
@@ -506,8 +506,8 @@ fun LikeCard(data: Datum) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Avatar(liker?.userAvatar, 30.dp) { liker?.uid?.let { navigator.navigate(UserRoute(it)) } }
                 Spacer(Modifier.width(10.dp))
-                Text(liker?.username.orEmpty(), Modifier.weight(1f))
-                Text(fromToday(data.long("likeTime")), color = MaterialTheme.colorScheme.outline, fontSize = 13.sp)
+                Text(liker?.username.orEmpty(), Modifier.weight(1f), fontSize = TextSizes.Name)
+                Text(fromToday(data.long("likeTime")), color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta)
             }
             Spacer(Modifier.height(10.dp))
             Text("赞了你的${data.string("infoHtml").orEmpty()}")
@@ -521,7 +521,7 @@ fun LikeCard(data: Datum) {
                     Column {
                         Text("@${data.username.orEmpty()}", maxLines = 1)
                         Spacer(Modifier.height(5.dp))
-                        HtmlText(data.message.orEmpty(), fontSize = 13.sp, maxLines = 3)
+                        HtmlText(data.message.orEmpty(), fontSize = TextSizes.Nested, maxLines = 3)
                     }
                 }
             }

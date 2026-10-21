@@ -28,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
@@ -49,6 +48,7 @@ import com.zailinn.c001apk.ui.screens.list.DataListContent
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
 import com.zailinn.c001apk.ui.screens.list.TabbedPages
 import com.zailinn.c001apk.ui.screens.runAction
+import com.zailinn.c001apk.ui.theme.TextSizes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -177,10 +177,10 @@ fun TopicScreen(tag: String?, id: String?) {
                             data.string("commentnum_txt")?.let { "${it}讨论" },
                             data.string("follow_num_txt")?.let { "${it}关注" },
                         ).joinToString("  "),
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.outline,
+                        fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.outline,
                     )
                     data.description?.takeIf { it.isNotEmpty() }?.let {
-                        Text(htmlToPlain(it), maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = 13.sp)
+                        Text(htmlToPlain(it), maxLines = 2, overflow = TextOverflow.Ellipsis, fontSize = TextSizes.Meta)
                     }
                 }
             }

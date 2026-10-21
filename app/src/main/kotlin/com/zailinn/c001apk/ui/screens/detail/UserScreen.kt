@@ -39,7 +39,6 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.zailinn.c001apk.AppContainer
@@ -63,6 +62,7 @@ import com.zailinn.c001apk.ui.screens.ContentViewModel
 import com.zailinn.c001apk.ui.screens.appViewModel
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
 import com.zailinn.c001apk.ui.screens.runAction
+import com.zailinn.c001apk.ui.theme.TextSizes
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 
@@ -237,11 +237,11 @@ fun UserScreen(uid: String) {
                             style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
                         )
                         Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("uid: ${data.uid}", Modifier.clickable { navigator.copy(data.uid.orEmpty()) }, color = MaterialTheme.colorScheme.outline, fontSize = 13.sp)
+                            Text("uid: ${data.uid}", Modifier.clickable { navigator.copy(data.uid.orEmpty()) }, color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta)
                             Spacer(Modifier.width(8.dp))
-                            Text("Lv.${data.text("level")}", color = MaterialTheme.colorScheme.primary, fontSize = 13.sp)
+                            Text("Lv.${data.text("level")}", color = MaterialTheme.colorScheme.primary, fontSize = TextSizes.Meta)
                         }
-                        data.string("bio")?.takeIf { it.isNotEmpty() }?.let { HtmlText(it, Modifier.padding(top = 6.dp), fontSize = 14.sp) }
+                        data.string("bio")?.takeIf { it.isNotEmpty() }?.let { HtmlText(it, Modifier.padding(top = 6.dp), fontSize = TextSizes.Nested) }
                         Row(Modifier.padding(top = 6.dp)) {
                             Text("${data.text("feed")}动态  ${data.text("be_like_num")}赞  ")
                             Text("${data.text("follow")}关注  ", Modifier.clickable {
@@ -253,7 +253,7 @@ fun UserScreen(uid: String) {
                         }
                         Text(
                             "${fromToday(data.long("logintime"))}活跃" + (data.string("ip_location")?.let { " · IP 属地：$it" } ?: ""),
-                            Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.outline, fontSize = 13.sp,
+                            Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta,
                         )
                         if (blocked) Text("已屏蔽用户 ${data.username.orEmpty()}", Modifier.padding(vertical = 24.dp))
                     }

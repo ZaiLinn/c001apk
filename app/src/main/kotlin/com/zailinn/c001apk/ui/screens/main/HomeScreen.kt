@@ -5,6 +5,7 @@ import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.text.font.FontWeight
 import com.zailinn.c001apk.data.SettingKeys
 import com.zailinn.c001apk.ui.screens.appContainer
 import com.zailinn.c001apk.ui.screens.settings.HomeTabsDialog
@@ -137,7 +138,7 @@ fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
                                 else scope.launch { pager.animateScrollToPage(index) }
                             },
                             text = {
-                                Text(tab.label, style = if (selected) MaterialTheme.typography.titleSmall else MaterialTheme.typography.bodyLarge)
+                                Text(tab.label, style = MaterialTheme.typography.titleSmall, fontWeight = if (selected) FontWeight.Bold else null)
                             },
                             unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
                         )

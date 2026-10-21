@@ -29,7 +29,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.sp
 import androidx.core.net.toUri
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -50,6 +49,7 @@ import com.zailinn.c001apk.ui.screens.compose.ComposerSheet
 import com.zailinn.c001apk.ui.screens.list.DataListContent
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
 import com.zailinn.c001apk.ui.screens.list.TabbedPages
+import com.zailinn.c001apk.ui.theme.TextSizes
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
@@ -127,10 +127,10 @@ fun AppScreen(id: String) {
                 Spacer(Modifier.width(12.dp))
                 Column(Modifier.weight(1f)) {
                     Text(data.title.orEmpty(), style = MaterialTheme.typography.titleMedium)
-                    Text("版本: ${data.text("apkversionname")}(${data.text("apkversioncode")})", fontSize = 13.sp)
+                    Text("版本: ${data.text("apkversionname")}(${data.text("apkversioncode")})", fontSize = TextSizes.Meta)
                     Text(
                         "大小: ${data.text("apksize")}  更新时间: ${data.long("lastupdate")?.let(::fromToday) ?: "未知"}",
-                        fontSize = 13.sp, color = MaterialTheme.colorScheme.outline,
+                        fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.outline,
                     )
                 }
                 if (data.entityType == "apk") {
