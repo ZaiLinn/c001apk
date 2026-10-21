@@ -8,8 +8,10 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.FilterList
@@ -40,6 +42,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -89,21 +92,10 @@ fun SearchScreen(title: String?, pageType: String?, pageParam: String?) {
             TopAppBar(
                 navigationIcon = { BackButton() },
                 title = {
-                    TextField(
-                        text, { text = it },
-                        Modifier.fillMaxWidth().focusRequester(focus),
-                        // 14sp like the home search pill.
-                        textStyle = MaterialTheme.typography.bodyMedium,
-                        placeholder = {
-                            Text(if (title != null) "在${scopeLabel(pageType)}「$title」中搜索" else "搜索", style = MaterialTheme.typography.bodyMedium)
-                        },
-                        singleLine = true,
-                        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = { search(text) }),
-                        colors = TextFieldDefaults.colors(
-                            focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
-                            focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
-                        ),
+                    SearchField(
+                        text, { text = it }, { search(text) },
+                        if (title != null) "在${scopeLabel(pageType)}「$title」中搜索" else "搜索",
+                        Modifier.focusRequester(focus),
                     )
                 },
                 actions = {
@@ -113,7 +105,8 @@ fun SearchScreen(title: String?, pageType: String?, pageParam: String?) {
             )
         },
     ) { padding ->
-        Column(Modifier.padding(padding).padding(horizontal = 16.dp)) {
+        // Scrolls: up to fifty keywords do not fit a small screen.
+        Column(Modifier.padding(padding).verticalScroll(rememberScrollState()).padding(horizontal = 16.dp)) {
             if (history.isNotEmpty()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text("搜索历史", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
@@ -169,18 +162,34 @@ fun SearchResultScreen(keyword: String, title: String?, pageType: String?, pageP
     val navigator = LocalNavigator.current
     val types = if (title == null) contentTypes else contentTypes.take(1)
     var menu by remember { mutableStateOf<String?>(null) }
-    val feedVm = appViewModel(key = "search-feed-$keyword-$pageType-$pageParam") { SearchViewModel(it, "feed", keyword, pageType, pageParam) }
+    val app = appContainer()
+    val scope = rememberCoroutineScope()
+    val focusManager = LocalFocusManager.current
+    // The box stays editable: a new keyword searches again on this page.
+    var text by rememberSaveable { mutableStateOf(keyword) }
+    var active by rememberSaveable { mutableStateOf(keyword) }
+    val search = {
+        val value = text.trim()
+        if (value.isNotEmpty()) {
+            scope.launch { app.content.addSearch(value) }
+            active = value
+            text = value
+            focusManager.clearFocus()
+        }
+    }
+    val feedVm = appViewModel(key = "search-feed-$active-$pageType-$pageParam") { SearchViewModel(it, "feed", active, pageType, pageParam) }
     Scaffold(
         topBar = {
             TopAppBar(
                 navigationIcon = { BackButton() },
                 title = {
-                    Column(Modifier.padding(end = 8.dp)) {
-                        Text(keyword, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = androidx.compose.ui.Modifier)
-                        if (title != null) Text("${scopeLabel(pageType)}：$title", style = MaterialTheme.typography.bodySmall, maxLines = 1)
-                    }
+                    SearchField(
+                        text, { text = it }, search, "搜索",
+                        prefix = title?.let { "${scopeLabel(pageType)}「$it」 " },
+                    )
                 },
                 actions = {
+                    if (text.isNotEmpty()) IconButton(onClick = { text = "" }) { Icon(Icons.Outlined.Clear, "清除") }
                     IconButton(onClick = { menu = "type" }) { Icon(Icons.Outlined.FilterList, "内容类型") }
                     IconButton(onClick = { menu = "sort" }) { Icon(Icons.AutoMirrored.Outlined.Sort, "排序方式") }
                     DropdownMenu(menu == "type", { menu = null }) {
@@ -202,12 +211,38 @@ fun SearchResultScreen(keyword: String, title: String?, pageType: String?, pageP
                 PagedListView(feedVm.list) { _, item -> ItemCard(item, feedVm.actions) }
             } else {
                 TabbedPages(types.map { it.first }) { index ->
-                    val vm = if (index == 0) feedVm else appViewModel(key = "search-${types[index].second}-$keyword") {
-                        SearchViewModel(it, types[index].second, keyword, pageType, pageParam)
+                    val vm = if (index == 0) feedVm else appViewModel(key = "search-${types[index].second}-$active") {
+                        SearchViewModel(it, types[index].second, active, pageType, pageParam)
                     }
                     PagedListView(vm.list) { _, item -> ItemCard(item, vm.actions) }
                 }
             }
         }
     }
+}
+
+/** The search box of the search page and the result page: 14sp like the home search pill. */
+@Composable
+private fun SearchField(
+    text: String,
+    onChange: (String) -> Unit,
+    onSearch: () -> Unit,
+    placeholder: String,
+    modifier: Modifier = Modifier,
+    prefix: String? = null,
+) {
+    TextField(
+        text, onChange,
+        modifier.fillMaxWidth(),
+        textStyle = MaterialTheme.typography.bodyMedium,
+        placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyMedium) },
+        prefix = prefix?.let { { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline) } },
+        singleLine = true,
+        keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
+        keyboardActions = KeyboardActions(onSearch = { onSearch() }),
+        colors = TextFieldDefaults.colors(
+            focusedContainerColor = Color.Transparent, unfocusedContainerColor = Color.Transparent,
+            focusedIndicatorColor = Color.Transparent, unfocusedIndicatorColor = Color.Transparent,
+        ),
+    )
 }

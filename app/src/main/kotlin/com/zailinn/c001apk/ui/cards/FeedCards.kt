@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.RowScope
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
@@ -65,6 +66,7 @@ import com.zailinn.c001apk.ui.common.formatCount
 import com.zailinn.c001apk.ui.common.fromToday
 import com.zailinn.c001apk.ui.common.htmlToCopy
 import com.zailinn.c001apk.ui.common.htmlToPlain
+import com.zailinn.c001apk.ui.common.rememberConfirm
 import com.zailinn.c001apk.ui.nav.CopyRoute
 import com.zailinn.c001apk.ui.nav.FeedRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
@@ -79,11 +81,13 @@ fun cardColor() = MaterialTheme.colorScheme.surfaceContainerLow
 /**
  * A feed in a list, or the header of the feed detail page when [detail] is set.
  * Without [footer] the location, counts and topic chips are left for the caller
- * to place with [FeedFooter], as articles do below their body.
+ * to place with [FeedFooter], as articles do below their body. With [authorOnly]
+ * it is just the author row above an article: a tap opens the profile and a
+ * long press does nothing.
  */
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun FeedCard(data: Datum, actions: ItemActions = ItemActions(), detail: Boolean = false, footer: Boolean = true) {
+fun FeedCard(data: Datum, actions: ItemActions = ItemActions(), detail: Boolean = false, footer: Boolean = true, authorOnly: Boolean = false) {
     val navigator = LocalNavigator.current
     val open = { data.id?.let { navigator.navigate(FeedRoute(it)) } ?: Unit }
     val pad = if (detail) 16.dp else 10.dp
@@ -94,8 +98,10 @@ fun FeedCard(data: Datum, actions: ItemActions = ItemActions(), detail: Boolean 
         modifier = Modifier.fillMaxWidth().clip(if (detail) RoundedCornerShape(0.dp) else CardShape)
             .combinedClickable(
                 enabled = true,
-                onClick = { if (!detail) open() },
-                onLongClick = { if (!press.active) navigator.navigate(CopyRoute(htmlToCopy(data.message.orEmpty()))) },
+                onClick = { if (authorOnly) navigator.openUser(data.uid, data.isAnonymous) else if (!detail) open() },
+                // The author row above an article has no text to copy. A no-op rather
+                // than null: without a long press handler the release counts as a tap.
+                onLongClick = { if (!authorOnly && !press.active) navigator.navigate(CopyRoute(htmlToCopy(data.message.orEmpty()))) },
             ),
     ) {
         CompositionLocalProvider(LocalContentPress provides press) {
@@ -136,14 +142,21 @@ fun FeedFooter(data: Datum, actions: ItemActions, detail: Boolean = true) {
     }
 }
 
+/** Author, time and device. In a list the whole row is the author: a tap opens the profile, a long press does nothing. */
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun FeedHeader(data: Datum, detail: Boolean, actions: ItemActions) {
     val navigator = LocalNavigator.current
     val session = LocalSession.current
     var menu by remember { mutableStateOf(false) }
+    val author = if (detail) Modifier else Modifier.combinedClickable(
+        onClick = { navigator.openUser(data.uid, data.isAnonymous) },
+        // A no-op rather than null, so the card's copy page stays away and a release is not a tap.
+        onLongClick = {},
+    )
     Row(verticalAlignment = Alignment.CenterVertically) {
         Row(
-            Modifier.weight(1f).padding(start = if (detail) 16.dp else 10.dp, top = if (detail) 12.dp else 10.dp),
+            Modifier.weight(1f).then(author).padding(start = if (detail) 16.dp else 10.dp, top = if (detail) 12.dp else 10.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Avatar(data.userAvatar ?: data.userInfo?.userAvatar, 36.dp) { navigator.openUser(data.uid, data.isAnonymous) }
@@ -175,6 +188,7 @@ private fun FeedHeader(data: Datum, detail: Boolean, actions: ItemActions) {
             }
         }
     }
+    val confirmDelete = rememberConfirm("删除这条动态？", "删除后无法恢复。", "删除")
     if (menu) {
         ActionSheet(
             buildList {
@@ -182,7 +196,10 @@ private fun FeedHeader(data: Datum, detail: Boolean, actions: ItemActions) {
                 data.uid?.let { uid -> add(SheetAction(Icons.Outlined.Block, "屏蔽作者") { actions.onBlock?.invoke(uid, null) }) }
                 add(SheetAction(Icons.Outlined.ErrorOutline, "举报") { navigator.report(data.id.orEmpty(), "feed") })
                 if (actions.onDelete != null && (actions.removable || (session.isLogin && data.uid == session.uid))) {
-                    add(SheetAction(Icons.Outlined.Delete, "删除", danger = true) { actions.onDelete.invoke(data, null) })
+                    // History and favorites remove a local record; only a real post asks first.
+                    add(SheetAction(Icons.Outlined.Delete, "删除", danger = true) {
+                        if (actions.removable) actions.onDelete.invoke(data, null) else confirmDelete { actions.onDelete.invoke(data, null) }
+                    })
                 }
             },
             onDismiss = { menu = false },
@@ -271,39 +288,41 @@ private fun FeedBottom(data: Datum, detail: Boolean, pad: androidx.compose.ui.un
     Row(Modifier.padding(start = pad, end = pad, top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         val left = if (detail) data.string("ip_location")?.takeIf { it.isNotEmpty() }?.let { "发布于 $it" }.orEmpty() else fromToday(data.dateline)
         Text(left, Modifier.weight(1f), color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta, maxLines = 1)
-        data.string("replynum")?.let { CountButton(Icons.AutoMirrored.Outlined.Message, it) }
+        val navigator = LocalNavigator.current
+        // In a list the reply count opens the feed at its replies; on the detail page they are right below.
+        data.string("replynum")?.let { count ->
+            CountButton(Icons.AutoMirrored.Outlined.Message, count, onClick = if (detail) null else {
+                { data.id?.let { navigator.navigate(FeedRoute(it, toReplies = true)) } }
+            })
+        }
         data.string("likenum")?.let { LikeButton(data, actions) }
     }
 }
 
+/** Icon and count; without [onClick] it is only a label, so a tap reaches the card under it. */
 @Composable
 fun CountButton(icon: androidx.compose.ui.graphics.vector.ImageVector, value: String, active: Boolean = false, onClick: (() -> Unit)? = null) {
     val color = if (active) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.outline
-    TextButton(
-        onClick = { onClick?.invoke() },
-        modifier = Modifier.height(36.dp),
-        contentPadding = PaddingValues(horizontal = 10.dp),
-    ) {
+    val content: @Composable RowScope.() -> Unit = {
         Icon(icon, null, Modifier.size(16.dp), tint = color)
         Spacer(Modifier.width(4.dp))
         Text(formatCount(value), color = color, fontSize = TextSizes.Meta)
+    }
+    if (onClick == null) {
+        Row(Modifier.height(36.dp).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically, content = content)
+    } else {
+        TextButton(onClick = onClick, modifier = Modifier.height(36.dp), contentPadding = PaddingValues(horizontal = 10.dp), content = content)
     }
 }
 
 @Composable
 fun LikeButton(data: Datum, actions: ItemActions) {
-    val session = LocalSession.current
-    val navigator = LocalNavigator.current
+    // The view model checks the login, once for every place a like starts.
     CountButton(
         if (data.isLiked) Icons.Filled.ThumbUp else Icons.Outlined.ThumbUp,
         data.string("likenum").orEmpty(),
         active = data.isLiked,
-    ) {
-        when {
-            !session.isLogin -> navigator.toast("登录后才能点赞")
-            data.has("userAction") || actions.onLike != null -> actions.onLike?.invoke(data)
-        }
-    }
+    ) { actions.onLike?.invoke(data) }
 }
 
 @Composable
@@ -379,7 +398,12 @@ fun ReplyCard(
                         data.obj("feed")?.takeIf { !isFeedReply && !nested }?.let { SourceFeed(it) }
                         Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(fromToday(data.dateline), Modifier.weight(1f), color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta)
-                            CountButton(Icons.AutoMirrored.Outlined.Message, data.string("replynum") ?: "0")
+                            // Opens the sub-replies when there are any, otherwise starts a reply.
+                            CountButton(Icons.AutoMirrored.Outlined.Message, data.string("replynum") ?: "0") {
+                                if ((data.int("replynum") ?: 0) > 0 && actions.onShowReplies != null) actions.onShowReplies.invoke(data)
+                                else if (isFeedReply && actions.onReply != null) actions.onReply.invoke(data, null)
+                                else navigator.openLink(data.url.orEmpty())
+                            }
                             LikeButton(data, actions)
                         }
                         val more = data.int("replyRowsMore") ?: 0
@@ -392,7 +416,8 @@ fun ReplyCard(
             }
         }
     }
-    if (menu) ReplyMenu(data, null, actions) { menu = false }
+    val confirmDelete = rememberConfirm("删除这条回复？", "删除后无法恢复。", "删除")
+    if (menu) ReplyMenu(data, null, actions, confirmDelete) { menu = false }
 }
 
 private fun tag(uid: String?, feedUid: String?, floorUid: String?) = when {
@@ -472,11 +497,12 @@ private fun NestedReplies(parent: Datum, actions: ItemActions, more: Int) {
             )
         }
     }
-    menuFor?.let { reply -> ReplyMenu(reply, parent, actions) { menuFor = null } }
+    val confirmDelete = rememberConfirm("删除这条回复？", "删除后无法恢复。", "删除")
+    menuFor?.let { reply -> ReplyMenu(reply, parent, actions, confirmDelete) { menuFor = null } }
 }
 
 @Composable
-fun ReplyMenu(reply: Datum, parent: Datum?, actions: ItemActions, onDismiss: () -> Unit) {
+fun ReplyMenu(reply: Datum, parent: Datum?, actions: ItemActions, confirmDelete: (() -> Unit) -> Unit, onDismiss: () -> Unit) {
     val navigator = LocalNavigator.current
     val session = LocalSession.current
     ActionSheet(
@@ -489,7 +515,7 @@ fun ReplyMenu(reply: Datum, parent: Datum?, actions: ItemActions, onDismiss: () 
             reply.uid?.let { uid -> add(SheetAction(Icons.Outlined.Block, "屏蔽用户") { actions.onBlock?.invoke(uid, parent) }) }
             add(SheetAction(Icons.Outlined.ErrorOutline, "举报") { navigator.report(reply.id.orEmpty(), "feed_reply") })
             if (actions.onDelete != null && session.isLogin && reply.uid == session.uid) {
-                add(SheetAction(Icons.Outlined.Delete, "删除", danger = true) { actions.onDelete.invoke(reply, parent) })
+                add(SheetAction(Icons.Outlined.Delete, "删除", danger = true) { confirmDelete { actions.onDelete.invoke(reply, parent) } })
             }
         },
         onDismiss,

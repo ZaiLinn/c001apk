@@ -1,6 +1,8 @@
 package com.zailinn.c001apk.ui.common
 
+import android.widget.Toast
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.size
@@ -12,6 +14,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.style.TextOverflow
 import com.zailinn.c001apk.core.model.FoldReason
 import com.zailinn.c001apk.core.model.foldReason
@@ -50,15 +53,17 @@ fun LoadingBox(modifier: Modifier = Modifier) {
     Box(modifier.fillMaxWidth().padding(24.dp), contentAlignment = Alignment.Center) { LoadingIndicator() }
 }
 
+/** A centered message; with [onClick] it says so under the text. */
 @Composable
 fun MessageBox(text: String, modifier: Modifier = Modifier, onClick: (() -> Unit)? = null) {
-    Box(
+    Column(
         modifier.fillMaxWidth()
             .then(if (onClick != null) Modifier.clickable(onClick = onClick) else Modifier)
             .padding(24.dp),
-        contentAlignment = Alignment.Center,
+        horizontalAlignment = Alignment.CenterHorizontally,
     ) {
         Text(text, textAlign = TextAlign.Center, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        if (onClick != null) Text("点击重试", Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelLarge)
     }
 }
 
@@ -78,7 +83,9 @@ fun StatusBox(status: LoadResult<*>, onRetry: () -> Unit, modifier: Modifier = M
 @Composable
 fun FooterItem(footer: Footer, onRetry: () -> Unit) {
     when (footer) {
-        Footer.Idle, Footer.Loading -> LoadingBox()
+        // Idle: more pages exist but none is loading; the next one starts near the end.
+        Footer.Idle -> Spacer(Modifier.fillMaxWidth())
+        Footer.Loading -> LoadingBox()
         Footer.End -> MessageBox("没有更多了")
         is Footer.Error -> MessageBox(footer.message, onClick = onRetry)
     }
@@ -128,14 +135,21 @@ fun PagedListView(
     listState: LazyListState = rememberLazyListState(),
     contentPadding: PaddingValues = PaddingValues(10.dp),
     spacing: Int = 10,
+    /** Also run on pull-to-refresh, for what the screen shows above the list. */
+    onRefresh: () -> Unit = {},
     header: LazyListScope.() -> Unit = {},
     item: @Composable (index: Int, datum: Datum) -> Unit,
 ) {
     val state by list.state.collectAsStateWithLifecycle()
+    val context = LocalContext.current
     LaunchedEffect(list) { list.start() }
+    LaunchedEffect(list) { list.messages.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() } }
     PullToRefreshBox(
         isRefreshing = state.refreshing,
-        onRefresh = { list.refresh(showIndicator = true) },
+        onRefresh = {
+            list.refresh(showIndicator = true)
+            onRefresh()
+        },
         modifier = modifier.fillMaxSize(),
     ) {
         if (state.status !is LoadResult.Success) {
@@ -162,7 +176,12 @@ fun PagedListView(
             header()
             itemsIndexed(
                 state.items,
-                key = { index, it -> "${it.entityType}-${it.entityId ?: it.id}-$index" },
+                // The id alone where the list is de-duplicated: an entry keeps its key, and so its
+                // state and the scroll anchor, when entries are added or removed above it.
+                key = { index, it ->
+                    val id = it.entityId ?: it.id
+                    if (list.unique && id != null) "${it.entityType}-$id" else "${it.entityType}-$id-$index"
+                },
                 // Lets the list reuse a feed card's layout for the next feed card.
                 contentType = { _, it -> "${it.entityType}/${it.entityTemplate}" },
             ) { index, datum ->

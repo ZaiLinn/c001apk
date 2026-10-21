@@ -3,7 +3,8 @@ package com.zailinn.c001apk.ui.nav
 import kotlinx.serialization.Serializable
 
 @Serializable data object MainRoute
-@Serializable data class FeedRoute(val id: String)
+/** [toReplies]: open scrolled to the replies, as from a reply count in a list. */
+@Serializable data class FeedRoute(val id: String, val toReplies: Boolean = false)
 @Serializable data class EventRoute(val id: String)
 @Serializable data class UserRoute(val uid: String)
 @Serializable data class AppRoute(val id: String)

@@ -7,6 +7,7 @@ import com.zailinn.c001apk.core.model.cursorLastId
 import com.zailinn.c001apk.core.net.Page
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
+import kotlinx.coroutines.flow.MutableSharedFlow
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -34,7 +35,8 @@ data class ListState(
  */
 class PagedList(
     private val scope: CoroutineScope,
-    private val unique: Boolean = true,
+    /** Entries are de-duplicated by id, so the id alone tells them apart. */
+    val unique: Boolean = true,
     /** Adjust a loaded page before it is shown; receives the 1-based page number. */
     private val transform: (page: Int, items: List<Datum>) -> List<Datum> = { _, items -> items },
     /** Replacement for a failed first page, e.g. the parent reply without children. */
@@ -47,6 +49,11 @@ class PagedList(
     private var end = false
     private var job: Job? = null
     private var started = false
+    /** Paging position before a pull-to-refresh, put back if the refresh fails. */
+    private var beforeRefresh: Pair<Page, Boolean>? = null
+
+    /** One-off messages for the screen, like a failed pull-to-refresh that kept the list. */
+    val messages = MutableSharedFlow<String>(extraBufferCapacity = 1)
 
     val items: List<Datum> get() = _state.value.items
 
@@ -56,8 +63,13 @@ class PagedList(
         refresh()
     }
 
+    /**
+     * Reloads from the first page. With [showIndicator] (a pull or a tap by the
+     * user) a failure keeps the shown items instead of replacing them with the error.
+     */
     fun refresh(showIndicator: Boolean = false) {
         job?.cancel()
+        beforeRefresh = if (showIndicator && _state.value.items.isNotEmpty()) cursor to end else null
         cursor = Page()
         end = false
         _state.update {
@@ -125,6 +137,15 @@ class PagedList(
             else -> {
                 end = true
                 val replacement = if (isRefresh) fallback?.invoke() else null
+                val kept = if (isRefresh && replacement == null) beforeRefresh else null
+                if (kept != null) {
+                    cursor = kept.first
+                    end = kept.second
+                    beforeRefresh = null
+                    _state.update { it.copy(refreshing = false) }
+                    messages.tryEmit("刷新失败：" + ((result as? LoadResult.Error)?.message ?: "暂无新内容"))
+                    return
+                }
                 _state.update {
                     when {
                         replacement != null -> it.copy(items = replacement, status = LoadResult.Success(Unit), footer = Footer.End, refreshing = false)

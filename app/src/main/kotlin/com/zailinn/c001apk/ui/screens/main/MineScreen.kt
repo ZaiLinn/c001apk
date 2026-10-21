@@ -38,6 +38,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -80,10 +81,6 @@ class MineViewModel(app: AppContainer) : ContentViewModel(app) {
     val counts = MutableStateFlow<List<Int?>>(List(5) { null })
 
     override val list = PagedList(viewModelScope) { page -> app.repository.notifications("/v6/notification/list", page) }
-
-    init {
-        if (app.session.isLogin) refreshAll() else Unit
-    }
 
     fun refreshAll() {
         if (!app.session.isLogin) return
@@ -153,6 +150,8 @@ fun MineScreen(generation: Int) {
     val profile by vm.profile.collectAsStateWithLifecycle()
     val counts by vm.counts.collectAsStateWithLifecycle()
     val account = vm.app.accounts.active
+    // Each visit to this tab, and each pull-to-refresh, updates the profile and the unread counts.
+    LaunchedEffect(vm) { vm.refreshAll() }
     Scaffold(
         topBar = {
             TopAppBar(
@@ -236,7 +235,7 @@ fun MineScreen(generation: Int) {
                 }
             }
             if (session.isLogin) {
-                PagedListView(vm.list, header = header) { _, item -> ItemCard(item, vm.actions) }
+                PagedListView(vm.list, onRefresh = vm::refreshAll, header = header) { _, item -> ItemCard(item, vm.actions) }
             } else {
                 androidx.compose.foundation.lazy.LazyColumn(
                     contentPadding = androidx.compose.foundation.layout.PaddingValues(10.dp),

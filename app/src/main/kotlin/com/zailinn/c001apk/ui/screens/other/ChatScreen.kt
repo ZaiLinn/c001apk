@@ -37,6 +37,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.platform.LocalContext
 import com.zailinn.c001apk.ui.common.EmojiPanel
 import com.zailinn.c001apk.ui.common.readUploadImage
+import com.zailinn.c001apk.ui.common.rememberConfirm
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import androidx.compose.material3.Icon
@@ -270,11 +271,12 @@ fun ChatScreen(ukey: String, uid: String, username: String) {
             vm.send(link)
         }
     }
+    val confirmDelete = rememberConfirm("删除这条私信？", "删除后无法恢复。", "删除")
     menuFor?.let { item ->
         ActionSheet(
             listOf(
                 SheetAction(Icons.Outlined.ContentCopy, "复制") { navigator.copy(htmlToCopy(item.message.orEmpty())) },
-                SheetAction(Icons.Outlined.Delete, "删除", danger = true) { vm.deleteMessage(item) },
+                SheetAction(Icons.Outlined.Delete, "删除", danger = true) { confirmDelete { vm.deleteMessage(item) } },
             ),
             onDismiss = { menuFor = null },
         )

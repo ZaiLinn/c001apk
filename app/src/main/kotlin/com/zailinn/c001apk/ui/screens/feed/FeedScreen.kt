@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.filled.Star
@@ -37,9 +38,11 @@ import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -64,6 +67,7 @@ import com.zailinn.c001apk.ui.common.ImageGrid
 import com.zailinn.c001apk.ui.common.PagedListView
 import com.zailinn.c001apk.ui.common.StatusBox
 import com.zailinn.c001apk.ui.common.htmlToPlain
+import com.zailinn.c001apk.ui.common.markdownToHtml
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.collection.CollectionPickerSheet
 import com.zailinn.c001apk.ui.screens.appViewModel
@@ -75,7 +79,7 @@ import com.zailinn.c001apk.ui.theme.TextSizes
 private data class ReplyRequest(val target: Datum?, val parent: Datum?)
 
 @Composable
-fun FeedScreen(id: String) {
+fun FeedScreen(id: String, toReplies: Boolean = false) {
     val navigator = LocalNavigator.current
     val session = LocalSession.current
     val vm = appViewModel(key = "feed-$id") { FeedViewModel(it, id) }
@@ -136,11 +140,23 @@ fun FeedScreen(id: String) {
             StatusBox(feed, onRetry = { vm.loadDetail(verify = true) }, Modifier.padding(padding))
             return@Scaffold
         }
+        // From a reply count: once the feed is shown, jump to the reply header below it (item 1), once.
+        val listState = rememberLazyListState()
+        var jumped by rememberSaveable { mutableStateOf(false) }
+        LaunchedEffect(Unit) {
+            if (toReplies && !jumped) {
+                listState.scrollToItem(1)
+                jumped = true
+            }
+        }
         PagedListView(
             vm.list,
             Modifier.padding(padding),
+            listState = listState,
             contentPadding = PaddingValues(bottom = 88.dp),
             spacing = 0,
+            // The pull also updates the feed itself: counts, edits, like state.
+            onRefresh = { vm.loadDetail(refreshReplies = false) },
             header = {
                 if (articles.isEmpty()) {
                     item(key = "feed") { FeedCard(data, vm.actions, detail = true) }
@@ -219,11 +235,14 @@ private fun ArticleBody(data: Datum, blocks: List<FeedArticle>, actions: ItemAct
         // The article's own title block repeats message_title, so the header keeps only the author line.
         val header = data.with("message", "").withList("picArr", emptyList())
             .let { if (blocks.any { it.type == "title" }) it.with("message_title", "") else it }
-        FeedCard(header, actions, detail = true, footer = false)
+        FeedCard(header, actions, detail = true, footer = false, authorOnly = true)
         blocks.forEach { block ->
             when (block.type) {
                 "title" -> HtmlText(block.title.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = 17.sp, bold = true, selectable = true)
-                "text" -> HtmlText(block.message.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = TextSizes.Body, selectable = true)
+                "text" -> {
+                    val html = remember(block.message) { markdownToHtml(block.message.orEmpty()) }
+                    HtmlText(html, Modifier.padding(horizontal = 16.dp), fontSize = TextSizes.Body, selectable = true)
+                }
                 "image" -> Column(Modifier.padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     val url = block.url.orEmpty()
                     ImageGridWithIndex(url, images)

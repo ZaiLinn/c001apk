@@ -5,13 +5,17 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyListScope
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Block
@@ -54,6 +58,7 @@ import com.zailinn.c001apk.ui.common.PagedList
 import com.zailinn.c001apk.ui.common.PagedListView
 import com.zailinn.c001apk.ui.common.StatusBox
 import com.zailinn.c001apk.ui.common.fromToday
+import com.zailinn.c001apk.ui.common.rememberConfirm
 import com.zailinn.c001apk.ui.nav.ChatRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.SearchRoute
@@ -159,6 +164,7 @@ fun UserScreen(uid: String) {
     val secretFollow = LocalAppSettings.current.secretFollow
     var menu by remember { mutableStateOf(false) }
     val data = (state as? LoadResult.Success)?.value
+    val confirmUnfollow = rememberConfirm("取消关注${data?.username?.let { " $it" }.orEmpty()}？", "之后可以再次关注。", "取消关注")
     Scaffold(
         topBar = {
             SimpleTopBar(data?.username ?: "用户") {
@@ -186,79 +192,82 @@ fun UserScreen(uid: String) {
             return@Scaffold
         }
         val localFollow = follows.any { it.uid == data.uid }
-        PagedListView(
-            vm.list,
-            Modifier.padding(padding),
-            header = {
-                item(key = "header") {
-                    Column {
-                        Box {
-                            NetworkImage(
-                                data.string("cover"),
-                                Modifier.fillMaxWidth().aspectRatio(2.6f).clip(RoundedCornerShape(12.dp))
-                                    .clickable { data.string("cover")?.let { navigator.openImages(listOf(it)) } },
-                            )
-                            Box(Modifier.align(Alignment.BottomStart).offset(x = 12.dp, y = 28.dp)) {
-                                Avatar(data.userAvatar, 64.dp) { data.userAvatar?.let { navigator.openImages(listOf(it)) } }
-                            }
-                        }
-                        Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                            Spacer(Modifier.weight(1f))
-                            if (session.isLogin) {
-                                FilledTonalIconButton(onClick = {
-                                    navigator.navigate(ChatRoute("", data.uid.orEmpty(), data.username.orEmpty()))
-                                }) { Icon(Icons.Outlined.MailOutline, "私信") }
-                            }
-                            val following = if (session.isLogin) data.int("isFollow") == 1 else localFollow
-                            // Long press adds a secret (device-only) follow when enabled.
-                            androidx.compose.material3.Surface(
-                                shape = androidx.compose.foundation.shape.CircleShape,
-                                color = if (following) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary,
-                                contentColor = if (following) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimary,
-                                modifier = Modifier.padding(start = 8.dp).clip(androidx.compose.foundation.shape.CircleShape).combinedClickable(
-                                    onClick = vm::toggleFollow,
-                                    onLongClick = if (session.isLogin && secretFollow) vm::toggleLocalFollow else null,
-                                ),
-                            ) {
-                                Text(
-                                    when {
-                                        !session.isLogin -> if (localFollow) "取消本地关注" else "本地关注"
-                                        following -> "取消关注"
-                                        else -> "关注"
-                                    } + if (session.isLogin && localFollow) " · 悄悄关注" else "",
-                                    Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
-                                    style = MaterialTheme.typography.labelLarge,
-                                )
-                            }
-                        }
-                        Text(
-                            data.username.orEmpty(),
-                            Modifier.padding(top = 8.dp).clickable { navigator.copy(data.username.orEmpty()) },
-                            style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+        val header: LazyListScope.() -> Unit = {
+            item(key = "header") {
+                Column {
+                    Box {
+                        NetworkImage(
+                            data.string("cover"),
+                            Modifier.fillMaxWidth().aspectRatio(2.6f).clip(RoundedCornerShape(12.dp))
+                                .clickable { data.string("cover")?.let { navigator.openImages(listOf(it)) } },
                         )
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Text("uid: ${data.uid}", Modifier.clickable { navigator.copy(data.uid.orEmpty()) }, color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta)
-                            Spacer(Modifier.width(8.dp))
-                            Text("Lv.${data.text("level")}", color = MaterialTheme.colorScheme.primary, fontSize = TextSizes.Meta)
+                        Box(Modifier.align(Alignment.BottomStart).offset(x = 12.dp, y = 28.dp)) {
+                            Avatar(data.userAvatar, 64.dp) { data.userAvatar?.let { navigator.openImages(listOf(it)) } }
                         }
-                        data.string("bio")?.takeIf { it.isNotEmpty() }?.let { HtmlText(it, Modifier.padding(top = 6.dp), fontSize = TextSizes.Nested) }
-                        Row(Modifier.padding(top = 6.dp)) {
-                            Text("${data.text("feed")}动态  ${data.text("be_like_num")}赞  ")
-                            Text("${data.text("follow")}关注  ", Modifier.clickable {
-                                navigator.navigate(UserListRoute("USER_FOLLOW", uid = data.uid))
-                            }, color = MaterialTheme.colorScheme.primary)
-                            Text("${data.text("fans")}粉丝", Modifier.clickable {
-                                navigator.navigate(UserListRoute("FAN", uid = data.uid))
-                            }, color = MaterialTheme.colorScheme.primary)
-                        }
-                        Text(
-                            "${fromToday(data.long("logintime"))}活跃" + (data.string("ip_location")?.let { " · IP 属地：$it" } ?: ""),
-                            Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta,
-                        )
-                        if (blocked) Text("已屏蔽用户 ${data.username.orEmpty()}", Modifier.padding(vertical = 24.dp))
                     }
+                    Row(Modifier.fillMaxWidth().padding(top = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Spacer(Modifier.weight(1f))
+                        if (session.isLogin) {
+                            FilledTonalIconButton(onClick = {
+                                navigator.navigate(ChatRoute("", data.uid.orEmpty(), data.username.orEmpty()))
+                            }) { Icon(Icons.Outlined.MailOutline, "私信") }
+                        }
+                        val following = if (session.isLogin) data.int("isFollow") == 1 else localFollow
+                        // Long press adds a secret (device-only) follow when enabled.
+                        androidx.compose.material3.Surface(
+                            shape = androidx.compose.foundation.shape.CircleShape,
+                            color = if (following) MaterialTheme.colorScheme.secondaryContainer else MaterialTheme.colorScheme.primary,
+                            contentColor = if (following) MaterialTheme.colorScheme.onSecondaryContainer else MaterialTheme.colorScheme.onPrimary,
+                            modifier = Modifier.padding(start = 8.dp).clip(androidx.compose.foundation.shape.CircleShape).combinedClickable(
+                                // Following needs one tap; stopping asks first.
+                                onClick = { if (following) confirmUnfollow(vm::toggleFollow) else vm.toggleFollow() },
+                                onLongClick = if (session.isLogin && secretFollow) vm::toggleLocalFollow else null,
+                            ),
+                        ) {
+                            Text(
+                                when {
+                                    !session.isLogin -> if (localFollow) "取消本地关注" else "本地关注"
+                                    following -> "取消关注"
+                                    else -> "关注"
+                                } + if (session.isLogin && localFollow) " · 悄悄关注" else "",
+                                Modifier.padding(horizontal = 20.dp, vertical = 10.dp),
+                                style = MaterialTheme.typography.labelLarge,
+                            )
+                        }
+                    }
+                    Text(
+                        data.username.orEmpty(),
+                        Modifier.padding(top = 8.dp).clickable { navigator.copy(data.username.orEmpty()) },
+                        style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                    )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text("uid: ${data.uid}", Modifier.clickable { navigator.copy(data.uid.orEmpty()) }, color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta)
+                        Spacer(Modifier.width(8.dp))
+                        Text("Lv.${data.text("level")}", color = MaterialTheme.colorScheme.primary, fontSize = TextSizes.Meta)
+                    }
+                    data.string("bio")?.takeIf { it.isNotEmpty() }?.let { HtmlText(it, Modifier.padding(top = 6.dp), fontSize = TextSizes.Nested) }
+                    Row(Modifier.padding(top = 6.dp)) {
+                        Text("${data.text("feed")}动态  ${data.text("be_like_num")}赞  ")
+                        Text("${data.text("follow")}关注  ", Modifier.clickable {
+                            navigator.navigate(UserListRoute("USER_FOLLOW", uid = data.uid))
+                        }, color = MaterialTheme.colorScheme.primary)
+                        Text("${data.text("fans")}粉丝", Modifier.clickable {
+                            navigator.navigate(UserListRoute("FAN", uid = data.uid))
+                        }, color = MaterialTheme.colorScheme.primary)
+                    }
+                    Text(
+                        "${fromToday(data.long("logintime"))}活跃" + (data.string("ip_location")?.let { " · IP 属地：$it" } ?: ""),
+                        Modifier.padding(top = 4.dp), color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta,
+                    )
+                    if (blocked) Text("已屏蔽用户 ${data.username.orEmpty()}", Modifier.padding(vertical = 24.dp))
                 }
-            },
-        ) { _, item -> if (!blocked) ItemCard(item, vm.actions) }
+            }
+        }
+        // A blocked user's posts are not requested at all: only the header shows.
+        if (blocked) {
+            LazyColumn(Modifier.padding(padding).fillMaxSize(), contentPadding = PaddingValues(10.dp)) { header() }
+        } else {
+            PagedListView(vm.list, Modifier.padding(padding), header = header) { _, item -> ItemCard(item, vm.actions) }
+        }
     }
 }

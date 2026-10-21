@@ -51,12 +51,32 @@ abstract class ContentViewModel(val app: AppContainer) : ViewModel() {
 
     open fun onLiked(item: Datum) = list.replace(item.id) { item }
 
+    /** Ids with a like request on the way; a second tap waits for the first. */
+    private val liking = mutableSetOf<String>()
+
+    /**
+     * Shows the new like state at once and sends it; the server's count replaces
+     * the guess when it answers, and a failure puts the old state back.
+     */
     fun like(item: Datum) {
         if (!app.session.isLogin) return app.toast("登录后才能点赞")
+        val id = item.id ?: return
+        if (!liking.add(id)) return
+        onLiked(likeToggled(item))
         viewModelScope.launch {
-            val updated = toggleLike(item) ?: return@launch
-            onLiked(updated)
+            try {
+                onLiked(toggleLike(item) ?: item)
+            } finally {
+                liking.remove(id)
+            }
         }
+    }
+
+    private fun likeToggled(item: Datum): Datum {
+        val liked = item.isLiked
+        val count = item.string("likenum")?.toIntOrNull()?.let { (it + if (liked) -1 else 1).coerceAtLeast(0).toString() }
+        return item.with("likenum", count ?: item.string("likenum"))
+            .with("userAction", JsonObject(mapOf("like" to JsonPrimitive(if (liked) 0 else 1))))
     }
 
     protected suspend fun toggleLike(item: Datum): Datum? {

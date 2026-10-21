@@ -115,7 +115,8 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
         list.start()
     }
 
-    fun loadDetail(verify: Boolean = false) {
+    /** [refreshReplies]: a later load also reloads the replies, unless a pull-to-refresh already does. */
+    fun loadDetail(verify: Boolean = false, refreshReplies: Boolean = true) {
         if (loadingDetail.value) return
         val previous = feed.value
         loadingDetail.value = true
@@ -138,7 +139,7 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
                     feed.value = result
                     notice.value = if (result.isPublic) "正文可正常阅读，当前账号的点赞状态暂不可用。" else ""
                     // A later reload (verify) refreshes replies; the first one is already loading in parallel.
-                    if (detailReady.isCompleted) list.refresh()
+                    if (detailReady.isCompleted && refreshReplies) list.refresh()
                     if (app.settings.current.recordHistory) app.content.addHistory(data)
                 } else if (verify) {
                     notice.value = (result as? LoadResult.Error)?.message ?: "账号详情暂不可用，请稍后重试"
@@ -182,8 +183,12 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
         viewModelScope.launch { if (app.content.block(uid)) app.toast("已屏蔽") else app.toast("已存在") }
     }
 
-    /** Shows a newly posted reply without reloading the list. */
+    /** Shows a newly posted reply without reloading the list, and counts it. */
     fun addReply(reply: Datum, target: Datum?, parent: Datum?) {
+        (feed.value as? LoadResult.Success)?.let { current ->
+            val count = (current.value.int("replynum") ?: 0) + 1
+            feed.value = current.copy(value = current.value.with("replynum", count.toString()))
+        }
         if (target == null) {
             list.update { items ->
                 items.toMutableList().apply { add(if (topReply == null) 0 else minOf(1, size), reply) }

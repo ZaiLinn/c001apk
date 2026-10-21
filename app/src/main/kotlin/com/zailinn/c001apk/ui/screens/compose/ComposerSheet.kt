@@ -36,8 +36,10 @@ import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.TextField
@@ -50,7 +52,10 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.listSaver
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.toMutableStateList
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -99,14 +104,26 @@ fun ComposerSheet(
     val app = appContainer()
     val context = LocalContext.current
     val scope = rememberCoroutineScope()
-    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     val initial = (target as? ComposeTarget.NewFeed)?.takeIf { it.targetType == "tag" }?.title?.let { "#$it# " }.orEmpty()
-    var text by remember { mutableStateOf(TextFieldValue(initial, TextRange(initial.length))) }
-    var checked by remember { mutableStateOf(false) }
+    // Saved, so a rotation or a trip to the photo picker keeps what was written.
+    var text by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(initial, TextRange(initial.length))) }
+    var checked by rememberSaveable { mutableStateOf(false) }
     var emoji by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf<String?>(null) }
     var captcha by remember { mutableStateOf<ByteArray?>(null) }
-    val images = remember { mutableStateListOf<Uri>() }
+    val images = rememberSaveable(saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() })) { mutableStateListOf<Uri>() }
+    var discarding by remember { mutableStateOf(false) }
+    var leaving by remember { mutableStateOf(false) }
+    // A swipe, a tap outside or back asks first when there is something to lose,
+    // and waits while a post is being sent: leaving would cancel it halfway.
+    val sheet = rememberModalBottomSheetState(skipPartiallyExpanded = true, confirmValueChange = { value ->
+        when {
+            value != SheetValue.Hidden || leaving -> true
+            busy != null -> { app.toast("正在发布，请稍候"); false }
+            text.text != initial || images.isNotEmpty() -> { discarding = true; false }
+            else -> true
+        }
+    })
     val focus = remember { FocusRequester() }
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(9)) { uris ->
         images.addAll(uris.filter { it !in images }.take(9 - images.size))
@@ -165,6 +182,22 @@ fun ComposerSheet(
                 busy = null
             }
         }
+    }
+
+    if (discarding) {
+        AlertDialog(
+            onDismissRequest = { discarding = false },
+            title = { Text("放弃编辑？") },
+            text = { Text("已输入的内容不会保存。") },
+            confirmButton = {
+                TextButton(onClick = {
+                    discarding = false
+                    leaving = true
+                    scope.launch { sheet.hide() }.invokeOnCompletion { onDismiss() }
+                }) { Text("放弃", color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { discarding = false }) { Text("继续编辑") } },
+        )
     }
 
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {

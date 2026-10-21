@@ -10,12 +10,18 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -113,3 +119,25 @@ fun SectionTitle(text: String, modifier: Modifier = Modifier) {
 }
 
 val CardSpacing = Arrangement.spacedBy(10.dp)
+
+/**
+ * Asks before running an action that cannot be undone, like deleting a post.
+ * Call it in a composable that outlives the menu offering the action; the
+ * returned function shows the dialog and runs the action on confirmation.
+ */
+@Composable
+fun rememberConfirm(title: String, text: String, confirmLabel: String): (action: () -> Unit) -> Unit {
+    var pending by remember { mutableStateOf<(() -> Unit)?>(null) }
+    pending?.let { action ->
+        AlertDialog(
+            onDismissRequest = { pending = null },
+            title = { Text(title) },
+            text = { Text(text) },
+            confirmButton = {
+                TextButton(onClick = { pending = null; action() }) { Text(confirmLabel, color = MaterialTheme.colorScheme.error) }
+            },
+            dismissButton = { TextButton(onClick = { pending = null }) { Text("取消") } },
+        )
+    }
+    return remember { { action -> pending = action } }
+}

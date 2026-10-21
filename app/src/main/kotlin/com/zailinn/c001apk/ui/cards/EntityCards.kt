@@ -64,6 +64,7 @@ import com.zailinn.c001apk.ui.common.SheetAction
 import com.zailinn.c001apk.ui.common.fromToday
 import com.zailinn.c001apk.ui.common.htmlToCopy
 import com.zailinn.c001apk.ui.common.htmlToPlain
+import com.zailinn.c001apk.ui.common.rememberConfirm
 import com.zailinn.c001apk.ui.nav.CopyRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.UserListRoute
@@ -380,11 +381,12 @@ fun NotificationCard(data: Datum, actions: ItemActions) {
             }
         }
     }
+    val confirmDelete = rememberConfirm("删除这条通知？", "删除后无法恢复。", "删除")
     if (menu) {
         ActionSheet(
             buildList {
                 add(SheetAction(Icons.Outlined.ContentCopy, "复制") { navigator.navigate(CopyRoute(htmlToCopy(note))) })
-                if (actions.onDelete != null) add(SheetAction(Icons.Outlined.Delete, "删除", danger = true) { actions.onDelete.invoke(data, null) })
+                if (actions.onDelete != null) add(SheetAction(Icons.Outlined.Delete, "删除", danger = true) { confirmDelete { actions.onDelete.invoke(data, null) } })
                 fromUid?.let { uid -> add(SheetAction(Icons.Outlined.Block, "屏蔽用户") { actions.onBlock?.invoke(uid, null) }) }
                 fromUid?.let { uid -> add(SheetAction(Icons.Outlined.ErrorOutline, "举报") { navigator.report(uid, "user") }) }
             },
