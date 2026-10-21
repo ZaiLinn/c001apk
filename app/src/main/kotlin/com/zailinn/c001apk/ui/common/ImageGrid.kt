@@ -67,19 +67,23 @@ fun ImageGrid(pics: List<String>, modifier: Modifier = Modifier, article: Boolea
 private fun ImageCell(url: String, modifier: Modifier, long: Boolean = false, onClick: () -> Unit) {
     Box(modifier.clip(Corner).clickable(onClick = onClick)) {
         NetworkImage(thumbnail(url), Modifier.fillMaxSize())
+        if (rememberUltraHdr(url)) CellLabel("HDR", Modifier.align(Alignment.TopStart))
         val label = when {
             url.endsWith(".gif") -> "GIF"
             long -> "长图"
             else -> null
         }
-        if (label != null) {
-            Text(
-                label,
-                Modifier.align(Alignment.BottomEnd).padding(4.dp)
-                    .background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
-                color = Color.White,
-                fontSize = TextSizes.Tag,
-            )
-        }
+        if (label != null) CellLabel(label, Modifier.align(Alignment.BottomEnd))
     }
+}
+
+/** Small white label on a dark chip over an image corner. */
+@Composable
+private fun CellLabel(text: String, modifier: Modifier) {
+    Text(
+        text,
+        modifier.padding(4.dp).background(Color.Black.copy(alpha = 0.5f), RoundedCornerShape(4.dp)).padding(horizontal = 4.dp),
+        color = Color.White,
+        fontSize = TextSizes.Tag,
+    )
 }
