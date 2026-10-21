@@ -35,6 +35,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -54,19 +55,21 @@ import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.common.ActionSheet
 import com.zailinn.c001apk.ui.common.Avatar
+import com.zailinn.c001apk.ui.common.ContentPress
 import com.zailinn.c001apk.ui.common.HtmlText
 import com.zailinn.c001apk.ui.common.IconText
 import com.zailinn.c001apk.ui.common.ImageGrid
+import com.zailinn.c001apk.ui.common.LocalContentPress
 import com.zailinn.c001apk.ui.common.RoundedImage
 import com.zailinn.c001apk.ui.common.SheetAction
 import com.zailinn.c001apk.ui.common.formatCount
 import com.zailinn.c001apk.ui.common.fromToday
+import com.zailinn.c001apk.ui.common.htmlToCopy
 import com.zailinn.c001apk.ui.common.htmlToPlain
 import com.zailinn.c001apk.ui.nav.CopyRoute
 import com.zailinn.c001apk.ui.nav.FeedRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.UserRoute
-
 val CardShape = RoundedCornerShape(12.dp)
 
 @Composable
@@ -83,6 +86,7 @@ fun FeedCard(data: Datum, actions: ItemActions = ItemActions(), detail: Boolean 
     val navigator = LocalNavigator.current
     val open = { data.id?.let { navigator.navigate(FeedRoute(it)) } ?: Unit }
     val pad = if (detail) 16.dp else 10.dp
+    val press = remember { ContentPress() }
     Surface(
         color = if (detail) Color.Transparent else cardColor(),
         shape = if (detail) RoundedCornerShape(0.dp) else CardShape,
@@ -90,28 +94,31 @@ fun FeedCard(data: Datum, actions: ItemActions = ItemActions(), detail: Boolean 
             .combinedClickable(
                 enabled = true,
                 onClick = { if (!detail) open() },
-                onLongClick = { navigator.navigate(CopyRoute(htmlToPlain(data.message.orEmpty()))) },
+                onLongClick = { if (!press.active) navigator.navigate(CopyRoute(htmlToCopy(data.message.orEmpty()))) },
             ),
     ) {
-        Column(Modifier.padding(bottom = if (!footer) 0.dp else if (detail) 12.dp else 10.dp)) {
-            FeedHeader(data, detail, actions)
-            data.messageTitle?.takeIf { it.isNotEmpty() }?.let {
-                HtmlText(it, Modifier.padding(start = pad, end = pad, top = 5.dp), fontSize = 16.sp, bold = true)
+        CompositionLocalProvider(LocalContentPress provides press) {
+            Column(Modifier.padding(bottom = if (!footer) 0.dp else if (detail) 12.dp else 10.dp)) {
+                FeedHeader(data, detail, actions)
+                data.messageTitle?.takeIf { it.isNotEmpty() }?.let {
+                    HtmlText(it, Modifier.padding(start = pad, end = pad, top = 5.dp), fontSize = 16.sp, bold = true, selectable = detail)
+                }
+                if (!data.message.isNullOrEmpty()) {
+                    HtmlText(
+                        data.message.orEmpty(),
+                        Modifier.padding(start = pad, end = pad, top = 5.dp),
+                        fontSize = 16.sp,
+                        maxLines = if (detail) Int.MAX_VALUE else 8,
+                        onClick = if (detail) null else open,
+                        selectable = detail,
+                    )
+                }
+                if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(start = pad, end = pad, top = 10.dp))
+                if (!data.string("forwardSourceType").isNullOrEmpty()) ForwardSource(data.obj("forwardSourceFeed"), pad, detail)
+                data.string("extra_url")?.takeIf { it.isNotEmpty() }?.let { ExtraLink(data, it, pad, detail) }
+                data.replyRows.firstOrNull()?.takeIf { !detail }?.let { HotReply(it, open) }
+                if (footer) FeedFooter(data, actions, detail)
             }
-            if (!data.message.isNullOrEmpty()) {
-                HtmlText(
-                    data.message.orEmpty(),
-                    Modifier.padding(start = pad, end = pad, top = 5.dp),
-                    fontSize = 16.sp,
-                    maxLines = if (detail) Int.MAX_VALUE else 8,
-                    onClick = if (detail) null else open,
-                )
-            }
-            if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(start = pad, end = pad, top = 10.dp))
-            if (!data.string("forwardSourceType").isNullOrEmpty()) ForwardSource(data.obj("forwardSourceFeed"), pad, detail)
-            data.string("extra_url")?.takeIf { it.isNotEmpty() }?.let { ExtraLink(data, it, pad, detail) }
-            data.replyRows.firstOrNull()?.takeIf { !detail }?.let { HotReply(it, open) }
-            if (footer) FeedFooter(data, actions, detail)
         }
     }
 }
@@ -347,37 +354,40 @@ fun ReplyCard(
     val isFeedReply = data.string("fetchType") == "feed_reply"
     var menu by remember { mutableStateOf(false) }
     val feedUid = data.string("feedUid")
+    val press = remember { ContentPress() }
     val clickable = Modifier.combinedClickable(
         onClick = {
             if (isFeedReply && actions.onReply != null) actions.onReply.invoke(data, null) else navigator.openLink(data.url.orEmpty())
         },
-        onLongClick = { menu = true },
+        onLongClick = { if (!press.active) menu = true },
     )
     Surface(
         color = if (!isFeedReply || (nested && !isTop)) cardColor() else Color.Transparent,
         shape = if (!isFeedReply) CardShape else RoundedCornerShape(0.dp),
         modifier = Modifier.fillMaxWidth().clip(if (!isFeedReply) CardShape else RoundedCornerShape(0.dp)).then(clickable),
     ) {
-        Box {
-            Row(Modifier.padding(horizontal = if (isFeedReply) 16.dp else 10.dp, vertical = if (isFeedReply) 12.dp else 10.dp)) {
-                Avatar(data.userAvatar ?: data.userInfo?.userAvatar, 30.dp) { navigator.openUser(data.uid, data.isAnonymous) }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f)) {
-                    HtmlText(replyTitle(data, nested, isTop, feedUid, floorUid), Modifier.padding(end = 28.dp))
-                    HtmlText(data.message.orEmpty(), picArr = data.picArr)
-                    if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(top = 10.dp))
-                    data.obj("feed")?.takeIf { !isFeedReply && !nested }?.let { SourceFeed(it) }
-                    Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(fromToday(data.dateline), Modifier.weight(1f), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
-                        CountButton(Icons.AutoMirrored.Outlined.Message, data.string("replynum") ?: "0")
-                        LikeButton(data, actions)
+        CompositionLocalProvider(LocalContentPress provides press) {
+            Box {
+                Row(Modifier.padding(horizontal = if (isFeedReply) 16.dp else 10.dp, vertical = if (isFeedReply) 12.dp else 10.dp)) {
+                    Avatar(data.userAvatar ?: data.userInfo?.userAvatar, 30.dp) { navigator.openUser(data.uid, data.isAnonymous) }
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f)) {
+                        HtmlText(replyTitle(data, nested, isTop, feedUid, floorUid), Modifier.padding(end = 28.dp))
+                        HtmlText(data.message.orEmpty(), picArr = data.picArr, selectable = true)
+                        if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(top = 10.dp))
+                        data.obj("feed")?.takeIf { !isFeedReply && !nested }?.let { SourceFeed(it) }
+                        Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Text(fromToday(data.dateline), Modifier.weight(1f), color = MaterialTheme.colorScheme.outline, style = MaterialTheme.typography.bodyMedium)
+                            CountButton(Icons.AutoMirrored.Outlined.Message, data.string("replynum") ?: "0")
+                            LikeButton(data, actions)
+                        }
+                        val more = data.int("replyRowsMore") ?: 0
+                        if (!nested && (data.replyRows.isNotEmpty() || more != 0)) NestedReplies(data, actions, more)
                     }
-                    val more = data.int("replyRowsMore") ?: 0
-                    if (!nested && (data.replyRows.isNotEmpty() || more != 0)) NestedReplies(data, actions, more)
                 }
-            }
-            IconButton(onClick = { menu = true }, Modifier.align(Alignment.TopEnd)) {
-                Icon(Icons.Outlined.KeyboardArrowDown, "更多", tint = MaterialTheme.colorScheme.outline)
+                IconButton(onClick = { menu = true }, Modifier.align(Alignment.TopEnd)) {
+                    Icon(Icons.Outlined.KeyboardArrowDown, "更多", tint = MaterialTheme.colorScheme.outline)
+                }
             }
         }
     }
@@ -468,7 +478,7 @@ fun ReplyMenu(reply: Datum, parent: Datum?, actions: ItemActions, onDismiss: () 
     ActionSheet(
         buildList {
             if (actions.onReply != null) add(SheetAction(Icons.AutoMirrored.Outlined.Reply, "回复") { actions.onReply.invoke(reply, parent) })
-            add(SheetAction(Icons.Outlined.ContentCopy, "复制") { navigator.navigate(CopyRoute(htmlToPlain(reply.message.orEmpty()))) })
+            add(SheetAction(Icons.Outlined.ContentCopy, "复制") { navigator.navigate(CopyRoute(htmlToCopy(reply.message.orEmpty()))) })
             if (parent == null && actions.onShowReplies != null && (reply.int("replynum") ?: 0) > 0) {
                 add(SheetAction(Icons.AutoMirrored.Outlined.Message, "查看回复") { actions.onShowReplies.invoke(reply) })
             }

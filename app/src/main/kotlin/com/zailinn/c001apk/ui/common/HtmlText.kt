@@ -1,5 +1,6 @@
 package com.zailinn.c001apk.ui.common
 
+import android.content.ClipData
 import android.content.Context
 import android.graphics.BitmapFactory
 import android.util.LruCache
@@ -10,6 +11,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.InlineTextContent
 import androidx.compose.foundation.text.appendInlineContent
+import androidx.compose.foundation.text.selection.SelectionContainer
+import androidx.compose.foundation.text.selection.SelectionState
+import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Photo
 import androidx.compose.material3.Icon
@@ -17,14 +21,20 @@ import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.platform.ClipEntry
+import androidx.compose.ui.platform.Clipboard
+import androidx.compose.ui.platform.LocalClipboard
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.NativeClipboard
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
@@ -48,7 +58,6 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.nav.LocalNavigator
-
 private const val LINK = "url"
 
 private val emojiPattern = Regex("\\[[^\\]]+]")
@@ -82,6 +91,10 @@ fun emojiBitmap(file: String): ImageBitmap? {
  * Renders the HTML subset used by Coolapk messages: links, line breaks and
  * emoticon markers. Link handling: an empty link is
  * the card itself, reply list links expand replies, image links open the viewer.
+ *
+ * A [selectable] text starts a drag selection on long press, and copies web
+ * links with their addresses. A card around it that provides [LocalContentPress]
+ * keeps its long press for the space outside the text. Taps off a link do nothing.
  */
 @Composable
 fun HtmlText(
@@ -95,6 +108,7 @@ fun HtmlText(
     onClick: (() -> Unit)? = null,
     onShowReplies: (() -> Unit)? = null,
     onViewFans: (() -> Unit)? = null,
+    selectable: Boolean = false,
 ) {
     val navigator = LocalNavigator.current
     val showEmoji = LocalAppSettings.current.showEmoji
@@ -140,16 +154,83 @@ fun HtmlText(
             }
         }
     } else Modifier
-    Text(
-        built.text,
-        modifier = modifier.then(links),
-        style = TextStyle(fontSize = fontSize, lineHeight = fontSize * 1.5f, fontWeight = if (bold) FontWeight.Bold else MaterialTheme.typography.bodyLarge.fontWeight),
-        color = if (color == Color.Unspecified) LocalContentColor.current else color,
-        maxLines = maxLines,
-        overflow = TextOverflow.Ellipsis,
-        inlineContent = inline,
-        onTextLayout = { layout.value = it },
-    )
+    // A press on the text tells the card to leave its long press to the selection,
+    // and a tap on the text is not a tap on the card.
+    val press = LocalContentPress.current
+    val taps = if (selectable) {
+        Modifier.pointerInput(press) {
+            awaitEachGesture {
+                // The selection takes the press first, so it may already be consumed.
+                awaitFirstDown(requireUnconsumed = false)
+                press?.active = true
+                try {
+                    waitForUpOrCancellation()?.consume()
+                } finally {
+                    press?.active = false
+                }
+            }
+        }
+    } else Modifier
+    val text = @Composable {
+        Text(
+            built.text,
+            modifier = taps.then(modifier).then(links),
+            style = TextStyle(fontSize = fontSize, lineHeight = fontSize * 1.5f, fontWeight = if (bold) FontWeight.Bold else MaterialTheme.typography.bodyLarge.fontWeight),
+            color = if (color == Color.Unspecified) LocalContentColor.current else color,
+            maxLines = maxLines,
+            overflow = TextOverflow.Ellipsis,
+            inlineContent = inline,
+            onTextLayout = { layout.value = it },
+        )
+    }
+    if (selectable) {
+        val clipboard = LocalClipboard.current
+        val selection = rememberSelectionState()
+        val linked = remember(clipboard, selection) { LinkClipboard(clipboard, selection) }
+        CompositionLocalProvider(LocalClipboard provides linked) { SelectionContainer(selection) { text() } }
+    } else {
+        text()
+    }
+}
+
+/**
+ * Whether a press is on selectable text inside a card. A card provides one
+ * through [LocalContentPress] and skips its own long press while it is set.
+ */
+class ContentPress {
+    var active = false
+}
+
+val LocalContentPress = staticCompositionLocalOf<ContentPress?> { null }
+
+/**
+ * Puts web link addresses into text copied from [selection]. The selected text
+ * keeps its link annotations, so each link is told apart by position even when
+ * several share a label like "查看链接".
+ */
+private class LinkClipboard(private val base: Clipboard, private val selection: SelectionState) : Clipboard {
+    override val nativeClipboard: NativeClipboard get() = base.nativeClipboard
+
+    override suspend fun getClipEntry(): ClipEntry? = base.getClipEntry()
+
+    override suspend fun setClipEntry(clipEntry: ClipEntry?) {
+        val copied = clipEntry?.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
+        val selected = selection.selectedTexts.singleOrNull()
+        if (copied == null || selected == null || selected.text != copied) return base.setClipEntry(clipEntry)
+        base.setClipEntry(ClipEntry(ClipData.newPlainText("c001apk", copyWithLinks(selected))))
+    }
+}
+
+/** [text] with each web link followed by its address. */
+internal fun copyWithLinks(text: AnnotatedString): String = buildString {
+    var at = 0
+    text.getStringAnnotations(LINK, 0, text.length).sortedBy { it.start }.forEach { link ->
+        if (link.end < at) return@forEach
+        append(text.text, at, link.end)
+        append(linkCopySuffix(text.text.substring(link.start, link.end), link.item))
+        at = link.end
+    }
+    append(text.text, at, text.length)
 }
 
 /** The link under [position], only when a linked character itself is touched. */

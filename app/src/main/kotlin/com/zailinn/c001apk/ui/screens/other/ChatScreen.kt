@@ -71,7 +71,7 @@ import com.zailinn.c001apk.ui.common.PagedList
 import com.zailinn.c001apk.ui.common.SheetAction
 import com.zailinn.c001apk.ui.common.StatusBox
 import com.zailinn.c001apk.ui.common.formatTime
-import com.zailinn.c001apk.ui.common.htmlToPlain
+import com.zailinn.c001apk.ui.common.htmlToCopy
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.UserRoute
 import com.zailinn.c001apk.ui.screens.ContentViewModel
@@ -270,7 +270,7 @@ fun ChatScreen(ukey: String, uid: String, username: String) {
     menuFor?.let { item ->
         ActionSheet(
             listOf(
-                SheetAction(Icons.Outlined.ContentCopy, "复制") { navigator.copy(htmlToPlain(item.message.orEmpty())) },
+                SheetAction(Icons.Outlined.ContentCopy, "复制") { navigator.copy(htmlToCopy(item.message.orEmpty())) },
                 SheetAction(Icons.Outlined.Delete, "删除", danger = true) { vm.deleteMessage(item) },
             ),
             onDismiss = { menuFor = null },

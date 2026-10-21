@@ -1,7 +1,5 @@
 package com.zailinn.c001apk.ui.screens.feed
 
-import androidx.compose.foundation.ExperimentalFoundationApi
-import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.PaddingValues
@@ -64,14 +62,12 @@ import com.zailinn.c001apk.ui.common.ImageGrid
 import com.zailinn.c001apk.ui.common.PagedListView
 import com.zailinn.c001apk.ui.common.StatusBox
 import com.zailinn.c001apk.ui.common.htmlToPlain
-import com.zailinn.c001apk.ui.nav.CopyRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.collection.CollectionPickerSheet
 import com.zailinn.c001apk.ui.screens.appViewModel
 import com.zailinn.c001apk.ui.screens.compose.ComposeTarget
 import com.zailinn.c001apk.ui.screens.compose.ComposerSheet
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
-
 private data class ReplyRequest(val target: Datum?, val parent: Datum?)
 
 @Composable
@@ -208,7 +204,6 @@ fun FeedScreen(id: String) {
 }
 
 /** Structured article: header, title, text and image blocks, then the like row. */
-@OptIn(ExperimentalFoundationApi::class)
 @Composable
 private fun ArticleBody(data: Datum, blocks: List<FeedArticle>, actions: ItemActions) {
     val navigator = LocalNavigator.current
@@ -220,13 +215,8 @@ private fun ArticleBody(data: Datum, blocks: List<FeedArticle>, actions: ItemAct
         FeedCard(header, actions, detail = true, footer = false)
         blocks.forEach { block ->
             when (block.type) {
-                "title" -> HtmlText(block.title.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = 17.sp, bold = true)
-                "text" -> HtmlText(
-                    block.message.orEmpty(),
-                    Modifier.padding(horizontal = 16.dp)
-                        .combinedClickable(onClick = {}, onLongClick = { navigator.navigate(CopyRoute(htmlToPlain(block.message.orEmpty()))) }),
-                    fontSize = 16.sp,
-                )
+                "title" -> HtmlText(block.title.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = 17.sp, bold = true, selectable = true)
+                "text" -> HtmlText(block.message.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = 16.sp, selectable = true)
                 "image" -> Column(Modifier.padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     val url = block.url.orEmpty()
                     ImageGridWithIndex(url, images)

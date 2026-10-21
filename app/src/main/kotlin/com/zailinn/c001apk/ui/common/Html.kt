@@ -91,3 +91,29 @@ fun htmlToPlain(html: String): String {
     plainCache.put(html, value)
     return value
 }
+
+/**
+ * The address to append after a web link's label when copying, so a link
+ * shown as "查看链接" still carries its URL. Labels that already show the
+ * address and in-app links (topics, users) need nothing.
+ */
+fun linkCopySuffix(label: String, href: String): String {
+    val shown = label.trim()
+    if (!href.startsWith("http://") && !href.startsWith("https://")) return ""
+    if (shown.isEmpty() || shown.startsWith("http") || href.contains(shown)) return ""
+    return "（$href）"
+}
+
+/** Text to copy from an HTML fragment: like [htmlToPlain], with web link addresses kept. */
+fun htmlToCopy(html: String): String {
+    if (!html.contains('<')) return htmlToPlain(html)
+    return buildString {
+        parseHtml(html).forEach { part ->
+            when (part) {
+                is HtmlPart.Text -> append(part.value).append(part.href?.let { linkCopySuffix(part.value, it) }.orEmpty())
+                HtmlPart.Break -> append('\n')
+                is HtmlPart.Image -> Unit
+            }
+        }
+    }.trim()
+}

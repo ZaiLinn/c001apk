@@ -59,6 +59,7 @@ import com.zailinn.c001apk.ui.common.NetworkImage
 import com.zailinn.c001apk.ui.common.RoundedImage
 import com.zailinn.c001apk.ui.common.SheetAction
 import com.zailinn.c001apk.ui.common.fromToday
+import com.zailinn.c001apk.ui.common.htmlToCopy
 import com.zailinn.c001apk.ui.common.htmlToPlain
 import com.zailinn.c001apk.ui.nav.CopyRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
@@ -353,7 +354,7 @@ fun NotificationCard(data: Datum, actions: ItemActions) {
                     noticeLink(note)?.let { navigator.openLink(it) }
                 }
             },
-            onLongClick = { navigator.navigate(CopyRoute(htmlToPlain(note))) },
+            onLongClick = { navigator.navigate(CopyRoute(htmlToCopy(note))) },
         ),
     ) {
         Box {
@@ -375,7 +376,7 @@ fun NotificationCard(data: Datum, actions: ItemActions) {
     if (menu) {
         ActionSheet(
             buildList {
-                add(SheetAction(Icons.Outlined.ContentCopy, "复制") { navigator.navigate(CopyRoute(htmlToPlain(note))) })
+                add(SheetAction(Icons.Outlined.ContentCopy, "复制") { navigator.navigate(CopyRoute(htmlToCopy(note))) })
                 if (actions.onDelete != null) add(SheetAction(Icons.Outlined.Delete, "删除", danger = true) { actions.onDelete.invoke(data, null) })
                 fromUid?.let { uid -> add(SheetAction(Icons.Outlined.Block, "屏蔽用户") { actions.onBlock?.invoke(uid, null) }) }
                 fromUid?.let { uid -> add(SheetAction(Icons.Outlined.ErrorOutline, "举报") { navigator.report(uid, "user") }) }
