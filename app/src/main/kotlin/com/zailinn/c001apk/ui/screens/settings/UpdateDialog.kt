@@ -5,7 +5,6 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -14,6 +13,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.zailinn.c001apk.core.update.UpdateResult
+import com.zailinn.c001apk.ui.common.AppAlertDialog
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.appContainer
 import kotlinx.coroutines.launch
@@ -29,7 +29,7 @@ fun UpdateDialog(result: UpdateResult, onDismiss: () -> Unit) {
         scope.launch { app.updates.preferences.snooze(System.currentTimeMillis()) }
         onDismiss()
     }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = later,
         title = { Text("发现新版本 ${release.version}") },
         text = {

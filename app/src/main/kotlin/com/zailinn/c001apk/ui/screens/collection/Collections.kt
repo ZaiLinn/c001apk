@@ -13,14 +13,12 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Folder
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.ListItemDefaults
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
@@ -39,6 +37,8 @@ import androidx.compose.ui.unit.dp
 import com.zailinn.c001apk.AppContainer
 import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.core.model.LoadResult
+import com.zailinn.c001apk.ui.common.AppAlertDialog
+import com.zailinn.c001apk.ui.common.AppBottomSheet
 import com.zailinn.c001apk.ui.screens.appContainer
 import com.zailinn.c001apk.ui.screens.runAction
 import kotlinx.coroutines.launch
@@ -54,7 +54,7 @@ fun CollectionEditDialog(
     var title by remember { mutableStateOf(initial?.title.orEmpty()) }
     var description by remember { mutableStateOf(initial?.description.orEmpty()) }
     var open by remember { mutableStateOf(initial?.int("is_open") == 1) }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(heading) },
         text = {
@@ -121,7 +121,7 @@ fun CollectionPickerSheet(feedId: String, onDismiss: () -> Unit) {
         }
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    AppBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 8.dp)) {
             Text("收藏到", Modifier.padding(horizontal = 24.dp, vertical = 8.dp), style = MaterialTheme.typography.titleLarge)
             when (val current = state) {

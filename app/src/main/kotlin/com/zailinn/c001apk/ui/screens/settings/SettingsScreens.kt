@@ -51,9 +51,9 @@ import androidx.compose.material.icons.outlined.DragHandle
 import androidx.compose.material.icons.outlined.Tab
 import androidx.compose.material3.Checkbox
 import androidx.compose.ui.Alignment
+import com.zailinn.c001apk.ui.common.AppAlertDialog
+import com.zailinn.c001apk.ui.common.AppDropdownMenu
 import com.zailinn.c001apk.ui.screens.main.HomeTab
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -210,7 +210,7 @@ private fun ChoiceItem(icon: ImageVector, title: String, subtitle: String, optio
         supportingContent = { Text("$subtitle · ${options.getOrNull(selected).orEmpty()}") },
         leadingContent = { Icon(icon, null) },
         trailingContent = {
-            DropdownMenu(open, { open = false }) {
+            AppDropdownMenu(open, { open = false }) {
                 options.forEachIndexed { index, label ->
                     DropdownMenuItem({ Text(label) }, { open = false; onSelect(index) })
                 }
@@ -251,7 +251,7 @@ private fun SectionItems(section: SettingsSection) {
             ) { setInt(SettingKeys.fontWeightLevel, it) }
             if (fontDialog) {
                 var value by remember { mutableFloatStateOf(settings.fontScale) }
-                AlertDialog(
+                AppAlertDialog(
                     onDismissRequest = { fontDialog = false },
                     title = { Text("字体大小") },
                     text = {
@@ -453,7 +453,7 @@ fun HomeTabsDialog(visible: List<HomeTab>, onDismiss: () -> Unit, onSave: (List<
         dragging = null
         offset = 0f
     }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("首页标签") },
         text = {
@@ -527,7 +527,7 @@ private fun Modifier.reorderDrag(
 @Composable
 fun EditDialog(title: String, initial: String, onDismiss: () -> Unit, onSave: (String) -> Unit) {
     var value by remember { mutableStateOf(initial) }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(title) },
         text = { OutlinedTextField(value, { value = it }, singleLine = true) },

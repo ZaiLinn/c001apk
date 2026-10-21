@@ -27,6 +27,7 @@ import com.zailinn.c001apk.core.net.readApiObject
 import com.zailinn.c001apk.core.update.UpdateResult
 import com.zailinn.c001apk.core.update.UpdateStatus
 import com.zailinn.c001apk.data.AppSettings
+import com.zailinn.c001apk.ui.common.AppAlertDialog
 import com.zailinn.c001apk.ui.nav.AboutRoute
 import com.zailinn.c001apk.ui.nav.AccountsRoute
 import com.zailinn.c001apk.ui.nav.AppNavigator
@@ -243,7 +244,7 @@ private suspend fun checkLoginInfo(app: AppContainer) {
 /** The server rejects requests carrying the imported 数盟 ID; offers to go back to the app's own ID. */
 @Composable
 private fun DeviceIdRejectedDialog(onClear: () -> Unit, onKeep: () -> Unit) {
-    androidx.compose.material3.AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onKeep,
         title = { androidx.compose.material3.Text("数盟 ID 被服务器拒绝") },
         text = {

@@ -10,11 +10,9 @@ import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.ListItem
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -80,7 +78,7 @@ data class SheetAction(val icon: ImageVector, val label: String, val danger: Boo
 /** Bottom sheet with a list of actions for "more" menus, under an optional [header] line such as a link address. */
 @Composable
 fun ActionSheet(actions: List<SheetAction>, onDismiss: () -> Unit, header: String? = null) {
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    AppBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 8.dp)) {
             header?.let {
                 Text(
@@ -129,7 +127,7 @@ val CardSpacing = Arrangement.spacedBy(10.dp)
 fun rememberConfirm(title: String, text: String, confirmLabel: String): (action: () -> Unit) -> Unit {
     var pending by remember { mutableStateOf<(() -> Unit)?>(null) }
     pending?.let { action ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { pending = null },
             title = { Text(title) },
             text = { Text(text) },

@@ -7,7 +7,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.Psychology
 import androidx.compose.material.icons.outlined.Science
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
@@ -33,6 +32,7 @@ import com.zailinn.c001apk.core.semantic.SemanticScore
 import com.zailinn.c001apk.data.SettingKeys
 import com.zailinn.c001apk.semantic.SemanticStatus
 import com.zailinn.c001apk.ui.LocalAppSettings
+import com.zailinn.c001apk.ui.common.AppAlertDialog
 import com.zailinn.c001apk.ui.common.SectionTitle
 import com.zailinn.c001apk.ui.screens.appContainer
 import kotlinx.coroutines.launch
@@ -132,7 +132,7 @@ fun SemanticSection() {
     }
 
     if (confirmDelete) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text("删除语义模型") },
             text = { Text("删除后语义屏蔽停止工作，需要时可重新下载。关键词折叠不受影响。") },
@@ -165,7 +165,7 @@ private fun TestDialog(onDismiss: () -> Unit) {
         result = runCatching { app.semantic.test(text, app.semanticConfig(settings)) }
         running = false
     }
-    AlertDialog(
+    AppAlertDialog(
         onDismissRequest = onDismiss,
         title = { Text("试一试") },
         text = {

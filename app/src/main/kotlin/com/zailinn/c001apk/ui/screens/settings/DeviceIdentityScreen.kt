@@ -17,7 +17,6 @@ import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.outlined.ContentPaste
 import androidx.compose.material.icons.outlined.Visibility
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.Icon
@@ -42,6 +41,7 @@ import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.unit.dp
 import com.zailinn.c001apk.core.protocol.OfficialDeviceIdentity
 import com.zailinn.c001apk.ui.LocalAppSettings
+import com.zailinn.c001apk.ui.common.AppAlertDialog
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.appContainer
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
@@ -203,7 +203,7 @@ fun DeviceIdentityScreen() {
     }
 
     openFailure?.let { result ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { openFailure = null },
             title = { Text(if (result == OpenResult.NotInstalled) "尚未安装官方酷安" else "无法打开酷安 OAID 界面") },
             text = {
@@ -219,7 +219,7 @@ fun DeviceIdentityScreen() {
         // Starts empty so the saved ID is never shown in the clear.
         var value by remember { mutableStateOf("") }
         var visible by remember { mutableStateOf(false) }
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { manual = false },
             title = { Text("手动输入数盟 ID") },
             text = {
@@ -237,7 +237,7 @@ fun DeviceIdentityScreen() {
         )
     }
     if (clearing) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { clearing = false },
             title = { Text("清除数盟 ID？") },
             text = { Text("清除后改用新生成的随机设备标识，可能需要重新完成人机验证。") },

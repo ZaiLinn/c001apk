@@ -7,6 +7,7 @@ import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.TopAppBarScrollBehavior
+import com.zailinn.c001apk.ui.common.AppAlertDialog
 import com.zailinn.c001apk.ui.screens.collection.CollectionEditDialog
 import com.zailinn.c001apk.ui.screens.collection.createCollection
 import androidx.compose.material.icons.outlined.PushPin
@@ -23,7 +24,6 @@ import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ClearAll
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.Scaffold
@@ -284,7 +284,7 @@ private fun MyCollections(creating: Boolean, onCreated: () -> Unit) {
         }
     }
     deleting?.let { item ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text("删除收藏夹？") },
             text = { Text("「${item.title.orEmpty()}」及其中的收藏记录将被删除，收藏的内容本身不受影响") },
@@ -360,7 +360,7 @@ fun NotificationScreen(type: String) {
         )
     }
     deleting?.let { item ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { deleting = null },
             title = { Text("删除此会话？") },
             text = { Text("与 ${item.string("messageUsername").orEmpty()} 的会话将从私信列表中删除") },
@@ -414,7 +414,7 @@ fun HistoryScreen(favorites: Boolean) {
         }
     }
     if (confirm) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { confirm = false },
             title = { Text("确定清除全部${if (favorites) "收藏" else "浏览历史"}？") },
             confirmButton = {

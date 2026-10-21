@@ -10,7 +10,6 @@ import androidx.compose.material.icons.outlined.CheckCircle
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.PersonAdd
 import androidx.compose.material.icons.outlined.PersonOutline
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.ListItem
@@ -27,6 +26,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zailinn.c001apk.data.SavedAccount
+import com.zailinn.c001apk.ui.common.AppAlertDialog
 import com.zailinn.c001apk.ui.common.Avatar
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.LoginRoute
@@ -98,7 +98,7 @@ fun AccountsScreen() {
         }
     }
     removing?.let { account ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { removing = null },
             title = { Text("移除账号") },
             text = { Text("将清除 ${account.displayName} 在本机保存的登录。历史、收藏和屏蔽设置会保留。") },

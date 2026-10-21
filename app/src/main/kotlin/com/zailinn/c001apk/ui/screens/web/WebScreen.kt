@@ -21,7 +21,6 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material3.Button
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -43,6 +42,7 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import com.zailinn.c001apk.AppContainer
 import com.zailinn.c001apk.core.protocol.Constants
+import com.zailinn.c001apk.ui.common.AppDropdownMenu
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.appContainer
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
@@ -131,7 +131,7 @@ fun WebScreen(url: String, isLogin: Boolean) {
             Column {
                 SimpleTopBar(title) {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }
-                    DropdownMenu(menu, { menu = false }) {
+                    AppDropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem({ Text("刷新") }, { menu = false; web?.reload() })
                         DropdownMenuItem({ Text("复制") }, { menu = false; web?.url?.let { navigator.copy(it) } })
                         DropdownMenuItem({ Text("在浏览器中打开") }, { menu = false; web?.url?.let { navigator.launchBrowser(it) } })

@@ -22,11 +22,9 @@ import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PersonOff
 import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material.icons.outlined.VisibilityOff
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
 import androidx.compose.material3.Checkbox
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
@@ -53,6 +51,8 @@ import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zailinn.c001apk.core.model.SensitiveCategory
 import com.zailinn.c001apk.data.SettingKeys
 import com.zailinn.c001apk.ui.LocalAppSettings
+import com.zailinn.c001apk.ui.common.AppAlertDialog
+import com.zailinn.c001apk.ui.common.AppDropdownMenu
 import com.zailinn.c001apk.ui.common.SectionTitle
 import com.zailinn.c001apk.ui.nav.BlacklistRoute
 import com.zailinn.c001apk.ui.nav.CategoryEditRoute
@@ -78,7 +78,7 @@ fun ContentFilterScreen() {
         topBar = {
             SimpleTopBar("内容过滤") {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }
-                DropdownMenu(menu, { menu = false }) {
+                AppDropdownMenu(menu, { menu = false }) {
                     DropdownMenuItem(text = { Text("恢复内置分类") }, onClick = { menu = false; restoring = true })
                 }
             }
@@ -131,7 +131,7 @@ fun ContentFilterScreen() {
         }
     }
     if (restoring) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { restoring = false },
             title = { Text("恢复内置分类") },
             text = { Text("内置的四个分类会恢复为默认内容，对它们的修改会丢失。自己新建的分类保留。") },
@@ -233,7 +233,7 @@ fun CategoryEditScreen(id: String) {
         }
     }
     if (deleting) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { deleting = false },
             title = { Text("删除分类") },
             text = {

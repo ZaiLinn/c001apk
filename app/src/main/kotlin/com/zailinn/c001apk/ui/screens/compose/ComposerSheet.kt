@@ -30,14 +30,12 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.EmojiEmotions
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Keyboard
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LoadingIndicator
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.SheetValue
 import androidx.compose.material3.Text
@@ -72,6 +70,8 @@ import coil3.compose.AsyncImage
 import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.core.net.ApiFailure
 import com.zailinn.c001apk.core.upload.UploadImage
+import com.zailinn.c001apk.ui.common.AppAlertDialog
+import com.zailinn.c001apk.ui.common.AppBottomSheet
 import com.zailinn.c001apk.ui.common.emojiBitmap
 import com.zailinn.c001apk.ui.common.EmojiPanel
 import com.zailinn.c001apk.ui.common.readUploadImage
@@ -185,7 +185,7 @@ fun ComposerSheet(
     }
 
     if (discarding) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { discarding = false },
             title = { Text("放弃编辑？") },
             text = { Text("已输入的内容不会保存。") },
@@ -200,7 +200,7 @@ fun ComposerSheet(
         )
     }
 
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
+    AppBottomSheet(onDismissRequest = onDismiss, sheetState = sheet) {
         Column(Modifier.fillMaxWidth().imePadding().navigationBarsPadding().padding(horizontal = 16.dp)) {
             TextField(
                 value = text,
@@ -256,7 +256,7 @@ fun ComposerSheet(
     captcha?.let { bytes ->
         var code by remember(bytes) { mutableStateOf("") }
         val bitmap = remember(bytes) { BitmapFactory.decodeByteArray(bytes, 0, bytes.size)?.asImageBitmap() }
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { captcha = null },
             title = { Text("验证码") },
             text = {

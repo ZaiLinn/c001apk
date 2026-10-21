@@ -6,7 +6,6 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
-import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -28,12 +27,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.window.Dialog
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.core.net.Page
 import com.zailinn.c001apk.ui.LocalSession
+import com.zailinn.c001apk.ui.common.AppAlertDialog
+import com.zailinn.c001apk.ui.common.AppDialog
 import com.zailinn.c001apk.ui.common.htmlToPlain
 import com.zailinn.c001apk.ui.screens.appContainer
 import kotlinx.coroutines.launch
@@ -52,7 +52,7 @@ fun feedShareLink(id: String) = "https://www.coolapk.com/feed/$id"
 fun ChatFeedPicker(onDismiss: () -> Unit, onSend: (String) -> Unit) {
     var tab by remember { mutableIntStateOf(0) }
     var confirm by remember { mutableStateOf<String?>(null) }
-    Dialog(onDismissRequest = onDismiss) {
+    AppDialog(onDismissRequest = onDismiss) {
         Surface(shape = MaterialTheme.shapes.extraLarge, modifier = Modifier.fillMaxWidth().fillMaxHeight(0.75f)) {
             Column {
                 Text("发送动态", Modifier.padding(start = 24.dp, top = 20.dp, bottom = 8.dp), style = MaterialTheme.typography.titleLarge)
@@ -70,7 +70,7 @@ fun ChatFeedPicker(onDismiss: () -> Unit, onSend: (String) -> Unit) {
         }
     }
     confirm?.let { id ->
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { confirm = null },
             title = { Text("发送动态？") },
             text = { Text(feedShareLink(id)) },

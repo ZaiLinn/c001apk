@@ -17,7 +17,6 @@ import androidx.compose.material.icons.outlined.Clear
 import androidx.compose.material.icons.outlined.FilterList
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.automirrored.outlined.Sort
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -51,6 +50,7 @@ import androidx.lifecycle.viewModelScope
 import com.zailinn.c001apk.AppContainer
 import com.zailinn.c001apk.core.net.Page
 import com.zailinn.c001apk.ui.cards.ItemCard
+import com.zailinn.c001apk.ui.common.AppDropdownMenu
 import com.zailinn.c001apk.ui.common.PagedList
 import com.zailinn.c001apk.ui.common.PagedListView
 import com.zailinn.c001apk.ui.nav.LocalNavigator
@@ -192,12 +192,12 @@ fun SearchResultScreen(keyword: String, title: String?, pageType: String?, pageP
                     if (text.isNotEmpty()) IconButton(onClick = { text = "" }) { Icon(Icons.Outlined.Clear, "清除") }
                     IconButton(onClick = { menu = "type" }) { Icon(Icons.Outlined.FilterList, "内容类型") }
                     IconButton(onClick = { menu = "sort" }) { Icon(Icons.AutoMirrored.Outlined.Sort, "排序方式") }
-                    DropdownMenu(menu == "type", { menu = null }) {
+                    AppDropdownMenu(menu == "type", { menu = null }) {
                         feedTypes.forEach { (label, value) ->
                             DropdownMenuItem({ Text(label) }, { menu = null; feedVm.setFeedType(value) })
                         }
                     }
-                    DropdownMenu(menu == "sort", { menu = null }) {
+                    AppDropdownMenu(menu == "sort", { menu = null }) {
                         sortTypes.forEach { item ->
                             DropdownMenuItem({ Text(item.first) }, { menu = null; feedVm.setSort(item) })
                         }

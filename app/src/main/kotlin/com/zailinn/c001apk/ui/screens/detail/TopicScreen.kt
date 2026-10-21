@@ -11,7 +11,6 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.Icon
@@ -35,6 +34,7 @@ import com.zailinn.c001apk.AppContainer
 import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.ui.LocalSession
+import com.zailinn.c001apk.ui.common.AppDropdownMenu
 import com.zailinn.c001apk.ui.common.MessageBox
 import com.zailinn.c001apk.ui.common.RoundedImage
 import com.zailinn.c001apk.ui.common.StatusBox
@@ -140,7 +140,7 @@ fun TopicScreen(tag: String?, id: String?) {
                         }) { Icon(Icons.Outlined.Search, "搜索") }
                     }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }
-                    DropdownMenu(menu, { menu = false }) {
+                    AppDropdownMenu(menu, { menu = false }) {
                         val shareUrl = "https://www.coolapk1s.com/" + if (isTopic) "t/${data.title}" else "product/${data.id}"
                         DropdownMenuItem({ Text("复制链接") }, { menu = false; navigator.copy(shareUrl) })
                         DropdownMenuItem({ Text("分享") }, { menu = false; navigator.share(shareUrl) })

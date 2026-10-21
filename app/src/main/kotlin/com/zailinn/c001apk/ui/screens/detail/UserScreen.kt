@@ -25,7 +25,6 @@ import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.outlined.Share
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.Icon
@@ -51,6 +50,7 @@ import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.cards.ItemCard
+import com.zailinn.c001apk.ui.common.AppDropdownMenu
 import com.zailinn.c001apk.ui.common.Avatar
 import com.zailinn.c001apk.ui.common.HtmlText
 import com.zailinn.c001apk.ui.common.NetworkImage
@@ -173,7 +173,7 @@ fun UserScreen(uid: String) {
                         navigator.navigate(SearchRoute(title = data.username, pageType = "user", pageParam = data.uid))
                     }) { Icon(Icons.Outlined.Search, "搜索") }
                     IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }
-                    DropdownMenu(menu, { menu = false }) {
+                    AppDropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem({ Text("复制链接") }, { menu = false; navigator.copy("https://www.coolapk.com/u/${data.uid}") },
                             leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) })
                         DropdownMenuItem({ Text("分享") }, { menu = false; navigator.share("https://www.coolapk1s.com/u/${data.uid}") },

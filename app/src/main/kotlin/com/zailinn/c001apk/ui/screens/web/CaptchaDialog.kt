@@ -28,9 +28,9 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.zailinn.c001apk.CaptchaCoordinator
+import com.zailinn.c001apk.ui.common.AppDialog
 import com.zailinn.c001apk.ui.screens.appContainer
 
 private const val BASE_URL = "https://captcha.c001apk.invalid/"
@@ -67,7 +67,7 @@ fun CaptchaDialog(pending: CaptchaCoordinator.Pending) {
     val app = appContainer()
     var web by remember { mutableStateOf<WebView?>(null) }
     val html = remember(pending) { captchaHtml(pending.challenge.captchaId) }
-    Dialog(onDismissRequest = { pending.complete(null) }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
+    AppDialog(onDismissRequest = { pending.complete(null) }, properties = DialogProperties(usePlatformDefaultWidth = false)) {
         // Centered card, not a full page: the NetEase embed is ~320 px wide.
         Surface(shape = MaterialTheme.shapes.extraLarge, tonalElevation = 6.dp, modifier = Modifier.widthIn(max = 360.dp).padding(16.dp)) {
             Column {

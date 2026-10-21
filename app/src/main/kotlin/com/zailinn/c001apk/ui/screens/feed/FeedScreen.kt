@@ -20,15 +20,12 @@ import androidx.compose.material.icons.outlined.Info
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.Share
 import androidx.compose.material.icons.outlined.StarBorder
-import androidx.compose.material3.AlertDialog
-import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.FloatingActionButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.ModalBottomSheet
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.SegmentedButton
 import androidx.compose.material3.SegmentedButtonDefaults
@@ -62,6 +59,9 @@ import com.zailinn.c001apk.ui.cards.FeedFooter
 import com.zailinn.c001apk.ui.cards.ItemActions
 import com.zailinn.c001apk.ui.cards.ReplyCard
 import com.zailinn.c001apk.ui.cards.cardColor
+import com.zailinn.c001apk.ui.common.AppAlertDialog
+import com.zailinn.c001apk.ui.common.AppBottomSheet
+import com.zailinn.c001apk.ui.common.AppDropdownMenu
 import com.zailinn.c001apk.ui.common.HtmlText
 import com.zailinn.c001apk.ui.common.ImageGrid
 import com.zailinn.c001apk.ui.common.PagedListView
@@ -111,7 +111,7 @@ fun FeedScreen(id: String, toReplies: Boolean = false) {
                 if (notice.isNotEmpty()) IconButton(onClick = { showNotice = true }) { Icon(Icons.Outlined.Info, "账号详情") }
                 if (data != null) {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }
-                    DropdownMenu(menu, { menu = false }) {
+                    AppDropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem({ Text("复制链接") }, { menu = false; navigator.copy("https://www.coolapk.com/feed/$id") },
                             leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) })
                         DropdownMenuItem({ Text("分享") }, { menu = false; navigator.share("https://www.coolapk1s.com/feed/$id") },
@@ -216,7 +216,7 @@ fun FeedScreen(id: String, toReplies: Boolean = false) {
     thread?.let { origin -> ReplyThreadSheet(origin, onDismiss = { thread = null }) }
     if (collecting) CollectionPickerSheet(id, onDismiss = { collecting = false })
     if (showNotice) {
-        AlertDialog(
+        AppAlertDialog(
             onDismissRequest = { showNotice = false },
             title = { Text("账号信息暂不可用") },
             text = { Text(notice) },
@@ -275,7 +275,7 @@ private fun ReplyThreadSheet(origin: Datum, onDismiss: () -> Unit) {
     val actions = vm.actions.copy(
         onReply = { target, _ -> if (session.isLogin) replying = target else navigator.toast("登录后才能回复") },
     )
-    ModalBottomSheet(onDismissRequest = onDismiss) {
+    AppBottomSheet(onDismissRequest = onDismiss) {
         Text(
             "回复（${origin.string("replynum").orEmpty()}）",
             Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
