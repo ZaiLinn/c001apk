@@ -3,7 +3,6 @@ package com.zailinn.c001apk.ui.screens.main
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import com.zailinn.c001apk.data.SettingKeys
@@ -188,15 +187,19 @@ fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
 
 /**
  * Long press seen before the tab's own click handling; the release after it is
- * consumed so the tab does not also switch or refresh.
+ * consumed so the tab does not also switch or refresh. A finger that lifts or
+ * moves past the touch slop before the timeout is a tap or a swipe, not a long press.
  */
-private fun Modifier.onLongPress(action: () -> Unit) = pointerInput(Unit) {
+internal fun Modifier.onLongPress(action: () -> Unit) = pointerInput(Unit) {
     awaitEachGesture {
-        awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
-        val released = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
-            waitForUpOrCancellation(PointerEventPass.Initial)
+        val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+        val ended = withTimeoutOrNull(viewConfiguration.longPressTimeoutMillis) {
+            while (true) {
+                val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: break
+                if (!change.pressed || (change.position - down.position).getDistance() > viewConfiguration.touchSlop) break
+            }
         }
-        if (released != null) return@awaitEachGesture
+        if (ended != null) return@awaitEachGesture
         action()
         do {
             val event = awaitPointerEvent(PointerEventPass.Initial)
