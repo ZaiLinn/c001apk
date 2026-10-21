@@ -37,6 +37,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -53,7 +54,9 @@ import androidx.compose.ui.unit.sp
 import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.ui.common.ActionSheet
 import com.zailinn.c001apk.ui.common.Avatar
+import com.zailinn.c001apk.ui.common.ContentPress
 import com.zailinn.c001apk.ui.common.HtmlText
+import com.zailinn.c001apk.ui.common.LocalContentPress
 import com.zailinn.c001apk.ui.common.ImageGrid
 import com.zailinn.c001apk.ui.common.NetworkImage
 import com.zailinn.c001apk.ui.common.RoundedImage
@@ -342,6 +345,7 @@ fun NotificationCard(data: Datum, actions: ItemActions) {
     var menu by remember { mutableStateOf(false) }
     val note = data.string("note").orEmpty()
     val fromUid = data.string("fromuid") ?: data.uid
+    val press = remember { ContentPress() }
     Surface(
         color = cardColor(), shape = CardShape,
         modifier = Modifier.fillMaxWidth().clip(CardShape).combinedClickable(
@@ -354,22 +358,24 @@ fun NotificationCard(data: Datum, actions: ItemActions) {
                     noticeLink(note)?.let { navigator.openLink(it) }
                 }
             },
-            onLongClick = { navigator.navigate(CopyRoute(htmlToCopy(note))) },
+            onLongClick = { if (!press.active) navigator.navigate(CopyRoute(htmlToCopy(note))) },
         ),
     ) {
-        Box {
-            Row(Modifier.padding(10.dp)) {
-                Avatar(data.string("fromUserAvatar"), 36.dp) { navigator.openUser(fromUid) }
-                Spacer(Modifier.width(10.dp))
-                Column(Modifier.weight(1f).padding(end = 24.dp)) {
-                    HtmlText(data.string("fromusername").orEmpty())
-                    HtmlText(note, fontSize = 14.sp, picArr = data.picArr)
-                    if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(top = 6.dp))
-                    Text(fromToday(data.dateline), fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
+        CompositionLocalProvider(LocalContentPress provides press) {
+            Box {
+                Row(Modifier.padding(10.dp)) {
+                    Avatar(data.string("fromUserAvatar"), 36.dp) { navigator.openUser(fromUid) }
+                    Spacer(Modifier.width(10.dp))
+                    Column(Modifier.weight(1f).padding(end = 24.dp)) {
+                        HtmlText(data.string("fromusername").orEmpty())
+                        HtmlText(note, fontSize = 14.sp, picArr = data.picArr)
+                        if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(top = 6.dp))
+                        Text(fromToday(data.dateline), fontSize = 13.sp, color = MaterialTheme.colorScheme.outline)
+                    }
                 }
-            }
-            IconButton(onClick = { menu = true }, Modifier.align(Alignment.TopEnd)) {
-                Icon(Icons.Outlined.KeyboardArrowDown, "更多", tint = MaterialTheme.colorScheme.outline)
+                IconButton(onClick = { menu = true }, Modifier.align(Alignment.TopEnd)) {
+                    Icon(Icons.Outlined.KeyboardArrowDown, "更多", tint = MaterialTheme.colorScheme.outline)
+                }
             }
         }
     }

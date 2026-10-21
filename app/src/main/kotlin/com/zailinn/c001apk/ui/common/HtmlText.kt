@@ -15,6 +15,8 @@ import androidx.compose.foundation.text.selection.SelectionContainer
 import androidx.compose.foundation.text.selection.SelectionState
 import androidx.compose.foundation.text.selection.rememberSelectionState
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
+import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Photo
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
@@ -25,6 +27,7 @@ import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
+import androidx.compose.runtime.setValue
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
@@ -40,6 +43,9 @@ import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.AwaitPointerEventScope
+import androidx.compose.ui.input.pointer.PointerEventPass
+import androidx.compose.ui.input.pointer.PointerInputChange
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.AnnotatedString
 import androidx.compose.ui.text.TextLayoutResult
@@ -58,6 +64,7 @@ import androidx.compose.ui.unit.em
 import androidx.compose.ui.unit.sp
 import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.nav.LocalNavigator
+
 private const val LINK = "url"
 
 private val emojiPattern = Regex("\\[[^\\]]+]")
@@ -142,21 +149,48 @@ fun HtmlText(
     // Links are hit-tested per character. Compose's own link handling uses the
     // bounding box of a link, so a topic wrapped onto the next line swallowed
     // taps on the plain text beside it. Taps off a link fall through to the card.
+    // A long press on a web link shows its address with copy and open; it is
+    // watched in the Initial pass so the text selection does not start as well.
+    val press = LocalContentPress.current
+    var sheetUrl by remember { mutableStateOf<String?>(null) }
     val links = if (built.hasLinks) {
-        Modifier.pointerInput(built) {
+        Modifier.pointerInput(built, press) {
             awaitEachGesture {
-                val down = awaitFirstDown()
+                val down = awaitFirstDown(pass = PointerEventPass.Initial)
                 val url = layout.value?.let { linkAt(built.text, it, down.position) } ?: return@awaitEachGesture
                 down.consume()
-                val up = waitForUpOrCancellation() ?: return@awaitEachGesture
-                up.consume()
-                current(url)
+                press?.active = true
+                try {
+                    val timeout = if (isWebLink(url)) viewConfiguration.longPressTimeoutMillis else Long.MAX_VALUE
+                    when (withTimeoutOrNull(timeout) { awaitTap(down) }) {
+                        true -> current(url)
+                        false -> Unit
+                        null -> {
+                            sheetUrl = url
+                            do {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                event.changes.forEach { it.consume() }
+                            } while (event.changes.any { it.pressed })
+                        }
+                    }
+                } finally {
+                    press?.active = false
+                }
             }
         }
     } else Modifier
+    sheetUrl?.let { url ->
+        ActionSheet(
+            listOf(
+                SheetAction(Icons.Outlined.ContentCopy, "复制") { navigator.copy(url) },
+                SheetAction(Icons.AutoMirrored.Outlined.OpenInNew, "打开") { current(url) },
+            ),
+            onDismiss = { sheetUrl = null },
+            header = url,
+        )
+    }
     // A press on the text tells the card to leave its long press to the selection,
     // and a tap on the text is not a tap on the card.
-    val press = LocalContentPress.current
     val taps = if (selectable) {
         Modifier.pointerInput(press) {
             awaitEachGesture {
@@ -232,6 +266,20 @@ internal fun copyWithLinks(text: AnnotatedString): String = buildString {
     }
     append(text.text, at, text.length)
 }
+
+/** True when [down] lifts in place, false when it moves away or is lost; the lift is consumed. */
+private suspend fun AwaitPointerEventScope.awaitTap(down: PointerInputChange): Boolean {
+    while (true) {
+        val change = awaitPointerEvent(PointerEventPass.Initial).changes.firstOrNull { it.id == down.id } ?: return false
+        if ((change.position - down.position).getDistance() > viewConfiguration.touchSlop) return false
+        if (!change.pressed) {
+            change.consume()
+            return true
+        }
+    }
+}
+
+private fun isWebLink(url: String) = url.startsWith("http://") || url.startsWith("https://")
 
 /** The link under [position], only when a linked character itself is touched. */
 internal fun linkAt(text: AnnotatedString, layout: TextLayoutResult, position: Offset): String? {

@@ -70,11 +70,21 @@ fun IconText(icon: ImageVector, text: String, modifier: Modifier = Modifier, col
 
 data class SheetAction(val icon: ImageVector, val label: String, val danger: Boolean = false, val onClick: () -> Unit)
 
-/** Bottom sheet with a list of actions for "more" menus. */
+/** Bottom sheet with a list of actions for "more" menus, under an optional [header] line such as a link address. */
 @Composable
-fun ActionSheet(actions: List<SheetAction>, onDismiss: () -> Unit) {
+fun ActionSheet(actions: List<SheetAction>, onDismiss: () -> Unit, header: String? = null) {
     ModalBottomSheet(onDismissRequest = onDismiss) {
         Column(Modifier.fillMaxWidth().navigationBarsPadding().padding(bottom = 8.dp)) {
+            header?.let {
+                Text(
+                    it,
+                    Modifier.padding(horizontal = 16.dp, vertical = 8.dp),
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    style = MaterialTheme.typography.bodyMedium,
+                    maxLines = 4,
+                    overflow = TextOverflow.Ellipsis,
+                )
+            }
             actions.forEach { action ->
                 ListItem(
                     headlineContent = {

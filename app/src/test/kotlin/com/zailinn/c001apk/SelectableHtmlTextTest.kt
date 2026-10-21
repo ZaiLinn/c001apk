@@ -125,7 +125,7 @@ class SelectableHtmlTextTest {
         node.fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
         val layout = layouts.single()
         val text = layout.layoutInput.text.text
-        // Long press on the plain "网盘B" and drag across the second link.
+        // Long press on the plain "网盘B" and drag across the second link; a long press on a link itself opens its sheet.
         node.performTouchInput {
             down(layout.getBoundingBox(text.indexOf("网盘B") + 1).center)
             advanceEventTime(viewConfiguration.longPressTimeoutMillis + 100)
@@ -137,5 +137,50 @@ class SelectableHtmlTextTest {
         compose.waitForIdle()
         val copied = clips.lastOrNull().orEmpty()
         assertTrue("copied: $copied", copied.contains("https://pan.example.com/b") && !copied.contains("https://pan.example.com/a"))
+    }
+
+    @OptIn(ExperimentalFoundationApi::class)
+    @Test
+    fun longPressOnAWebLinkShowsItsAddressInsteadOfSelecting() {
+        val clips = mutableListOf<String>()
+        val fake = object : androidx.compose.ui.platform.Clipboard {
+            override val nativeClipboard: androidx.compose.ui.platform.NativeClipboard
+                get() = compose.activity.getSystemService(android.content.ClipboardManager::class.java)
+            override suspend fun getClipEntry(): androidx.compose.ui.platform.ClipEntry? = null
+            override suspend fun setClipEntry(clipEntry: androidx.compose.ui.platform.ClipEntry?) {
+                clipEntry?.clipData?.getItemAt(0)?.text?.let { clips += it.toString() }
+            }
+        }
+        var cardLongPress = 0
+        compose.setContent {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val nav = androidx.navigation.compose.rememberNavController()
+            val navigator = AppNavigator(context, nav, AppContainer(context, "test-${UUID.randomUUID()}").settings)
+            val press = androidx.compose.runtime.remember { ContentPress() }
+            CompositionLocalProvider(
+                LocalNavigator provides navigator,
+                LocalContentPress provides press,
+                androidx.compose.ui.platform.LocalClipboard provides fake,
+            ) {
+                Column(Modifier.width(367.dp).combinedClickable(onClick = {}, onLongClick = { if (!press.active) cardLongPress++ })) {
+                    HtmlText("""下载：<a href="https://pan.example.com/s/abc">查看链接</a>""", fontSize = 16.sp, selectable = true)
+                }
+            }
+        }
+        val node = compose.onNodeWithText("下载", substring = true, useUnmergedTree = true)
+        val layouts = mutableListOf<TextLayoutResult>()
+        node.fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+        val layout = layouts.single()
+        node.performTouchInput { longClick(layout.getBoundingBox(layout.layoutInput.text.text.indexOf("查看链接") + 1).center) }
+        compose.waitForIdle()
+
+        assertEquals("card long press", 0, cardLongPress)
+        compose.onNodeWithText("https://pan.example.com/s/abc").assertExists()
+        compose.onNodeWithText("复制").assertExists()
+        compose.onNodeWithText("打开").assertExists()
+
+        node.performKeyInput { withKeyDown(androidx.compose.ui.input.key.Key.CtrlLeft) { pressKey(androidx.compose.ui.input.key.Key.C) } }
+        compose.waitForIdle()
+        assertEquals("no text selection under the sheet", emptyList<String>(), clips)
     }
 }

@@ -46,6 +46,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.derivedStateOf
 import androidx.compose.runtime.getValue
@@ -65,7 +66,9 @@ import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.common.ActionSheet
 import com.zailinn.c001apk.ui.common.Avatar
 import com.zailinn.c001apk.ui.common.FooterItem
+import com.zailinn.c001apk.ui.common.ContentPress
 import com.zailinn.c001apk.ui.common.HtmlText
+import com.zailinn.c001apk.ui.common.LocalContentPress
 import com.zailinn.c001apk.ui.common.NetworkImage
 import com.zailinn.c001apk.ui.common.PagedList
 import com.zailinn.c001apk.ui.common.SheetAction
@@ -289,12 +292,13 @@ private fun Bubble(item: Datum, mine: Boolean, onAvatar: () -> Unit, onLongClick
         }
         Column(horizontalAlignment = if (mine) Alignment.End else Alignment.Start, modifier = Modifier.widthIn(max = 280.dp)) {
             if (!item.message.isNullOrEmpty()) {
+                val press = remember { ContentPress() }
                 Box(
                     Modifier.clip(RoundedCornerShape(12.dp))
                         .background(if (mine) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerHigh)
-                        .combinedClickable(onClick = {}, onLongClick = onLongClick)
+                        .combinedClickable(onClick = {}, onLongClick = { if (!press.active) onLongClick() })
                         .padding(10.dp),
-                ) { HtmlText(item.message.orEmpty()) }
+                ) { CompositionLocalProvider(LocalContentPress provides press) { HtmlText(item.message.orEmpty()) } }
             }
             item.string("message_pic")?.takeIf { it.isNotEmpty() }?.let { pic ->
                 if (pic.startsWith("http")) {

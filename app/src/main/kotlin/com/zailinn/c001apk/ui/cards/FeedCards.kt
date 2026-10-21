@@ -70,6 +70,7 @@ import com.zailinn.c001apk.ui.nav.CopyRoute
 import com.zailinn.c001apk.ui.nav.FeedRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.UserRoute
+
 val CardShape = RoundedCornerShape(12.dp)
 
 @Composable
@@ -447,15 +448,18 @@ private fun NestedReplies(parent: Datum, actions: ItemActions, more: Int) {
             val ruid = reply.string("ruid")
             val rUser = if (ruid == parent.uid) "" else """<a href="/u/$ruid">${reply.string("rusername").orEmpty()}${tag(ruid, feedUid, parent.uid)}</a>"""
             val pic = if (reply.picArr.isEmpty()) "" else """ <a href="${reply.pic}">查看图片(${reply.picArr.size})</a>"""
-            HtmlText(
-                """<a href="/u/${reply.uid}">${reply.displayName}${tag(reply.uid, feedUid, parent.uid)}</a>回复$rUser: ${reply.message.orEmpty()}$pic""",
-                Modifier.fillMaxWidth()
-                    .combinedClickable(onClick = { actions.onReply?.invoke(reply, parent) }, onLongClick = { menuFor = reply })
-                    .padding(horizontal = 8.dp, vertical = 4.dp),
-                fontSize = 14.sp,
-                picArr = reply.picArr,
-                onShowReplies = { actions.onShowReplies?.invoke(parent) },
-            )
+            val press = remember { ContentPress() }
+            CompositionLocalProvider(LocalContentPress provides press) {
+                HtmlText(
+                    """<a href="/u/${reply.uid}">${reply.displayName}${tag(reply.uid, feedUid, parent.uid)}</a>回复$rUser: ${reply.message.orEmpty()}$pic""",
+                    Modifier.fillMaxWidth()
+                        .combinedClickable(onClick = { actions.onReply?.invoke(reply, parent) }, onLongClick = { if (!press.active) menuFor = reply })
+                        .padding(horizontal = 8.dp, vertical = 4.dp),
+                    fontSize = 14.sp,
+                    picArr = reply.picArr,
+                    onShowReplies = { actions.onShowReplies?.invoke(parent) },
+                )
+            }
         }
         if (more > 0) {
             Text(
