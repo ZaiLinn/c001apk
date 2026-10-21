@@ -54,6 +54,7 @@ import androidx.compose.ui.text.PlaceholderVerticalAlign
 import androidx.compose.ui.text.SpanStyle
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.ui.text.buildAnnotatedString
+import androidx.compose.ui.text.font.FontStyle
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.text.withAnnotation
@@ -304,6 +305,21 @@ fun Badge(text: String) {
     )
 }
 
+/** Bold, italic and heading sizes from Markdown articles; null for plain text. */
+private fun markdownStyle(part: HtmlPart.Text): SpanStyle? {
+    if (!part.bold && !part.italic && part.heading == 0) return null
+    return SpanStyle(
+        fontWeight = if (part.bold || part.heading > 0) FontWeight.Bold else null,
+        fontStyle = if (part.italic) FontStyle.Italic else null,
+        fontSize = when (part.heading) {
+            1 -> 1.3.em
+            2 -> 1.2.em
+            3 -> 1.1.em
+            else -> TextUnit.Unspecified
+        },
+    )
+}
+
 private fun buildHtml(html: String, showEmoji: Boolean, linkColor: Color): BuiltHtml {
     val inline = mutableSetOf<String>()
     val linkStyle = SpanStyle(color = linkColor)
@@ -333,9 +349,13 @@ private fun buildHtml(html: String, showEmoji: Boolean, linkColor: Color): Built
         for (part in parseHtml(html)) {
             when (part) {
                 HtmlPart.Break -> append('\n')
-                is HtmlPart.Text ->
+                is HtmlPart.Text -> {
+                    val style = markdownStyle(part)
+                    if (style != null) pushStyle(style)
                     if (part.href == null) appendText(part.value)
                     else withAnnotation(LINK, part.href) { withStyle(linkStyle) { appendText(part.value) } }
+                    if (style != null) pop()
+                }
                 is HtmlPart.Image -> {
                     inline += PHOTO
                     if (part.href == null) appendInlineContent(PHOTO, "[图片]")

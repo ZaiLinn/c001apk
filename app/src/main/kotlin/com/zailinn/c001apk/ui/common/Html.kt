@@ -2,11 +2,19 @@ package com.zailinn.c001apk.ui.common
 
 /**
  * Minimal tokenizer for the HTML subset in Coolapk messages: links, line
- * breaks, images and entities. Much cheaper than building a DOM for every
- * card while scrolling.
+ * breaks, images and entities, plus the bold, italic and heading tags that
+ * [markdownToHtml] produces. Much cheaper than building a DOM for every card
+ * while scrolling.
  */
 sealed interface HtmlPart {
-    data class Text(val value: String, val href: String?) : HtmlPart
+    data class Text(
+        val value: String,
+        val href: String?,
+        val bold: Boolean = false,
+        val italic: Boolean = false,
+        /** 1 to 6 inside a heading, otherwise 0. */
+        val heading: Int = 0,
+    ) : HtmlPart
     data object Break : HtmlPart
     data class Image(val src: String, val href: String?) : HtmlPart
 }
@@ -22,9 +30,12 @@ fun parseHtml(html: String): List<HtmlPart> {
     val parts = mutableListOf<HtmlPart>()
     val text = StringBuilder()
     var href: String? = null
+    var bold = 0
+    var italic = 0
+    var heading = 0
     fun flush() {
         if (text.isNotEmpty()) {
-            parts += HtmlPart.Text(decodeEntities(text.toString()), href)
+            parts += HtmlPart.Text(decodeEntities(text.toString()), href, bold > 0, italic > 0, heading)
             text.clear()
         }
     }
@@ -51,6 +62,9 @@ fun parseHtml(html: String): List<HtmlPart> {
             "a" -> { flush(); href = if (closing) null else attribute(tag, "href").orEmpty() }
             "img" -> { flush(); attribute(tag, "src")?.takeIf { it.isNotEmpty() }?.let { parts += HtmlPart.Image(it, href) } }
             "p", "div" -> if (closing) { flush(); parts += HtmlPart.Break }
+            "b", "strong" -> { flush(); bold = (bold + if (closing) -1 else 1).coerceAtLeast(0) }
+            "i", "em" -> { flush(); italic = (italic + if (closing) -1 else 1).coerceAtLeast(0) }
+            "h1", "h2", "h3", "h4", "h5", "h6" -> { flush(); heading = if (closing) 0 else name[1] - '0' }
         }
         i = end + 1
     }
@@ -117,3 +131,27 @@ fun htmlToCopy(html: String): String {
         }
     }.trim()
 }
+
+private val mdHeading = Regex("""^(#{1,6})\s+(.*)$""")
+private val mdQuote = Regex("""^>\s?(.*)$""")
+private val mdBullet = Regex("""^(\s*)[-*+]\s+(.*)$""")
+private val mdLink = Regex("""\[([^\]\n]+)]\((https?://[^)\s]+)\)""")
+private val mdBold = Regex("""\*\*(.+?)\*\*""")
+private val mdItalic = Regex("""(?<![*\w])\*(?![*\s])(.+?)(?<![*\s])\*(?![*\w])""")
+
+/**
+ * Article text blocks arrive as Markdown, not HTML: headings, bold, italic,
+ * links, lists and quotes become the subset [parseHtml] reads. HTML already in
+ * the text, like the `<!--break-->` markers, passes through.
+ */
+fun markdownToHtml(markdown: String): String = markdown.lines().joinToString("\n") { line ->
+    mdHeading.matchEntire(line)?.let { val level = it.groupValues[1].length; "<h$level>${markdownInline(it.groupValues[2])}</h$level>" }
+        ?: mdQuote.matchEntire(line)?.let { "▎<i>${markdownInline(it.groupValues[1])}</i>" }
+        ?: mdBullet.matchEntire(line)?.let { "${it.groupValues[1]}• ${markdownInline(it.groupValues[2])}" }
+        ?: markdownInline(line)
+}
+
+private fun markdownInline(text: String): String = text
+    .replace(mdLink) { """<a href="${it.groupValues[2]}">${it.groupValues[1]}</a>""" }
+    .replace(mdBold) { "<b>${it.groupValues[1]}</b>" }
+    .replace(mdItalic) { "<i>${it.groupValues[1]}</i>" }

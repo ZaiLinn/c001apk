@@ -6,6 +6,7 @@ import com.zailinn.c001apk.ui.common.HtmlPart
 import com.zailinn.c001apk.ui.common.copyWithLinks
 import com.zailinn.c001apk.ui.common.htmlToCopy
 import com.zailinn.c001apk.ui.common.htmlToPlain
+import com.zailinn.c001apk.ui.common.markdownToHtml
 import com.zailinn.c001apk.ui.common.parseHtml
 import org.junit.Assert.assertEquals
 import org.junit.Test
@@ -62,5 +63,34 @@ class HtmlTest {
         }
         assertEquals("A：查看链接（https://pan.example.com/a） B：查看链接（https://pan.example.com/b）", copyWithLinks(text))
         assertEquals("链接（https://pan.example.com/b）", copyWithLinks(text.subSequence(text.length - 2, text.length)))
+    }
+
+    /** Text blocks of the 图文 feed 74399579 (酷周报 2642): Markdown with `<!--break-->` markers. */
+    @Test
+    fun articleMarkdownBecomesHeadingsAndBold() {
+        val block = "阶跃终端带来品牌首款智能体手机。\n\n**周五时间到，搬好小板凳<!--break-->，咱们一起闲聊本周新鲜事～**\n\n# 💫苹果发布HomeView等多款智能家居新品\n\n售价299美元"
+        assertEquals(
+            listOf(
+                HtmlPart.Text("阶跃终端带来品牌首款智能体手机。", null),
+                HtmlPart.Break, HtmlPart.Break,
+                HtmlPart.Text("周五时间到，搬好小板凳，咱们一起闲聊本周新鲜事～", null, bold = true),
+                HtmlPart.Break, HtmlPart.Break,
+                HtmlPart.Text("💫苹果发布HomeView等多款智能家居新品", null, heading = 1),
+                HtmlPart.Break, HtmlPart.Break,
+                HtmlPart.Text("售价299美元", null),
+            ),
+            parseHtml(markdownToHtml(block)),
+        )
+    }
+
+    @Test
+    fun markdownLinksListsQuotesAndItalic() {
+        assertEquals(
+            listOf(HtmlPart.Text("下载：", null), HtmlPart.Text("网盘", "https://pan.example.com/s/a_b")),
+            parseHtml(markdownToHtml("下载：[网盘](https://pan.example.com/s/a_b)")),
+        )
+        assertEquals("• 第一项\n  • 子项\n1. 有序", htmlToPlain(markdownToHtml("- 第一项\n  * 子项\n1. 有序")))
+        assertEquals(listOf(HtmlPart.Text("▎", null), HtmlPart.Text("引用", null, italic = true)), parseHtml(markdownToHtml("> 引用")))
+        assertEquals(listOf(HtmlPart.Text("很", null, italic = true), HtmlPart.Text(" 2*3*4 不变", null)), parseHtml(markdownToHtml("*很* 2*3*4 不变")))
     }
 }
