@@ -35,6 +35,7 @@ import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -42,6 +43,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
@@ -68,6 +70,7 @@ import com.zailinn.c001apk.ui.screens.appViewModel
 import com.zailinn.c001apk.ui.screens.compose.ComposeTarget
 import com.zailinn.c001apk.ui.screens.compose.ComposerSheet
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
+
 private data class ReplyRequest(val target: Datum?, val parent: Datum?)
 
 @Composable
@@ -94,9 +97,12 @@ fun FeedScreen(id: String) {
     }
     val actions = vm.actions.copy(onReply = { target, parent -> reply(target, parent) }, onShowReplies = { thread = it })
 
+    // The title bar slides away while reading and returns on the first scroll down.
+    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
     Scaffold(
+        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
         topBar = {
-            SimpleTopBar(data?.string("feedTypeName") ?: "动态") {
+            SimpleTopBar(data?.string("feedTypeName") ?: "动态", scrollBehavior) {
                 if (notice.isNotEmpty()) IconButton(onClick = { showNotice = true }) { Icon(Icons.Outlined.Info, "账号详情") }
                 if (data != null) {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }

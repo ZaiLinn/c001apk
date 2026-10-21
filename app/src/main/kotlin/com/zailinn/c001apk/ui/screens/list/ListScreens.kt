@@ -4,6 +4,9 @@ import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.TopAppBarScrollBehavior
 import com.zailinn.c001apk.ui.screens.collection.CollectionEditDialog
 import com.zailinn.c001apk.ui.screens.collection.createCollection
 import androidx.compose.material.icons.outlined.PushPin
@@ -63,12 +66,20 @@ fun BackButton() {
     IconButton(onClick = { navigator.back() }) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
 }
 
+/** With [scrollBehavior] the bar can slide away while reading, keeping its color when content scrolls under it. */
 @Composable
-fun SimpleTopBar(title: String, actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {}) {
+fun SimpleTopBar(
+    title: String,
+    scrollBehavior: TopAppBarScrollBehavior? = null,
+    actions: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit = {},
+) {
     TopAppBar(
         title = { Text(title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
         navigationIcon = { BackButton() },
         actions = actions,
+        scrollBehavior = scrollBehavior,
+        colors = if (scrollBehavior == null) TopAppBarDefaults.topAppBarColors()
+        else TopAppBarDefaults.topAppBarColors(scrolledContainerColor = MaterialTheme.colorScheme.surface),
     )
 }
 

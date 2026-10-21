@@ -92,7 +92,11 @@ fun SearchScreen(title: String?, pageType: String?, pageParam: String?) {
                     TextField(
                         text, { text = it },
                         Modifier.fillMaxWidth().focusRequester(focus),
-                        placeholder = { Text(if (title != null) "在${scopeLabel(pageType)}「$title」中搜索" else "搜索") },
+                        // 14sp like the home search pill.
+                        textStyle = MaterialTheme.typography.bodyMedium,
+                        placeholder = {
+                            Text(if (title != null) "在${scopeLabel(pageType)}「$title」中搜索" else "搜索", style = MaterialTheme.typography.bodyMedium)
+                        },
                         singleLine = true,
                         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
                         keyboardActions = KeyboardActions(onSearch = { search(text) }),
