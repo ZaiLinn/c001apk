@@ -17,6 +17,14 @@ import javax.net.ssl.SSLPeerUnverifiedException
 enum class ApiFailureKind {
     Transport, Cancelled, Http, Business, Authentication, Captcha, RateLimit, RiskControl,
     ClientUpgrade, InvalidResponse, Parsing,
+    /** "当前版本存在异常 (-419)" or 评论接口异常: the server does not accept the device's 数盟 ID, as with a stale one. */
+    DeviceRejected,
+}
+
+/** App-wide hooks for failures the whole app should react to, not just the screen that asked. */
+object ApiFailureEvents {
+    /** Called, on the thread that read the response, whenever the device code is rejected. */
+    @Volatile var onDeviceRejected: (() -> Unit)? = null
 }
 
 /**
@@ -76,6 +84,12 @@ fun readApiObject(response: ApiResponse): JsonObject {
     return checkApiObject(body)
 }
 
+/**
+ * How the server answers a 数盟 ID it does not accept, as seen with stale IDs:
+ * -419 on feed details, 评论接口异常 on replies and sub-replies.
+ */
+private val DEVICE_REJECTED_MARKERS = listOf("-419", "当前版本存在异常", "评论接口异常")
+
 /** A short, readable server message, or null when there is none worth showing. */
 private fun serverReason(message: String): String? =
     message.replace(Regex("<[^>]*>"), "").trim().takeIf { it.isNotEmpty() && it.length <= 80 && it.any { c -> c.code > 0x2E80 } }
@@ -84,11 +98,14 @@ fun checkApiObject(body: JsonObject): JsonObject {
     val marker = body.raw("messageStatus").orEmpty().lowercase()
     val message = body.raw("message").orEmpty()
     val error = body.raw("error")
-    val clues = "$marker $message ${error.orEmpty()}".lowercase()
+    val data = body["data"]
+    // Some failures come as HTTP 200 with the reason as a string in `data`, like 评论接口异常.
+    val dataText = (data as? JsonPrimitive)?.takeIf { it.isString }?.content.orEmpty()
+    val clues = "$marker $message ${error.orEmpty()} $dataText".lowercase()
     val code = body.raw("code")?.toIntOrNull()
     val businessStatus = body.raw("status")?.toIntOrNull()
-    val data = body["data"]
-    val failed = (code != null && code !in setOf(0, 1, 200)) ||
+    val deviceRejected = DEVICE_REJECTED_MARKERS.any { it in clues }
+    val failed = deviceRejected || (code != null && code !in setOf(0, 1, 200)) ||
         (businessStatus != null && businessStatus !in setOf(0, 1)) ||
         marker.startsWith("err_") ||
         (error != null && error !in setOf("", "0", "false")) ||
@@ -110,6 +127,10 @@ fun checkApiObject(body: JsonObject): JsonObject {
             marker == "err_request_need_upgrade_new_version" -> ApiFailure(
                 ApiFailureKind.ClientUpgrade, coded("当前客户端协议未被服务端接受，请更新客户端后重试"), errorCode = errorCode,
             )
+            deviceRejected -> {
+                ApiFailureEvents.onDeviceRejected?.invoke()
+                ApiFailure(ApiFailureKind.DeviceRejected, coded(reason ?: "服务端拒绝了当前设备标识，请稍后重试"), errorCode = errorCode)
+            }
             clues.contains("captcha") || clues.contains("验证码") ->
                 ApiFailure(ApiFailureKind.Captcha, "请求需要验证码验证，请完成验证后重试", errorCode = errorCode)
             clues.contains("login") || clues.contains("auth") || clues.contains("登录") || code == 401 ->

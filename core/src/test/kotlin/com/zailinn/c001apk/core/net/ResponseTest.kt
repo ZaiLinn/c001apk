@@ -131,4 +131,26 @@ class ResponseTest {
         assertTrue(failure.message.contains("超时"))
         assertTrue(!failure.message.contains("synthetic-secret"))
     }
+
+    /** The reply seen after importing a 数盟 ID that does not match: its own kind, and the app is told. */
+    @Test
+    fun deviceRejectionIsItsOwnKindAndNotifies() {
+        var told = 0
+        ApiFailureEvents.onDeviceRejected = { told++ }
+        try {
+            val failure = failureOf("""{"status":403,"message":"检测到当前版本存在异常，可能对您的账号信息安全带来风险。暂时无法访问该内容，请使用官方APP访问(-419)"}""")
+            assertEquals(ApiFailureKind.DeviceRejected, failure.kind)
+            assertEquals(1, told)
+            assertTrue(failure.message.endsWith("（错误码 403）"))
+            failureOf("""{"status":403,"message":"其他原因"}""")
+            assertEquals("other failures do not notify", 1, told)
+            // Replies with a stale ID: HTTP 200, the reason as a string in data.
+            val replies = failureOf("""{"data":"评论接口异常"}""")
+            assertEquals(ApiFailureKind.DeviceRejected, replies.kind)
+            assertEquals("评论接口异常", replies.message)
+            assertEquals(2, told)
+        } finally {
+            ApiFailureEvents.onDeviceRejected = null
+        }
+    }
 }
