@@ -31,11 +31,18 @@ data class FeedRecord(
             uid = feed.uid.orEmpty(),
             username = feed.displayName,
             userAvatar = feed.userInfo?.userAvatar ?: feed.userAvatar.orEmpty(),
-            message = feed.message.orEmpty().take(150),
+            message = preview(feed.message.orEmpty()),
             device = feed.string("device_title").orEmpty(),
             dateline = feed.dateline ?: 0,
             time = System.currentTimeMillis(),
         )
+
+        /**
+         * The first [max] characters of an HTML message, without a tag or entity cut in half,
+         * which would show as raw markup.
+         */
+        fun preview(html: String, max: Int = 150): String =
+            html.take(max).replace(Regex("<[^>]*$"), "").replace(Regex("&#?\\w*$"), "")
     }
 }
 

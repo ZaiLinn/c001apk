@@ -93,4 +93,31 @@ class HtmlTest {
         assertEquals(listOf(HtmlPart.Text("▎", null), HtmlPart.Text("引用", null, italic = true)), parseHtml(markdownToHtml("> 引用")))
         assertEquals(listOf(HtmlPart.Text("很", null, italic = true), HtmlPart.Text(" 2*3*4 不变", null)), parseHtml(markdownToHtml("*很* 2*3*4 不变")))
     }
+
+    /** A history or list preview cut off inside a link shows the text before it, not raw markup. */
+    @Test
+    fun tagCutOffAtTheEndIsDropped() {
+        assertEquals(
+            listOf(HtmlPart.Text("【闲鱼】", null)),
+            parseHtml("""【闲鱼】<a class="feed-link-url" href="https://m.tb.cn/h.jWc7NwM?tk=kEZ7" target="_blank" re"""),
+        )
+        assertEquals(listOf(HtmlPart.Text("#话题#", "/t/a")), parseHtml("""<a href="/t/a">#话题#</a><a class="feed-link-tag" href="/t/%E8"""))
+        assertEquals(listOf(HtmlPart.Text("1<2 且 a<b", null)), parseHtml("1<2 且 a<b"))
+    }
+
+    /** Feed and reply HTML keeps its links and topics while its Markdown is styled. */
+    @Test
+    fun markdownInsideFeedHtml() {
+        assertEquals(
+            listOf(
+                HtmlPart.Text("#话题#", "/t/x"),
+                HtmlPart.Text(" ", null),
+                HtmlPart.Text("重点", null, bold = true),
+                HtmlPart.Break,
+                HtmlPart.Text("▎", null),
+                HtmlPart.Text("引用", null, italic = true),
+            ),
+            parseHtml(markdownToHtml("<a href=\"/t/x\">#话题#</a> **重点**\n&gt; 引用")),
+        )
+    }
 }

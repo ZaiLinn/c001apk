@@ -67,7 +67,6 @@ import com.zailinn.c001apk.ui.common.ImageGrid
 import com.zailinn.c001apk.ui.common.PagedListView
 import com.zailinn.c001apk.ui.common.StatusBox
 import com.zailinn.c001apk.ui.common.htmlToPlain
-import com.zailinn.c001apk.ui.common.markdownToHtml
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.collection.CollectionPickerSheet
 import com.zailinn.c001apk.ui.screens.appViewModel
@@ -239,10 +238,7 @@ private fun ArticleBody(data: Datum, blocks: List<FeedArticle>, actions: ItemAct
         blocks.forEach { block ->
             when (block.type) {
                 "title" -> HtmlText(block.title.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = 17.sp, bold = true, selectable = true)
-                "text" -> {
-                    val html = remember(block.message) { markdownToHtml(block.message.orEmpty()) }
-                    HtmlText(html, Modifier.padding(horizontal = 16.dp), fontSize = TextSizes.Body, selectable = true)
-                }
+                "text" -> HtmlText(block.message.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = TextSizes.Body, selectable = true)
                 "image" -> Column(Modifier.padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     val url = block.url.orEmpty()
                     ImageGridWithIndex(url, images)

@@ -26,6 +26,8 @@ private fun attribute(tag: String, name: String): String? =
         decodeEntities(m.groupValues[2].ifEmpty { m.groupValues[3].ifEmpty { m.groupValues[4] } })
     }
 
+private val unclosedTag = Regex("""</?(a|img|br|p|div|span|b|strong|i|em|h[1-6])\s[^<>]*""", RegexOption.IGNORE_CASE)
+
 fun parseHtml(html: String): List<HtmlPart> {
     val parts = mutableListOf<HtmlPart>()
     val text = StringBuilder()
@@ -45,6 +47,9 @@ fun parseHtml(html: String): List<HtmlPart> {
         val next = html.getOrNull(i + 1)
         val end = if (c == '<' && next != null && (next.isLetter() || next == '/' || next == '!')) html.indexOf('>', i) else -1
         if (end < 0) {
+            // A message cut short mid-tag, as list and history previews are, would
+            // otherwise show the rest of the tag as raw markup.
+            if (c == '<' && unclosedTag.matches(html.substring(i))) break
             if (c == '\n') {
                 flush()
                 parts += HtmlPart.Break
@@ -133,16 +138,17 @@ fun htmlToCopy(html: String): String {
 }
 
 private val mdHeading = Regex("""^(#{1,6})\s+(.*)$""")
-private val mdQuote = Regex("""^>\s?(.*)$""")
+private val mdQuote = Regex("""^(?:>|&gt;)\s?(.*)$""")
 private val mdBullet = Regex("""^(\s*)[-*+]\s+(.*)$""")
 private val mdLink = Regex("""\[([^\]\n]+)]\((https?://[^)\s]+)\)""")
 private val mdBold = Regex("""\*\*(.+?)\*\*""")
 private val mdItalic = Regex("""(?<![*\w])\*(?![*\s])(.+?)(?<![*\s])\*(?![*\w])""")
 
 /**
- * Article text blocks arrive as Markdown, not HTML: headings, bold, italic,
- * links, lists and quotes become the subset [parseHtml] reads. HTML already in
- * the text, like the `<!--break-->` markers, passes through.
+ * Article text blocks arrive as Markdown, and feeds and replies may carry it
+ * too: headings, bold, italic, links, lists and quotes become the subset
+ * [parseHtml] reads. HTML already in the text, like links, topics and the
+ * `<!--break-->` markers, passes through.
  */
 fun markdownToHtml(markdown: String): String = markdown.lines().joinToString("\n") { line ->
     mdHeading.matchEntire(line)?.let { val level = it.groupValues[1].length; "<h$level>${markdownInline(it.groupValues[2])}</h$level>" }

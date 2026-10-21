@@ -107,4 +107,12 @@ class SplitEntriesTest {
         // Sentences and patterns keep their spaces and punctuation.
         assertEquals(listOf("晒 自己的、奢侈品"), com.zailinn.c001apk.ui.screens.settings.splitEntries("晒 自己的、奢侈品", multiple = false))
     }
+
+    @Test
+    fun historyPreviewNeverCutsATagInHalf() {
+        val link = """仅拆封试听 【闲鱼】<a class="feed-link-url" href="https://m.tb.cn/h.x">https://m.tb.cn/h.x</a>"""
+        assertEquals("仅拆封试听 【闲鱼】", com.zailinn.c001apk.data.FeedRecord.preview(link, max = 30))
+        assertEquals("a ", com.zailinn.c001apk.data.FeedRecord.preview("a &amp; b", max = 4))
+        assertEquals(link, com.zailinn.c001apk.data.FeedRecord.preview(link, max = 500))
+    }
 }

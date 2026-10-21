@@ -346,7 +346,7 @@ private fun buildHtml(html: String, showEmoji: Boolean, linkColor: Color): Built
             append(value, last, value.length)
         }
 
-        for (part in parseHtml(html)) {
+        for (part in parseHtml(markdownToHtml(html))) {
             when (part) {
                 HtmlPart.Break -> append('\n')
                 is HtmlPart.Text -> {
