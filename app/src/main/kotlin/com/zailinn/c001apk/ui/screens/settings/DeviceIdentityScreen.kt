@@ -100,16 +100,19 @@ fun DeviceIdentityScreen() {
     var manual by remember { mutableStateOf(false) }
     var clearing by remember { mutableStateOf(false) }
 
+    // After a paste is recognised the box is cleared, but the keyboard still holds
+    // the pasted text and sends one more change (empty, partial or the same text)
+    // when it closes. Only a new recognised paste replaces the ID; other input
+    // while one is waiting is that echo and is dropped, so 保存并应用 stays enabled.
     fun recognise(input: String) {
         text = input
-        pending = null
         error = null
         if (input.isBlank()) return
         try {
             pending = OfficialDeviceIdentity.parse(input)
             text = ""
         } catch (e: IllegalArgumentException) {
-            error = e.message
+            if (pending != null) text = "" else error = e.message
         }
     }
 
@@ -129,6 +132,14 @@ fun DeviceIdentityScreen() {
                 "从官方酷安导入数盟 ID（SZLM ID），用于本应用的请求，可减少部分内容的人机验证。" +
                     "这是临时方案，有效期由服务端决定，仍可能要求验证。" +
                     "导入方法来自 TG-Twilight/c001apk，感谢其整理与验证。",
+            )
+            // Reports from other third-party clients: an ID used outside the official app can get the device flagged.
+            Text(
+                "风险提示：数盟 ID 是官方酷安为这台手机登记的设备标识。在第三方客户端中使用可能被酷安风控，" +
+                    "有用户反馈设备号因此被封，影响这台手机上的官方酷安。只导入自己手机的 ID，不要共享；" +
+                    "如果出现“当前版本存在异常（-419）”或“评论接口异常”，说明 ID 已失效或被拒绝，请清除。",
+                color = MaterialTheme.colorScheme.error,
+                style = MaterialTheme.typography.bodyMedium,
             )
             Text(
                 "1. 点击下方“酷安 OAID 界面”，打开官方酷安的“检查日志和测试”页。\n" +

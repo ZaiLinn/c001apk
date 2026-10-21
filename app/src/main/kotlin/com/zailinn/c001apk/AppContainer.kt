@@ -6,6 +6,7 @@ import android.os.Looper
 import android.widget.Toast
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
 import androidx.datastore.preferences.preferencesDataStoreFile
+import com.zailinn.c001apk.core.net.ApiFailureEvents
 import com.zailinn.c001apk.core.net.CaptchaChallenge
 import com.zailinn.c001apk.core.net.CoolapkClient
 import com.zailinn.c001apk.core.net.CoolapkHeaders
@@ -73,6 +74,12 @@ class AppContainer(
         SemanticConfig(content.filterCategories.value.filter { it.enabled }, current.semanticThreshold)
     val uploader = com.zailinn.c001apk.core.upload.OssUploader(repository, baseHttp)
     val captcha = CaptchaCoordinator()
+
+    /**
+     * Set when the server rejects the device code (-419) while a 数盟 ID is imported:
+     * an ID that does not match the rest of the device code makes every request fail.
+     */
+    val deviceIdRejected = MutableStateFlow(false)
     val updates = UpdateService(UpdatePreferences(settings), { BuildConfig.VERSION_NAME }, UpdateService.defaultFetcher(baseHttp))
 
     private val main = Handler(Looper.getMainLooper())
@@ -88,6 +95,7 @@ class AppContainer(
             content.migrateCategories()
         }
         client.captchaVerifier = captcha::verify
+        ApiFailureEvents.onDeviceRejected = { if (settings.current.protocol.szlmId.isNotEmpty()) deviceIdRejected.value = true }
         // Start loading the model early so the first pages can already use it.
         settings.current.let { semantic.matcher(it.sensitiveFilterOn && it.semanticFold, semanticConfig(it)) }
     }

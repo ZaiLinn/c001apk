@@ -1,6 +1,8 @@
 package com.zailinn.c001apk
 
+import androidx.compose.ui.test.assert
 import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.assertIsEnabled
 import androidx.compose.ui.test.hasText
 import androidx.activity.ComponentActivity
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
@@ -11,8 +13,12 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performImeAction
+import androidx.compose.ui.test.performScrollTo
+import androidx.compose.ui.test.performScrollToIndex
 import androidx.compose.ui.test.performTextClearance
 import androidx.compose.ui.test.performTextInput
+import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
 import androidx.test.core.app.ApplicationProvider
@@ -230,6 +236,9 @@ class AppUiTest {
         compose.onNodeWithText("DUsyntheticSZLM0123456789abcdef", substring = true).assertDoesNotExist()
         compose.onNodeWithText("粘贴官方复制的完整文本").assertIsDisplayed()
         shot("device-identity")
+        // Closing the keyboard sends back part of the paste; the recognised ID stays ready to save.
+        compose.onNodeWithText("粘贴官方复制的完整文本").performTextInput("设备ID: 0123")
+        compose.onNodeWithText("保存并应用").assertIsEnabled()
         val model = app.settings.current.protocol.model
         compose.onNodeWithText("保存并应用").performClick()
         compose.waitUntil(5_000) { app.settings.current.protocol.szlmId == "DUsyntheticSZLM0123456789abcdef" }
@@ -310,6 +319,96 @@ class AppUiTest {
         compose.onNodeWithText("外观与字号").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("动态取色").fetchSemanticsNodes().isNotEmpty() }
         shot("settings-appearance")
+    }
+
+    /** Opening a result and coming back neither reloads the search nor loses the scroll position. */
+    @Test
+    fun searchResultsKeepTheirPlaceAfterOpeningAResult() {
+        launch()
+        // First-page requests only: a reload asks for page 1 again, scrolling near the end asks for page 2.
+        fun searches() = synchronized(transport.paths) {
+            transport.urls.count { it.contains("/v6/search?") && Regex("[?&]page=1(&|$)").containsMatchIn(it) }
+        }
+        compose.onNodeWithText("搜索动态、应用、话题和用户").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextInput("合成")
+        compose.onNode(androidx.compose.ui.test.hasSetTextAction()).performImeAction()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("搜索结果第1条").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+        // The vertical result list, not the horizontal pager of result types around it.
+        val list = androidx.compose.ui.test.hasScrollToIndexAction() and
+            androidx.compose.ui.test.hasAnyDescendant(hasText("搜索结果第1条")) and
+            androidx.compose.ui.test.SemanticsMatcher.keyIsDefined(androidx.compose.ui.semantics.SemanticsProperties.VerticalScrollAxisRange)
+        compose.onNode(list).performScrollToIndex(12)
+        compose.waitForIdle()
+        val loaded = searches()
+
+        compose.onNodeWithText("搜索结果第13条").performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("合成回复内容", useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.activityRule.scenario.onActivity { it.onBackPressedDispatcher.onBackPressed() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("搜索结果第13条").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+
+        assertEquals("no reload of the results", loaded, searches())
+        assertTrue("still scrolled down", compose.onAllNodesWithText("搜索结果第1条").fetchSemanticsNodes().isEmpty())
+    }
+
+    /** The result page keeps an editable search box; a new keyword searches again in place. */
+    @Test
+    fun resultPageSearchesAgainFromItsBox() {
+        launch()
+        compose.onNodeWithText("搜索动态、应用、话题和用户").performClick()
+        compose.waitUntil(5_000) { compose.onAllNodes(androidx.compose.ui.test.hasSetTextAction()).fetchSemanticsNodes().isNotEmpty() }
+        compose.onNode(androidx.compose.ui.test.hasSetTextAction()).performTextInput("合成")
+        compose.onNode(androidx.compose.ui.test.hasSetTextAction()).performImeAction()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("搜索结果第1条").fetchSemanticsNodes().isNotEmpty() }
+        val box = compose.onNode(androidx.compose.ui.test.hasSetTextAction())
+        box.assert(hasText("合成"))
+        box.performTextReplacement("手机")
+        box.performImeAction()
+        compose.waitUntil(10_000) {
+            synchronized(transport.paths) { transport.urls.any { it.contains("/v6/search?") && it.contains("searchValue=%E6%89%8B%E6%9C%BA") } }
+        }
+    }
+
+    /** Stopping a follow asks first; starting one does not. */
+    @Test
+    fun unfollowAsksFirst() {
+        kotlinx.coroutines.runBlocking { app.content.localFollow("10", "合成作者", "") }
+        compose.setContent { C001apkApp(app, deepLink = android.net.Uri.parse("https://www.coolapk.com/u/10")) {} }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("取消本地关注").fetchSemanticsNodes().isNotEmpty() }
+        compose.onNodeWithText("取消本地关注").performClick()
+        compose.waitForIdle()
+        compose.onNodeWithText("取消关注 合成作者？").assertExists()
+        assertTrue("still followed until confirmed", app.content.isLocalFollow("10"))
+        compose.onNodeWithText("取消").performClick()
+        compose.waitForIdle()
+        assertTrue(app.content.isLocalFollow("10"))
+    }
+
+    /** In a list the reply count opens the feed scrolled to its replies. */
+    @Test
+    // A short screen, so the two synthetic replies leave room to scroll the feed away.
+    @Config(sdk = [35], qualifiers = "w411dp-h480dp-xxhdpi")
+    fun replyCountInAListOpensTheReplies() {
+        launch()
+        compose.onAllNodes(hasText("2") and androidx.compose.ui.test.hasClickAction()).onFirst().performScrollTo().performClick()
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("共", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+        // The reply header sits right under the title bar instead of below the feed and its image.
+        val header = compose.onAllNodesWithText("共", substring = true).fetchSemanticsNodes().first()
+        val density = compose.activity.resources.displayMetrics.density
+        assertTrue("header at ${header.boundsInRoot.top / density}dp", header.boundsInRoot.top / density < 200f)
+    }
+
+    /** A blocked user's page shows the profile only; their posts are not even requested. */
+    @Test
+    fun blockedUserPostsAreNotRequested() {
+        kotlinx.coroutines.runBlocking { app.content.block("10") }
+        compose.setContent { C001apkApp(app, deepLink = android.net.Uri.parse("https://www.coolapk.com/u/10")) {} }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("已屏蔽用户", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        compose.waitForIdle()
+        assertEquals(0, synchronized(transport.paths) { transport.paths.count { it.endsWith("/v6/user/feedList") } })
     }
 
     @Test

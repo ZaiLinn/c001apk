@@ -13,6 +13,8 @@ import androidx.compose.runtime.compositionLocalOf
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -88,6 +90,7 @@ import com.zailinn.c001apk.ui.screens.web.CaptchaDialog
 import com.zailinn.c001apk.ui.screens.web.WebScreen
 import com.zailinn.c001apk.ui.theme.C001apkTheme
 import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 
@@ -102,6 +105,10 @@ fun C001apkApp(app: AppContainer, deepLink: Uri?, onDeepLinkHandled: () -> Unit)
     val vault by app.accounts.vault.collectAsStateWithLifecycle()
     val generation by app.accounts.generation.collectAsStateWithLifecycle()
     val captcha by app.captcha.pending.collectAsStateWithLifecycle()
+    val deviceIdRejected by app.deviceIdRejected.collectAsStateWithLifecycle()
+    // Asked once per run; "暂不处理" leaves the ID until the app starts again.
+    var deviceIdAsked by rememberSaveable { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
     val session = SessionInfo(vault.active != null, vault.active?.uid.orEmpty())
     val context = LocalContext.current
     val nav = rememberNavController()
@@ -146,7 +153,7 @@ fun C001apkApp(app: AppContainer, deepLink: Uri?, onDeepLinkHandled: () -> Unit)
                 popExitTransition = { slideOutHorizontally(tween(300)) { it / 4 } + fadeOut(tween(300)) },
             ) {
                 composable<MainRoute> { MainScreen(generation) }
-                composable<FeedRoute> { FeedScreen(it.toRoute<FeedRoute>().id) }
+                composable<FeedRoute> { it.toRoute<FeedRoute>().let { r -> FeedScreen(r.id, r.toReplies) } }
                 composable<EventRoute> { com.zailinn.c001apk.ui.screens.detail.EventScreen(it.toRoute<EventRoute>().id) }
                 composable<UserRoute> { UserScreen(it.toRoute<UserRoute>().uid) }
                 composable<AppRoute> { AppScreen(it.toRoute<AppRoute>().id) }
@@ -178,6 +185,22 @@ fun C001apkApp(app: AppContainer, deepLink: Uri?, onDeepLinkHandled: () -> Unit)
                 composable<CopyRoute> { CopyScreen(it.toRoute<CopyRoute>().text) }
             }
             captcha?.let { CaptchaDialog(it) }
+            if (deviceIdRejected && !deviceIdAsked) {
+                DeviceIdRejectedDialog(
+                    onClear = {
+                        deviceIdAsked = true
+                        app.deviceIdRejected.value = false
+                        scope.launch {
+                            app.settings.setSzlmId("")
+                            app.toast("已清除数盟 ID，下拉刷新即可")
+                        }
+                    },
+                    onKeep = {
+                        deviceIdAsked = true
+                        app.deviceIdRejected.value = false
+                    },
+                )
+            }
             update?.let { UpdateDialog(it) { update = null } }
         }
     }
@@ -215,4 +238,21 @@ private suspend fun checkLoginInfo(app: AppContainer) {
     } catch (_: Exception) {
         // Login check failures leave the saved account untouched.
     }
+}
+
+/** The server rejects requests carrying the imported 数盟 ID; offers to go back to the app's own ID. */
+@Composable
+private fun DeviceIdRejectedDialog(onClear: () -> Unit, onKeep: () -> Unit) {
+    androidx.compose.material3.AlertDialog(
+        onDismissRequest = onKeep,
+        title = { androidx.compose.material3.Text("数盟 ID 被服务器拒绝") },
+        text = {
+            androidx.compose.material3.Text(
+                "服务器拒绝了带有导入数盟 ID 的请求（-419），内容可能无法加载。" +
+                    "清除后改用本应用生成的设备标识，机型等参数和登录状态不变。",
+            )
+        },
+        confirmButton = { androidx.compose.material3.TextButton(onClick = onClear) { androidx.compose.material3.Text("清除数盟 ID") } },
+        dismissButton = { androidx.compose.material3.TextButton(onClick = onKeep) { androidx.compose.material3.Text("暂不处理") } },
+    )
 }

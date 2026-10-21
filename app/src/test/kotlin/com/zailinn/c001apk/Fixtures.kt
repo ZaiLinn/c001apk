@@ -35,7 +35,10 @@ class FixtureTransport : Interceptor {
             path.endsWith("/v6/user/space") -> """{"data":{"uid":"10","username":"合成作者","userAvatar":"","cover":"","level":"5","feed":"12",
                 "follow":"3","fans":"40","be_like_num":"99","logintime":"1770000000","bio":"合成简介","isFollow":0}}"""
             path.endsWith("/v6/user/feedList") -> list(feed(300, "用户的合成动态"))
-            path.endsWith("/v6/search") -> list(feed(400, "搜索到的合成动态"))
+            // Twenty results on the first page, enough to scroll; nothing after it.
+            path.endsWith("/v6/search") ->
+                if (Regex("[?&]page=1(&|$)").containsMatchIn("?" + request.url.encodedQuery.orEmpty())) list(*Array(20) { feed(400 + it, "搜索结果第${it + 1}条") })
+                else list()
             path.endsWith("/v6/topic/newTagDetail") -> """{"data":{"id":"7","entityType":"topic","title":"合成话题","logo":"",
                 "hot_num_txt":"1万","commentnum_txt":"20","tabList":[{"title":"热门","url":"/page?url=hot","pageName":"hot"},
                 {"title":"最新","url":"/page?url=new","pageName":"new"}],"selectedTab":"hot"}}"""
