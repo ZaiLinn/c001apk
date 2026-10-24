@@ -1,6 +1,7 @@
 package com.zailinn.c001apk
 
 import android.content.Context
+import android.content.res.Configuration
 import android.os.Handler
 import android.os.Looper
 import android.widget.Toast
@@ -66,7 +67,19 @@ class AppContainer(
         }
         .build()
 
-    val client = CoolapkClient(session, CoolapkHeaders(session, { settings.current.protocol }), baseHttp, transport)
+    val client = CoolapkClient(
+        session,
+        CoolapkHeaders(session, { settings.current.protocol }, darkMode = ::isDarkMode),
+        baseHttp,
+        transport,
+    )
+
+    /** Same rule as [com.zailinn.c001apk.ui.theme.isAppInDarkTheme], readable outside composition. */
+    private fun isDarkMode(): Boolean = when (settings.current.themeMode) {
+        1 -> false
+        2 -> true
+        else -> context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
+    }
     val semantic = SemanticModel(context, baseHttp, scope)
     val repository = CoolapkRepository(client) {
         val current = settings.current

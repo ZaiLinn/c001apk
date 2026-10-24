@@ -36,6 +36,8 @@ internal class SessionChangedException : IOException("账号已切换")
 class CoolapkHeaders(
     private val session: SessionState,
     private val protocol: () -> ProtocolParams,
+    /** Whether the app shows dark mode now; the official app reports its own as X-Dark-Mode. */
+    private val darkMode: () -> Boolean = { false },
     private val token: (ProtocolParams) -> String = { TokenUtils.getTokenV3(it.xAppDevice, appCode = it.versionCode.toInt()) },
 ) : Interceptor {
     override fun intercept(chain: Interceptor.Chain): Response {
@@ -89,7 +91,7 @@ class CoolapkHeaders(
                 builder.header("X-App-Code", params.versionCode)
                 builder.header("X-Api-Version", params.apiVersion)
                 builder.header("X-App-Device", params.xAppDevice)
-                builder.header("X-Dark-Mode", "0")
+                builder.header("X-Dark-Mode", if (darkMode()) "1" else "0")
                 builder.header("X-App-Channel", Constants.CHANNEL)
                 builder.header("X-App-Mode", Constants.MODE)
                 builder.header("X-App-Supported", params.versionCode)

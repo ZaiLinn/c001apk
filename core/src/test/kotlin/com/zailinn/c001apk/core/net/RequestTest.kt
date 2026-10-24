@@ -25,6 +25,16 @@ class RequestTest {
     }
 
     @Test
+    fun darkModeHeaderFollowsTheApp() {
+        var dark = false
+        val headers = CoolapkHeaders(SessionState(), { syntheticParams }, darkMode = { dark })
+        val request = okhttp3.Request.Builder().url("https://api.coolapk.com/v6/main/indexV8").build()
+        assertEquals("0", headers.sign(request).header("X-Dark-Mode"))
+        dark = true
+        assertEquals("1", headers.sign(request).header("X-Dark-Mode"))
+    }
+
+    @Test
     fun passwordLoginSendsUrlEncodedFields() = runTest {
         val h = Harness { _, _ -> 200 to "{}" }
         h.repo.login("synthetic-hash", "test+account", "test&password", "")
