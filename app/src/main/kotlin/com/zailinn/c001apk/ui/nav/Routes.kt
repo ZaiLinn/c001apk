@@ -27,6 +27,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class SettingsSectionRoute(val section: String)
 @Serializable data object ParamsRoute
 @Serializable data object DeviceIdentityRoute
+@Serializable data object CaptchaLogRoute
 @Serializable data object AboutRoute
 @Serializable data class HistoryRoute(val favorites: Boolean)
 @Serializable data class BlacklistRoute(val users: Boolean)

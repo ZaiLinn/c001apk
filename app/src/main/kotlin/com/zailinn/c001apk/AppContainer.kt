@@ -19,6 +19,7 @@ import com.zailinn.c001apk.data.AccountManager
 import com.zailinn.c001apk.data.LocalContent
 import com.zailinn.c001apk.data.LocalStore
 import com.zailinn.c001apk.data.AppSettings
+import com.zailinn.c001apk.data.CaptchaLog
 import com.zailinn.c001apk.data.SettingsRepository
 import com.zailinn.c001apk.data.sensitiveFilterOn
 import com.zailinn.c001apk.semantic.SemanticConfig
@@ -56,6 +57,7 @@ class AppContainer(
     val content = LocalContent(store)
     val session = SessionState()
     val accounts = AccountManager(store, session)
+    val captchaLog = CaptchaLog(store, scope)
 
     private val baseHttp = OkHttpClient()
 
@@ -111,6 +113,7 @@ class AppContainer(
             content.migrateCategories()
         }
         client.captchaVerifier = captcha::verify
+        client.captchaListener = { captchaLog.add(it, settings.current) }
         // The device ID and 数盟 ID a saved API session is bound to.
         fun device(settings: AppSettings) = settings.protocol.let { "${it.deviceId}|${it.szlmId}".hashCode().toString() }
         accounts.keepSession(settings.settings.map(::device).stateIn(scope, SharingStarted.Eagerly, device(settings.current)), scope)

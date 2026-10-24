@@ -97,6 +97,7 @@ import com.zailinn.c001apk.ui.common.SectionTitle
 import com.zailinn.c001apk.ui.nav.AboutRoute
 import com.zailinn.c001apk.ui.screens.account.CookieExportDialog
 import com.zailinn.c001apk.ui.nav.AccountsRoute
+import com.zailinn.c001apk.ui.nav.CaptchaLogRoute
 import com.zailinn.c001apk.ui.nav.ContentFilterRoute
 import com.zailinn.c001apk.ui.nav.LocalFollowRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
@@ -368,6 +369,12 @@ private fun SectionItems(section: SettingsSection) {
                 supportingContent = { Text("配置客户端版本、设备与请求参数") },
                 leadingContent = { Icon(Icons.Outlined.DeveloperMode, null) },
                 modifier = Modifier.clickable { navigator.navigate(ParamsRoute) },
+            )
+            ListItem(
+                headlineContent = { Text("人机验证记录") },
+                supportingContent = { Text("最近被要求验证的接口与请求频率，用于反馈问题") },
+                leadingContent = { Icon(Icons.Outlined.DeveloperMode, null) },
+                modifier = Modifier.clickable { navigator.navigate(CaptchaLogRoute) },
             )
         }
     }

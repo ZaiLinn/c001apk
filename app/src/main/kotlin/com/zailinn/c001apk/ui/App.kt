@@ -34,6 +34,7 @@ import com.zailinn.c001apk.ui.nav.AppNavigator
 import com.zailinn.c001apk.ui.nav.AppRoute
 import com.zailinn.c001apk.ui.nav.BlacklistRoute
 import com.zailinn.c001apk.ui.nav.CategoryEditRoute
+import com.zailinn.c001apk.ui.nav.CaptchaLogRoute
 import com.zailinn.c001apk.ui.nav.ContentFilterRoute
 import com.zailinn.c001apk.ui.nav.CarouselRoute
 import com.zailinn.c001apk.ui.nav.ChatRoute
@@ -51,6 +52,7 @@ import com.zailinn.c001apk.ui.nav.MainRoute
 import com.zailinn.c001apk.ui.nav.NotificationRoute
 import com.zailinn.c001apk.ui.nav.ParamsRoute
 import com.zailinn.c001apk.ui.nav.DeviceIdentityRoute
+import com.zailinn.c001apk.ui.screens.settings.CaptchaLogScreen
 import com.zailinn.c001apk.ui.screens.settings.DeviceIdentityScreen
 import com.zailinn.c001apk.ui.nav.SearchResultRoute
 import com.zailinn.c001apk.ui.nav.SearchRoute
@@ -174,6 +176,7 @@ fun C001apkApp(app: AppContainer, deepLink: Uri?, onDeepLinkHandled: () -> Unit)
                 composable<SettingsSectionRoute> { SettingsSectionScreen(it.toRoute<SettingsSectionRoute>().section) }
                 composable<ParamsRoute> { ParamsScreen() }
                 composable<DeviceIdentityRoute> { DeviceIdentityScreen() }
+                composable<CaptchaLogRoute> { CaptchaLogScreen() }
                 composable<AboutRoute> { AboutScreen() }
                 composable<HistoryRoute> { HistoryScreen(it.toRoute<HistoryRoute>().favorites) }
                 composable<BlacklistRoute> { BlacklistScreen(it.toRoute<BlacklistRoute>().users) }

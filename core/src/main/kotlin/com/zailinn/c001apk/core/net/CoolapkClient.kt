@@ -32,11 +32,13 @@ class ApiResponse(
      * `paused` (prompts are paused after a rejection or a cancel).
      */
     val captchaVerification: String? = null,
+    /** Request rate when this API request was sent; null for other hosts. */
+    val stats: RequestStats? = null,
 ) {
     val text: String by lazy { bytes.toString(Charsets.UTF_8) }
     val cookies: List<String> get() = headers.values("Set-Cookie")
 
-    fun withVerification(value: String) = ApiResponse(code, headers, bytes, url, value)
+    fun withVerification(value: String) = ApiResponse(code, headers, bytes, url, value, stats)
 }
 
 /** Request body that can be rebuilt with a captcha proof added. */
@@ -75,6 +77,10 @@ class CoolapkClient(
     private val noRedirect: OkHttpClient = http.newBuilder().followRedirects(false).followSslRedirects(false).build()
 
     @Volatile var captchaVerifier: CaptchaVerifier? = null
+
+    /** Told about every captcha challenge met, whatever happens with it. */
+    @Volatile var captchaListener: ((CaptchaEvent) -> Unit)? = null
+    private val rate = RequestRate(clock)
     private val sessidPattern = Regex("^[A-Za-z0-9._%-]{1,256}$")
     private val verifying = AtomicBoolean(false)
 
@@ -103,7 +109,7 @@ class CoolapkClient(
             .tag(RequestOptions::class.java, opts)
             .get().build()
         val response = execute(client, build(emptyList()), generation)
-        return verifyAndRetry(response, snapshot, generation, skipCaptcha) { proof, challenge ->
+        return verifyAndRetry("GET", response, snapshot, generation, skipCaptcha) { proof, challenge ->
             if (challenge.field.isEmpty())
                 execute(client, build(emptyList(), options.copy(validateProof = proof)), generation)
             else
@@ -125,7 +131,7 @@ class CoolapkClient(
             .tag(RequestOptions::class.java, opts)
             .post(content.toRequestBody()).build()
         val response = execute(http, build(body), generation)
-        return verifyAndRetry(response, snapshot, generation, skipCaptcha) { proof, challenge ->
+        return verifyAndRetry("POST", response, snapshot, generation, skipCaptcha) { proof, challenge ->
             if (challenge.field.isEmpty())
                 execute(http, build(body, options.copy(validateProof = proof)), generation)
             else
@@ -137,19 +143,46 @@ class CoolapkClient(
     suspend fun external(request: Request): ApiResponse = execute(http, request, null)
 
     private suspend fun verifyAndRetry(
+        method: String,
         response: ApiResponse,
         snapshot: AccountCredentials?,
         generation: Int,
         skip: Boolean,
         retry: suspend (String, CaptchaChallenge) -> ApiResponse,
     ): ApiResponse {
-        val verifier = captchaVerifier
-        if (skip || generation != session.generation || verifier == null || snapshot != session.account ||
-            !response.url.isHttps || response.url.host !in CoolapkHeaders.apiHosts || response.code !in 200..299
-        ) return response
+        if (!response.url.isHttps || response.url.host !in CoolapkHeaders.apiHosts || response.code !in 200..299) return response
+        // Cheap check first: most responses are not challenges and need no JSON parse here.
+        if (!response.text.contains(CAPTCHA_STATUS)) return response
         val challenge = CaptchaChallenge.fromText(response.text) ?: return response
-        if (pausedGeneration == generation && clock() < promptsPausedUntil) return response.withVerification("paused")
-        if (!verifying.compareAndSet(false, true)) return response
+        fun report(outcome: String) {
+            val event = CaptchaEvent(
+                time = clock(),
+                method = method,
+                path = CaptchaEvent.pathOf(response.url),
+                signedIn = snapshot != null,
+                cookieProtocol = challenge.field.isEmpty(),
+                outcome = outcome,
+                stats = response.stats,
+            )
+            runCatching { captchaListener?.invoke(event) }
+        }
+        val verifier = captchaVerifier
+        if (skip) {
+            report("skipped")
+            return response
+        }
+        if (generation != session.generation || verifier == null || snapshot != session.account) {
+            report("not-prompted")
+            return response
+        }
+        if (pausedGeneration == generation && clock() < promptsPausedUntil) {
+            report("paused")
+            return response.withVerification("paused")
+        }
+        if (!verifying.compareAndSet(false, true)) {
+            report("busy")
+            return response
+        }
         val proof = try {
             verifier(challenge)
         } finally {
@@ -159,14 +192,18 @@ class CoolapkClient(
             snapshot != session.account
         ) {
             if (proof == null) pausePrompts(generation, CANCEL_PAUSE_MS)
-            return response.withVerification(if (proof == null) "cancelled" else "incomplete")
+            val outcome = if (proof == null) "cancelled" else "incomplete"
+            report(outcome)
+            return response.withVerification(outcome)
         }
         // Single direct retry: no verification loop or replay after transport errors.
         val result = retry(proof, challenge)
         if (CaptchaChallenge.fromText(result.text) != null) {
             pausePrompts(generation, REJECTED_PAUSE_MS)
+            report("rejected")
             return result.withVerification("rejected")
         }
+        report("submitted")
         return result.withVerification("submitted")
     }
 
@@ -180,6 +217,7 @@ class CoolapkClient(
     }
 
     private suspend fun execute(client: OkHttpClient, request: Request, generation: Int?): ApiResponse = withContext(Dispatchers.IO) {
+        val stats = if (request.url.isHttps && request.url.host in CoolapkHeaders.apiHosts) rate.sent() else null
         val response = try {
             client.newCall(request).await()
         } catch (e: ApiFailureIOException) {
@@ -188,7 +226,7 @@ class CoolapkClient(
             throw ApiFailure.cancelled
         }
         val result = response.use {
-            ApiResponse(it.code, it.headers, it.body?.bytes() ?: ByteArray(0), it.request.url)
+            ApiResponse(it.code, it.headers, it.body?.bytes() ?: ByteArray(0), it.request.url, stats = stats)
         }
         if (generation != null && generation != session.generation) throw ApiFailure.cancelled
         keepSessionCookie(request, result)
@@ -210,6 +248,8 @@ class CoolapkClient(
     }
 
     private companion object {
+        const val CAPTCHA_STATUS = "err_request_captcha_v2"
+
         /** The server did not accept a passed verification. */
         const val REJECTED_PAUSE_MS = 30 * 60_000L
         const val CANCEL_PAUSE_MS = 10 * 60_000L
