@@ -41,8 +41,16 @@ class SessionState {
     @Volatile var account: AccountCredentials? = null
         private set
 
+    /** Called with each new [sessid], so the app can keep it across restarts. */
+    @Volatile var onSessidChanged: ((String) -> Unit)? = null
+
     /** `SESSID=...` last issued by the API; carries passed captcha verification. */
     @Volatile var sessid: String = ""
+        set(value) {
+            if (field == value) return
+            field = value
+            onSessidChanged?.invoke(value)
+        }
 
     /** `SESSID=...` of the account.coolapk.com password login page. */
     @Volatile var loginSession: String = ""

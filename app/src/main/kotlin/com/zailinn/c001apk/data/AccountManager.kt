@@ -2,9 +2,11 @@ package com.zailinn.c001apk.data
 
 import com.zailinn.c001apk.core.net.AccountCredentials
 import com.zailinn.c001apk.core.net.SessionState
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
@@ -31,6 +33,10 @@ data class AccountVault(val accounts: List<SavedAccount> = emptyList(), val acti
     val active: SavedAccount? get() = accounts.firstOrNull { it.uid == activeUid && !it.needsLogin }
 }
 
+/** The API session of one account (or the guest) on one device identity. */
+@Serializable
+private data class SavedSession(val owner: String = "", val sessid: String = "")
+
 /**
  * Multi-account switching. Every switch bumps the session generation so pages
  * of the previous account reload and their late responses are discarded.
@@ -48,6 +54,33 @@ class AccountManager(private val store: LocalStore, val session: SessionState) {
 
     init {
         session.activate(_vault.value.active?.credentials(), notify = false)
+    }
+
+    /**
+     * Keeps the API SESSID, on which the server remembers a passed captcha, across
+     * restarts; without it every cold start asked again. It belongs to the account
+     * and [device] identity it was issued for: either changing starts a new session.
+     */
+    fun keepSession(device: StateFlow<String>, scope: CoroutineScope) {
+        fun owner() = "${session.account?.uid ?: "guest"}|${device.value}"
+        val saved = store.readJson(store.prefs.value, SESSION_KEY, SavedSession.serializer(), SavedSession())
+        if (saved.owner == owner() && saved.sessid.startsWith("SESSID=")) session.sessid = saved.sessid
+        val latest = MutableStateFlow(saved)
+        session.onSessidChanged = { latest.value = SavedSession(owner(), it) }
+        scope.launch {
+            var written = saved
+            latest.collect { entry ->
+                if (entry != written) {
+                    store.updateJson(SESSION_KEY, SavedSession.serializer(), SavedSession()) { entry }
+                    written = entry
+                }
+            }
+        }
+        val startDevice = device.value
+        scope.launch {
+            var current = startDevice
+            device.collect { if (it != current) { current = it; session.sessid = "" } }
+        }
     }
 
     suspend fun saveLogin(uid: String, username: String, token: String) = mutex.withLock {
@@ -118,5 +151,6 @@ class AccountManager(private val store: LocalStore, val session: SessionState) {
 
     companion object {
         private const val KEY = "accountVaultV1"
+        private const val SESSION_KEY = "apiSessionV1"
     }
 }

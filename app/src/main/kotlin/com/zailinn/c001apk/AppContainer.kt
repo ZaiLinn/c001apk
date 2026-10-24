@@ -28,7 +28,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -95,6 +98,9 @@ class AppContainer(
             content.migrateCategories()
         }
         client.captchaVerifier = captcha::verify
+        // The device ID and 数盟 ID a saved API session is bound to.
+        fun device(settings: AppSettings) = settings.protocol.let { "${it.deviceId}|${it.szlmId}".hashCode().toString() }
+        accounts.keepSession(settings.settings.map(::device).stateIn(scope, SharingStarted.Eagerly, device(settings.current)), scope)
         ApiFailureEvents.onDeviceRejected = { if (settings.current.protocol.szlmId.isNotEmpty()) deviceIdRejected.value = true }
         // Start loading the model early so the first pages can already use it.
         settings.current.let { semantic.matcher(it.sensitiveFilterOn && it.semanticFold, semanticConfig(it)) }
