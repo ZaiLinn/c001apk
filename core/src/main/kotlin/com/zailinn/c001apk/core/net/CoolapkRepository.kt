@@ -47,6 +47,17 @@ class CoolapkRepository(
     val client: CoolapkClient,
     private val filter: () -> ContentFilter = { ContentFilter() },
 ) {
+    /**
+     * Feeds seen in lists, the least recently used dropped first. The public page
+     * only serves featured feeds now, so a guest opening another feed falls back
+     * to its list copy, which is complete unless marked `issummary`.
+     */
+    private val listCopies = object : LinkedHashMap<String, Datum>(64, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, Datum>?) = size > LIST_COPIES
+    }
+
+    private fun listCopy(id: String): Datum? = synchronized(listCopies) { listCopies[id] }
+
     // region Lists
 
     suspend fun homeFeed(page: Page, firstLaunch: Int, installTime: String) = list {
@@ -245,10 +256,9 @@ class CoolapkRepository(
             if (failure.kind != ApiFailureKind.Captcha && failure.kind != ApiFailureKind.Authentication) {
                 return LoadResult.Error(failure.message)
             }
-            return when (val public = data { client.get("${Constants.URL_COOLAPK}feed/$id") }) {
-                is LoadResult.Success -> LoadResult.Success(public.value.with("userAction", null as JsonElement?), isPublic = true)
-                else -> public
-            }
+            val public = data { publicFeedPage(client.get("${Constants.URL_COOLAPK}feed/$id")) }
+            val shown = (public as? LoadResult.Success)?.value ?: listCopy(id) ?: return public
+            return LoadResult.Success(shown.with("userAction", null as JsonElement?), isPublic = true)
         }
     }
 
@@ -430,6 +440,34 @@ class CoolapkRepository(
         else -> failure.message
     }
 
+    /**
+     * The public page now answers with its whole page model and the feed under
+     * `responseData`; older answers carried the feed as top-level `data`. For a
+     * feed that is not featured it serves an HTML page asking to use the app.
+     */
+    private fun publicFeedPage(response: ApiResponse): ApiResponse {
+        val body = runCatching { lenientJson.parseToJsonElement(response.text) as? JsonObject }.getOrNull()
+        if (body == null && response.code in 200..299 && response.text.trimStart().startsWith("<")) {
+            throw ApiFailure(ApiFailureKind.Authentication, PUBLIC_PAGE_APP_ONLY)
+        }
+        val inner = body?.takeIf { !it.containsKey("data") }?.get("responseData") as? JsonObject
+        return if (inner?.get("data") is JsonObject) {
+            val fixed = withSchemeOnUrls(inner)
+            ApiResponse(response.code, response.headers, fixed.toString().toByteArray(), response.url, response.captchaVerification)
+        } else {
+            response
+        }
+    }
+
+    /** The page model writes image links like `picArr` without a scheme (`//image.coolapk.com/...`). */
+    private fun withSchemeOnUrls(element: JsonElement): JsonElement = when (element) {
+        is JsonObject -> JsonObject(element.mapValues { withSchemeOnUrls(it.value) })
+        is JsonArray -> JsonArray(element.map(::withSchemeOnUrls))
+        is JsonPrimitive -> element.takeIf { it.isString && it.content.startsWith("//") && !it.content.startsWith("///") }
+            ?.let { JsonPrimitive("https:" + it.content) } ?: element
+        else -> element
+    }
+
     private fun toData(body: JsonObject): LoadResult<Datum> =
         (body["data"] as? JsonObject)?.let { LoadResult.Success(Datum(it)) } ?: LoadResult.Empty
 
@@ -451,6 +489,9 @@ class CoolapkRepository(
 
     private suspend fun toList(body: JsonObject, includeConfigCard: Boolean = false): LoadResult<List<Datum>> {
         val items = expandListCards((body["data"] as? JsonArray).orEmpty()).toList()
+        synchronized(listCopies) {
+            items.forEach { item -> item.id?.takeIf { item.entityType == "feed" }?.let { listCopies[it] = item } }
+        }
         return if (items.isEmpty()) {
             LoadResult.Empty
         } else {
@@ -483,6 +524,8 @@ class CoolapkRepository(
 
     companion object {
         const val CAPTCHA_PAUSED = "服务端暂不接受本客户端的验证结果，已暂停弹出验证，请稍后再试"
+        const val PUBLIC_PAGE_APP_ONLY = "这条动态的网页版仅在酷安 App 内显示，游客无法查看，请登录后重试"
+        private const val LIST_COPIES = 500
 
         /**
          * Search results group normal entities inside listCard containers. Expand

@@ -137,7 +137,12 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
                     topReply = data.list("topReplyRows").firstOrNull()
                     replyMe = data.list("replyMeRows").firstOrNull()
                     feed.value = result
-                    notice.value = if (result.isPublic) "正文可正常阅读，当前账号的点赞状态暂不可用。" else ""
+                    notice.value = when {
+                        !result.isPublic -> ""
+                        // A list copy of a feed the public page does not serve; long ones are cut short.
+                        data.string("issummary") == "1" -> "网页版不提供这条动态，正文为列表中的摘要，登录后可查看全文。"
+                        else -> "正文可正常阅读，当前账号的点赞状态暂不可用。"
+                    }
                     // A later reload (verify) refreshes replies; the first one is already loading in parallel.
                     if (detailReady.isCompleted && refreshReplies) list.refresh()
                     if (app.settings.current.recordHistory) app.content.addHistory(data)

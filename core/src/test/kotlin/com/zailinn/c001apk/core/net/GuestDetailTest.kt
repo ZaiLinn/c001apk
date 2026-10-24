@@ -35,6 +35,51 @@ class GuestDetailTest {
     }
 
     @Test
+    fun publicPageModelWithFeedUnderResponseDataIsRead() = runTest {
+        val page = """{"requestHash":"x","SESSION":{"uid":0,"isLogin":false},"feedId":"123",
+            "responseData":${publicFeed.substringAfter("\"data\":").removeSuffix("}").let { """{"data":$it}""" }}}"""
+        val h = Harness { request, _ -> 200 to if (request.url.host == "www.coolapk.com") page else captcha }
+        val result = h.repo.feedDetail("123") as LoadResult.Success
+        assertTrue(result.isPublic)
+        assertEquals("完整的合成动态正文", result.value.message)
+    }
+
+    private val appOnlyPage = "<!DOCTYPE html><html><head><title>动态分享 - 酷安</title></head><body>请用酷安手机APP扫码查看详情</body></html>"
+    private val homeList = """{"data":[{"id":"123","entityType":"feed","uid":10,"username":"合成作者","message":"列表里的完整正文","issummary":"0"}]}"""
+
+    @Test
+    fun feedTheWebDoesNotServeOpensFromItsListCopy() = runTest {
+        val h = Harness { request, _ ->
+            200 to when {
+                request.url.host == "www.coolapk.com" -> appOnlyPage
+                request.url.encodedPath.endsWith("/feed/detail") -> captcha
+                else -> homeList
+            }
+        }
+        h.repo.homeFeed(Page(), 1, "0")
+        val result = h.repo.feedDetail("123") as LoadResult.Success
+        assertTrue(result.isPublic)
+        assertEquals("列表里的完整正文", result.value.message)
+    }
+
+    @Test
+    fun feedTheWebDoesNotServeWithoutListCopyExplainsWhy() = runTest {
+        val h = Harness { request, _ -> 200 to if (request.url.host == "www.coolapk.com") appOnlyPage else captcha }
+        val result = h.repo.feedDetail("123") as LoadResult.Error
+        assertEquals(CoolapkRepository.PUBLIC_PAGE_APP_ONLY, result.message)
+    }
+
+    @Test
+    fun publicPageImageLinksWithoutSchemeGetHttps() = runTest {
+        val page = """{"responseData":{"data":{"id":"123","entityType":"feed","message":"x",
+            "picArr":["//image.coolapk.com/feed/a@1080x240.jpg"],"pic":"http://image.coolapk.com/feed/a@1080x240.jpg"}}}"""
+        val h = Harness { request, _ -> 200 to if (request.url.host == "www.coolapk.com") page else captcha }
+        val result = h.repo.feedDetail("123") as LoadResult.Success
+        assertEquals(listOf("https://image.coolapk.com/feed/a@1080x240.jpg"), result.value.picArr)
+        assertEquals("http://image.coolapk.com/feed/a@1080x240.jpg", result.value.string("pic"))
+    }
+
+    @Test
     fun loginRequirementAlsoFallsBack() = runTest {
         val h = harness("""{"messageStatus":"err_not_login","message":"请先登录","data":null}""")
         assertTrue((h.repo.feedDetail("123") as LoadResult.Success).isPublic)
