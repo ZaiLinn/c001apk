@@ -123,17 +123,20 @@ class CoolapkRepository(
             else -> result
         }
 
-    /** Replies embedded in the public web page of a feed: in practice only the hot ones. */
+    /**
+     * Replies embedded in the public web page of a feed: in practice only the hot
+     * ones. A feed the page does not serve simply has none here.
+     */
     suspend fun webReplies(id: String): LoadResult<List<Datum>> {
         if (!Regex("^[0-9]+$").matches(id)) return LoadResult.Error("动态编号无效")
-        return when (val feed = data { client.get("${Constants.URL_COOLAPK}feed/$id") }) {
+        return when (val feed = data { publicFeedPage(client.get("${Constants.URL_COOLAPK}feed/$id")) }) {
             is LoadResult.Success -> {
                 val rows = (feed.value.list("hotReplyRows") + feed.value.list("replyRows")).distinctBy { it.id ?: it.hashCode().toString() }
                 val rules = filter()
                 val shown = rules.markAll(rows.filter { rules.accepts(it, false) })
                 if (rows.isEmpty()) LoadResult.Empty else LoadResult.Success(shown, isPublic = true)
             }
-            is LoadResult.Error -> feed
+            is LoadResult.Error -> if (feed.message == PUBLIC_PAGE_APP_ONLY) LoadResult.Empty else feed
             else -> LoadResult.Empty
         }
     }

@@ -133,4 +133,33 @@ class ReplyFallbackTest {
         assertTrue(last.header("Cookie").orEmpty().contains("validate=NEC%3A5fc4c10e%3Avalidate-proof"))
         assertEquals(null, last.url.queryParameter("_v2_post_token"))
     }
+
+    @Test
+    fun webRepliesReadTheCurrentPageModel() = runTest {
+        val page = """{"requestHash":"x","responseData":${web.removePrefix("{\"data\":").removeSuffix("}").let { """{"data":$it}""" }}}"""
+        val h = Harness { request, _ ->
+            200 to when {
+                request.url.host == "www.coolapk.com" -> page
+                request.isHot() -> """{"data":[]}"""
+                else -> captcha
+            }
+        }
+        val (result, source) = h.repo.feedRepliesWithoutPrompt("7", "lastupdate_desc", Page())
+        assertEquals(ReplySource.Web, source)
+        assertEquals(listOf("1", "2"), (result as LoadResult.Success).value.map { it.id })
+    }
+
+    @Test
+    fun feedTheWebDoesNotServeShowsNoWebRepliesInsteadOfAnError() = runTest {
+        val h = Harness { request, _ ->
+            200 to when {
+                request.url.host == "www.coolapk.com" -> "<!DOCTYPE html><html><body>请用酷安手机APP扫码查看详情</body></html>"
+                request.isHot() -> """{"data":[]}"""
+                else -> captcha
+            }
+        }
+        val (result, source) = h.repo.feedRepliesWithoutPrompt("7", "lastupdate_desc", Page())
+        assertEquals(ReplySource.Web, source)
+        assertTrue(result is LoadResult.Success && result.value.isEmpty())
+    }
 }
