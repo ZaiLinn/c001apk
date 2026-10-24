@@ -95,6 +95,7 @@ import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.common.SectionTitle
 import com.zailinn.c001apk.ui.nav.AboutRoute
+import com.zailinn.c001apk.ui.screens.account.CookieExportDialog
 import com.zailinn.c001apk.ui.nav.AccountsRoute
 import com.zailinn.c001apk.ui.nav.ContentFilterRoute
 import com.zailinn.c001apk.ui.nav.LocalFollowRoute
@@ -107,13 +108,6 @@ import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
 import com.zailinn.c001apk.ui.theme.seedColorNames
 import kotlinx.coroutines.launch
 import androidx.compose.foundation.layout.BoxWithConstraints
-import android.content.ClipData
-import android.content.ClipDescription
-import android.content.ClipboardManager
-import android.content.Context
-import android.os.Build
-import android.os.PersistableBundle
-import com.zailinn.c001apk.core.net.AccountCredentials
 
 enum class SettingsSection(val title: String, val description: String, val icon: ImageVector) {
     Appearance("外观与字号", "动态取色、主题、深色模式、字体大小与粗细", Icons.Outlined.Palette),
@@ -191,47 +185,18 @@ fun SettingsScreen() {
 @Composable
 private fun CookieExportItem() {
     val app = appContainer()
-    val context = LocalContext.current
     val vault by app.accounts.vault.collectAsStateWithLifecycle()
     val account = vault.active
     var confirm by remember { mutableStateOf(false) }
     ListItem(
         headlineContent = { Text("导出 Cookie") },
-        supportingContent = { Text(if (account == null) "登录后可复制当前账号的 Cookie" else "复制当前账号的 Cookie，可在其他设备或客户端粘贴登录") },
+        supportingContent = {
+            Text(if (account == null) "登录后可复制当前账号的 Cookie" else "复制当前账号的 Cookie，可在其他设备或客户端粘贴登录。其他账号可在账号管理中导出")
+        },
         leadingContent = { Icon(Icons.Outlined.Cookie, null) },
         modifier = Modifier.clickable(enabled = account != null) { confirm = true },
     )
-    if (confirm && account != null) {
-        AppAlertDialog(
-            onDismissRequest = { confirm = false },
-            title = { Text("导出 Cookie") },
-            text = {
-                Text(
-                    "Cookie 包含登录凭据，等同于账号密码，拿到它的人可以直接登录你的账号。只粘贴到自己的设备，不要发送或分享给他人。" +
-                        "在不同设备上同时使用同一个 Cookie，可能触发服务端风控。",
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirm = false
-                    copySensitive(context, AccountCredentials(account.uid, account.username, account.token).toCookie())
-                    // Android 13 and later confirm a copy themselves.
-                    if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) app.toast("已复制 Cookie")
-                }) { Text("复制") }
-            },
-            dismissButton = { TextButton(onClick = { confirm = false }) { Text("取消") } },
-        )
-    }
-}
-
-/** Marks the clip sensitive so clipboard previews hide it; the flag only works in a PersistableBundle. */
-private fun copySensitive(context: Context, text: String) {
-    val clip = ClipData.newPlainText("c001apk cookie", text)
-    clip.description.extras = PersistableBundle().apply {
-        putBoolean("android.content.extra.IS_SENSITIVE", true)
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true)
-    }
-    (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
+    if (confirm && account != null) CookieExportDialog(account, onDismiss = { confirm = false })
 }
 
 @Composable

@@ -21,7 +21,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class CoolpicRoute(val tag: String)
 @Serializable data class ImageViewerRoute(val urls: List<String>, val index: Int = 0)
 @Serializable data class WebRoute(val url: String, val isLogin: Boolean = false)
-@Serializable data object LoginRoute
+@Serializable data class LoginRoute(val cookie: Boolean = false)
 @Serializable data object AccountsRoute
 @Serializable data object SettingsRoute
 @Serializable data class SettingsSectionRoute(val section: String)

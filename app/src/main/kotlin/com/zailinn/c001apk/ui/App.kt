@@ -168,7 +168,7 @@ fun C001apkApp(app: AppContainer, deepLink: Uri?, onDeepLinkHandled: () -> Unit)
                 composable<CoolpicRoute> { CoolpicScreen(it.toRoute<CoolpicRoute>().tag) }
                 composable<ImageViewerRoute> { it.toRoute<ImageViewerRoute>().let { r -> ImageViewerScreen(r.urls, r.index) } }
                 composable<WebRoute> { it.toRoute<WebRoute>().let { r -> WebScreen(r.url, r.isLogin) } }
-                composable<LoginRoute> { LoginScreen() }
+                composable<LoginRoute> { LoginScreen(it.toRoute<LoginRoute>().cookie) }
                 composable<AccountsRoute> { AccountsScreen() }
                 composable<SettingsRoute> { SettingsScreen() }
                 composable<SettingsSectionRoute> { SettingsSectionScreen(it.toRoute<SettingsSectionRoute>().section) }

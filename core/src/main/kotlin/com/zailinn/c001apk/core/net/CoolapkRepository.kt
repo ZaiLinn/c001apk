@@ -266,7 +266,9 @@ class CoolapkRepository(
 
     // region Account
 
-    suspend fun checkLoginInfo() = client.get("$API/v6/account/checkLoginInfo", skipCaptcha = true)
+    /** The active account's login, or [account]'s without touching the session. */
+    suspend fun checkLoginInfo(account: AccountCredentials? = null) =
+        client.get("$API/v6/account/checkLoginInfo", skipCaptcha = true, account = account)
 
     suspend fun profile(uid: String) = client.get("$API/v6/user/profile", listOf("uid" to uid), skipCaptcha = true)
 

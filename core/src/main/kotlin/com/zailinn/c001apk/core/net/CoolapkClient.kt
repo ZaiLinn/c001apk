@@ -92,10 +92,11 @@ class CoolapkClient(
         skipCaptcha: Boolean = false,
         expectImage: Boolean = false,
         followRedirects: Boolean = true,
+        account: AccountCredentials? = null,
     ): ApiResponse {
         val generation = session.generation
         val snapshot = session.account
-        val options = RequestOptions(generation, skipCaptcha, expectImage)
+        val options = RequestOptions(generation, skipCaptcha, expectImage, account = account)
         val client = if (followRedirects) http else noRedirect
         fun build(extra: List<Pair<String, String>>, opts: RequestOptions = options) = Request.Builder()
             .url(url.toHttpUrl().newBuilder().apply { (query + extra).forEach { (k, v) -> addQueryParameter(k, v) } }.build())
@@ -201,6 +202,8 @@ class CoolapkClient(
      */
     private fun keepSessionCookie(request: Request, response: ApiResponse) {
         if (!request.url.isHttps || request.url.host !in CoolapkHeaders.apiHosts) return
+        // Issued to another account than the session's.
+        if (request.tag(RequestOptions::class.java)?.account != null) return
         val value = response.cookies.map { it.substringBefore(';').trim() }
             .lastOrNull { it.startsWith("SESSID=") }?.removePrefix("SESSID=") ?: return
         session.sessid = if (value.isEmpty() || value == "deleted" || !sessidPattern.matches(value)) "" else "SESSID=$value"

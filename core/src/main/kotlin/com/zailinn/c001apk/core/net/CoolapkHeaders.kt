@@ -20,6 +20,11 @@ data class RequestOptions(
      * blank-field (validate-cookie protocol) challenge. Never persisted.
      */
     val validateProof: String? = null,
+    /**
+     * Signs this one request as [account] instead of the active session, as when
+     * checking a pasted Cookie before saving it; no SESSID is sent with it.
+     */
+    val account: AccountCredentials? = null,
 )
 
 internal class SessionChangedException : IOException("账号已切换")
@@ -93,8 +98,8 @@ class CoolapkHeaders(
                     // account/session cookie. Restricted to numeric feed IDs.
                     builder.removeHeader("Cookie")
                 } else {
-                    val account = session.account
-                    val sessid = session.sessid.takeIf { it.startsWith("SESSID=") }
+                    val account = options?.account ?: session.account
+                    val sessid = session.sessid.takeIf { options?.account == null && it.startsWith("SESSID=") }
                     val base = if (account != null) {
                         "uid=${account.uid}; username=${account.username}; token=${account.token}" + (sessid?.let { "; $it" } ?: "")
                     } else {

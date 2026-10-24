@@ -168,7 +168,7 @@ fun MineScreen(generation: Int) {
                 item {
                     if (!session.isLogin) {
                         Box(Modifier.fillMaxWidth().padding(16.dp), contentAlignment = Alignment.Center) {
-                            FilledTonalButton(onClick = { navigator.navigate(LoginRoute) }) { Text("点击登录") }
+                            FilledTonalButton(onClick = { navigator.navigate(LoginRoute()) }) { Text("点击登录") }
                         }
                     } else {
                         ProfileHeader(

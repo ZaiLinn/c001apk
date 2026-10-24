@@ -46,6 +46,8 @@ import androidx.lifecycle.viewModelScope
 import com.zailinn.c001apk.AppContainer
 import com.zailinn.c001apk.core.net.AccountCredentials
 import com.zailinn.c001apk.core.net.ApiFailure
+import com.zailinn.c001apk.core.net.ApiFailureKind
+import com.zailinn.c001apk.core.net.readApiObject
 import com.zailinn.c001apk.core.net.ApiResponse
 import com.zailinn.c001apk.core.protocol.Constants
 import com.zailinn.c001apk.ui.nav.LocalNavigator
@@ -142,21 +144,26 @@ class LoginViewModel(private val app: AppContainer) : ViewModel() {
     }
 
     /**
-     * Saves an account from pasted Cookie text. The login check after every
-     * account switch then expires it if the server rejects the token.
+     * Checks pasted Cookie text with the server before saving it as an account,
+     * so a rejected token never lands in the account list.
      */
     fun loginWithCookie(text: String) {
         if (submitting.value) return
-        val account = AccountCredentials.parseCookie(text) ?: return app.toast("Cookie 缺少有效的 uid、username 或 token")
+        val pasted = AccountCredentials.parseCookie(text) ?: return app.toast("Cookie 缺少有效的 uid、username 或 token")
         submitting.value = true
         viewModelScope.launch {
             try {
-                app.accounts.saveLogin(account.uid, account.username, account.token)
+                val data = readApiObject(app.repository.checkLoginInfo(pasted))["data"] as? JsonObject
+                if ((data?.get("uid") as? JsonPrimitive)?.content != pasted.uid) return@launch app.toast(COOKIE_REJECTED)
+                // The server may hand out a refreshed token, as at every start.
+                val token = (data["token"] as? JsonPrimitive)?.content?.takeIf { it.isNotEmpty() } ?: pasted.token
+                app.accounts.saveLogin(pasted.uid, pasted.username, token)
                 app.toast("已使用 Cookie 登录")
             } catch (e: CancellationException) {
                 throw e
-            } catch (_: Exception) {
-                app.toast("无法保存 Cookie 登录状态，请重试")
+            } catch (e: Exception) {
+                val failure = ApiFailure.from(e)
+                app.toast(if (failure.kind == ApiFailureKind.Authentication) COOKIE_REJECTED else "暂时无法验证 Cookie：${failure.message}")
             } finally {
                 submitting.value = false
             }
@@ -168,8 +175,11 @@ class LoginViewModel(private val app: AppContainer) : ViewModel() {
     }
 }
 
+private const val COOKIE_REJECTED = "Cookie 无效或已过期，未保存。请重新导出后再试"
+
+/** [cookie]: open in Cookie mode, as from 账号管理. */
 @Composable
-fun LoginScreen() {
+fun LoginScreen(cookie: Boolean = false) {
     val navigator = LocalNavigator.current
     val vm = appViewModel(key = "login") { LoginViewModel(it) }
     val hash by vm.requestHash.collectAsStateWithLifecycle()
@@ -180,8 +190,8 @@ fun LoginScreen() {
     var password by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
-    var cookieMode by rememberSaveable { mutableStateOf(false) }
-    var cookie by remember { mutableStateOf("") }
+    var cookieMode by rememberSaveable { mutableStateOf(cookie) }
+    var cookieText by remember { mutableStateOf("") }
     // A saved login switches the session, which returns the app to the main page.
     if (openWeb) DisposableEffect(Unit) {
         vm.openWeb.value = false
@@ -208,7 +218,7 @@ fun LoginScreen() {
             if (cookieMode) {
                 Text("粘贴包含 uid、username 和 token 的 Cookie，例如从本应用其他设备的“导出 Cookie”复制。Cookie 等同于账号密码，不要使用他人提供的 Cookie。")
                 OutlinedTextField(
-                    cookie, { cookie = it }, Modifier.fillMaxWidth(), label = { Text("Cookie") }, minLines = 3, maxLines = 6,
+                    cookieText, { cookieText = it }, Modifier.fillMaxWidth(), label = { Text("Cookie") }, minLines = 3, maxLines = 6,
                     visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
                     keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
                     trailingIcon = {
@@ -220,7 +230,7 @@ fun LoginScreen() {
                 if (submitting) {
                     LoadingIndicator(Modifier.align(Alignment.CenterHorizontally))
                 } else {
-                    Button(onClick = { vm.loginWithCookie(cookie) }, enabled = cookie.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+                    Button(onClick = { vm.loginWithCookie(cookieText) }, enabled = cookieText.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
                         Text("登录")
                     }
                 }
