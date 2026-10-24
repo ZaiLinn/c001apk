@@ -574,8 +574,12 @@ fun ParamsScreen() {
     fun version(title: String, value: String, update: (String) -> ProtocolParams) = Triple<String, String, (String) -> Unit>(title, value) { v ->
         scope.launch { app.settings.saveProtocol(update(v).withUserAgent()) }
     }
+    val hasSzlmId = params.szlmId.isNotEmpty()
     fun device(title: String, value: String, update: (String) -> ProtocolParams) = Triple<String, String, (String) -> Unit>(title, value) { v ->
-        scope.launch { app.settings.saveProtocol(update(v).withUserAgent().withDevice(), PROTOCOL_GENERATED) }
+        scope.launch {
+            app.settings.saveProtocol(update(v).withUserAgent().withDevice(), PROTOCOL_GENERATED)
+            if (hasSzlmId) app.toast("已导入的数盟 ID 来自本机，改成别的机型可能更容易触发人机验证")
+        }
     }
     val versions = listOf(
         version("客户端版本名称", params.versionName) { params.copy(versionName = it) },
@@ -612,11 +616,17 @@ fun ParamsScreen() {
                 ListItem(
                     headlineContent = { Text("重新生成参数") },
                     supportingContent = {
-                        Text(if (local) "随机换成另一款真实机型，并生成新的设备标识" else "已使用生成的参数，再次点按换一款机型")
+                        Text(
+                            when {
+                                hasSzlmId -> "已导入数盟 ID，它来自这台手机，需要和本机型号一起使用。清除数盟 ID 后可用"
+                                local -> "随机换成另一款真实机型，并生成新的设备标识"
+                                else -> "已使用生成的参数，再次点按换一款机型"
+                            },
+                        )
                     },
-                    leadingContent = { RadioButton(!local, null) },
-                    modifier = Modifier.clickable {
-                        scope.launch { app.settings.regenerateProtocol(); app.toast("已重新生成") }
+                    leadingContent = { RadioButton(!local, null, enabled = !hasSzlmId) },
+                    modifier = Modifier.clickable(enabled = !hasSzlmId) {
+                        scope.launch { if (app.settings.regenerateProtocol()) app.toast("已重新生成") }
                     },
                 )
             }

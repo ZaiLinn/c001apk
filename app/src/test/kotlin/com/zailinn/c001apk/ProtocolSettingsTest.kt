@@ -16,6 +16,7 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Rule
@@ -77,5 +78,50 @@ class ProtocolSettingsTest {
         settings.await { current.protocolSource == PROTOCOL_LOCAL }
         assertEquals(phone, settings.current.protocol.profile)
         assertEquals(generated.deviceId, settings.current.protocol.deviceId)
+    }
+
+    @Test
+    fun importingSzlmIdSwitchesBackToThisPhone() = runBlocking {
+        val settings = repository()
+        settings.initialize()
+        settings.await { current.protocol.profile == phone }
+        settings.regenerateProtocol()
+        settings.await { current.protocolSource == PROTOCOL_GENERATED }
+        settings.setSzlmId(SZLM)
+        settings.await { current.protocol.szlmId == SZLM }
+        assertEquals(PROTOCOL_LOCAL, settings.current.protocolSource)
+        assertEquals(phone, settings.current.protocol.profile)
+        assertEquals(SZLM, settings.current.protocol.deviceId)
+    }
+
+    @Test
+    fun regeneratingIsRefusedWhileSzlmIdIsSet() = runBlocking {
+        val settings = repository()
+        settings.initialize()
+        settings.await { current.protocol.profile == phone }
+        settings.setSzlmId(SZLM)
+        settings.await { current.protocol.szlmId == SZLM }
+        val before = settings.current.protocol
+        assertFalse(settings.regenerateProtocol())
+        assertEquals(before, settings.current.protocol)
+        assertEquals(PROTOCOL_LOCAL, settings.current.protocolSource)
+    }
+
+    @Test
+    fun clearingSzlmIdKeepsModelAndStartsFreshId() = runBlocking {
+        val settings = repository()
+        settings.initialize()
+        settings.await { current.protocol.profile == phone }
+        settings.setSzlmId(SZLM)
+        settings.await { current.protocol.szlmId == SZLM }
+        settings.setSzlmId("")
+        settings.await { current.protocol.szlmId.isEmpty() }
+        assertEquals(phone, settings.current.protocol.profile)
+        assertNotEquals(SZLM, settings.current.protocol.deviceId)
+        assertTrue(settings.regenerateProtocol())
+    }
+
+    private companion object {
+        const val SZLM = "DUsyntheticSZLM0123456789abcdef"
     }
 }

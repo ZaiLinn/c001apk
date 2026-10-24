@@ -124,21 +124,32 @@ class SettingsRepository(
     /** Uses this phone's model and system; the device ID stays. */
     suspend fun useLocalDevice() = saveProtocol(current.protocol.withProfile(localDevice()), PROTOCOL_LOCAL)
 
-    /** A different real phone model with a new device ID (the SZLM ID, if set, is kept). */
-    suspend fun regenerateProtocol() {
+    /**
+     * A different real phone model with a new device ID. Not available while an
+     * SZLM ID is set: that ID belongs to this phone, and sending it with another
+     * model would look less like a real device, not more. Returns false then.
+     */
+    suspend fun regenerateProtocol(): Boolean {
+        if (current.protocol.szlmId.isNotEmpty()) return false
         val currentModel = current.protocol.profile
         var params: ProtocolParams
-        do params = ProtocolParams.generate(current.protocol.szlmId) while (params.profile == currentModel)
+        do params = ProtocolParams.generate() while (params.profile == currentModel)
         saveProtocol(params, PROTOCOL_GENERATED)
+        return true
     }
 
     /**
-     * Uses [id] as the device ID, keeping the model. Clearing it, when it was
-     * the device ID, starts a fresh random one.
+     * Uses [id] as the device ID. Setting one also switches back to this phone's
+     * model and system, since the ID was read from the official app on this phone.
+     * Clearing it, when it was the device ID, starts a fresh random one and keeps the model.
      */
     suspend fun setSzlmId(id: String) {
         val params = current.protocol
-        saveProtocol(params.copy(szlmId = id).withDevice(newId = id.isEmpty() && params.szlmId.isNotEmpty()))
+        if (id.isNotEmpty()) {
+            saveProtocol(params.copy(szlmId = id).withProfile(localDevice()), PROTOCOL_LOCAL)
+        } else {
+            saveProtocol(params.copy(szlmId = id).withDevice(newId = params.szlmId.isNotEmpty()))
+        }
     }
 
     /** [source] null keeps the current one; editing device fields by hand passes [PROTOCOL_GENERATED]. */
