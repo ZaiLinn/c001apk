@@ -18,6 +18,9 @@ import org.junit.rules.TemporaryFolder
 
 /** A passed captcha lives on the API SESSID, which now survives a restart of the same account and device. */
 class SessionPersistenceTest {
+    // Generous: the first DataStore write in a CI fork can take seconds.
+    private companion object { const val WAIT_MS = 20_000L }
+
     @get:Rule val folder = TemporaryFolder()
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     private val store by lazy { LocalStore(PreferenceDataStoreFactory.create(scope = scope) { folder.newFile("s.preferences_pb") }, scope) }
@@ -31,7 +34,7 @@ class SessionPersistenceTest {
     }
 
     private fun saved(sessid: String) = runBlocking {
-        withTimeout(5_000) { while (!store.prefs.value.toString().contains(sessid)) delay(10) }
+        withTimeout(WAIT_MS) { while (!store.prefs.value.toString().contains(sessid)) delay(10) }
     }
 
     @Test
@@ -53,7 +56,7 @@ class SessionPersistenceTest {
         saved("SESSID=account")
         assertEquals("SESSID=account", launch(device).first.sessid)
         accounts.useGuest()
-        withTimeout(5_000) { while (store.prefs.value.toString().contains("SESSID=account")) delay(10) }
+        withTimeout(WAIT_MS) { while (store.prefs.value.toString().contains("SESSID=account")) delay(10) }
         assertEquals("", launch(device).first.sessid)
     }
 
@@ -71,6 +74,6 @@ class SessionPersistenceTest {
         val (session, _) = launch(device)
         session.sessid = "SESSID=abc"
         device.value = "d2"
-        withTimeout(5_000) { while (session.sessid.isNotEmpty()) delay(10) }
+        withTimeout(WAIT_MS) { while (session.sessid.isNotEmpty()) delay(10) }
     }
 }
