@@ -74,6 +74,7 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -129,7 +130,8 @@ fun SettingsScreen() {
     val navigator = LocalNavigator.current
     val app = appContainer()
     val vault by app.accounts.vault.collectAsStateWithLifecycle()
-    var selected by remember { mutableStateOf(SettingsSection.Appearance) }
+    // Saveable: on wide windows a page opened from a section returns to that section.
+    var selected by rememberSaveable { mutableStateOf(SettingsSection.Appearance) }
     Scaffold(topBar = { SimpleTopBar("设置") }) { padding ->
         BoxWithConstraints(Modifier.padding(padding).fillMaxSize()) {
             val wide = maxWidth >= 840.dp

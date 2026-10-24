@@ -89,8 +89,8 @@ fun FeedScreen(id: String, toReplies: Boolean = false) {
     val repliesSource by vm.repliesSource.collectAsStateWithLifecycle()
     val repliesNotice by vm.repliesNotice.collectAsStateWithLifecycle()
     val favorite by vm.favorite.collectAsStateWithLifecycle()
+    val thread by vm.thread.collectAsStateWithLifecycle()
     var replying by remember { mutableStateOf<ReplyRequest?>(null) }
-    var thread by remember { mutableStateOf<Datum?>(null) }
     var menu by remember { mutableStateOf(false) }
     var showNotice by remember { mutableStateOf(false) }
     var collecting by remember { mutableStateOf(false) }
@@ -99,7 +99,7 @@ fun FeedScreen(id: String, toReplies: Boolean = false) {
     val reply: (Datum?, Datum?) -> Unit = { target, parent ->
         if (session.isLogin) replying = ReplyRequest(target, parent) else navigator.toast("登录后才能回复")
     }
-    val actions = vm.actions.copy(onReply = { target, parent -> reply(target, parent) }, onShowReplies = { thread = it })
+    val actions = vm.actions.copy(onReply = { target, parent -> reply(target, parent) }, onShowReplies = { vm.thread.value = it })
 
     // The title bar slides away while reading and returns on the first scroll down.
     val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
@@ -212,7 +212,7 @@ fun FeedScreen(id: String, toReplies: Boolean = false) {
             onReplied = { vm.addReply(it, target, request.parent) },
         )
     }
-    thread?.let { origin -> ReplyThreadSheet(origin, onDismiss = { thread = null }) }
+    thread?.let { origin -> ReplyThreadSheet(origin, onDismiss = { vm.thread.value = null }) }
     if (collecting) CollectionPickerSheet(id, onDismiss = { collecting = false })
     if (showNotice) {
         AppAlertDialog(

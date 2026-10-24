@@ -31,6 +31,11 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
     val loadingDetail = MutableStateFlow(false)
     val sort = MutableStateFlow(ReplySort.Default)
     val favorite = MutableStateFlow(app.content.isFavorite(id))
+    /**
+     * The reply whose sub-replies are open. Held here, not in the screen, since the
+     * screen leaves composition while an image or profile opened from the sheet shows.
+     */
+    val thread = MutableStateFlow<Datum?>(null)
     var topReply: Datum? = null
         private set
     private var replyMe: Datum? = null

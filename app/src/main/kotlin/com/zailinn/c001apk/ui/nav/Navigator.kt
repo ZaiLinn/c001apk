@@ -9,7 +9,9 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.core.net.toUri
+import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
+import androidx.navigation.toRoute
 import com.zailinn.c001apk.core.protocol.Constants
 import com.zailinn.c001apk.data.SettingsRepository
 
@@ -19,7 +21,17 @@ class AppNavigator(
     private val nav: NavHostController,
     private val settings: SettingsRepository,
 ) {
-    fun navigate(route: Any) = nav.navigate(route) { launchSingleTop = true }
+    /**
+     * Opens [route] unless it is already the current page with the same arguments.
+     * launchSingleTop would match the destination alone, so a linked feed or
+     * another profile replaced the current page and back skipped it.
+     */
+    fun navigate(route: Any) {
+        val current = nav.currentBackStackEntry
+        val same = current != null && current.destination.hasRoute(route::class) &&
+            runCatching { current.toRoute<Any>(route::class) == route }.getOrDefault(false)
+        if (!same) nav.navigate(route)
+    }
     fun back() {
         if (nav.previousBackStackEntry != null) nav.popBackStack()
     }
