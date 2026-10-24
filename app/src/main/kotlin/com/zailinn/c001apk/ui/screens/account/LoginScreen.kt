@@ -44,6 +44,7 @@ import androidx.lifecycle.ViewModel
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.zailinn.c001apk.AppContainer
+import com.zailinn.c001apk.core.net.AccountCredentials
 import com.zailinn.c001apk.core.net.ApiFailure
 import com.zailinn.c001apk.core.net.ApiResponse
 import com.zailinn.c001apk.core.protocol.Constants
@@ -140,6 +141,28 @@ class LoginViewModel(private val app: AppContainer) : ViewModel() {
         }
     }
 
+    /**
+     * Saves an account from pasted Cookie text. The login check after every
+     * account switch then expires it if the server rejects the token.
+     */
+    fun loginWithCookie(text: String) {
+        if (submitting.value) return
+        val account = AccountCredentials.parseCookie(text) ?: return app.toast("Cookie 缺少有效的 uid、username 或 token")
+        submitting.value = true
+        viewModelScope.launch {
+            try {
+                app.accounts.saveLogin(account.uid, account.username, account.token)
+                app.toast("已使用 Cookie 登录")
+            } catch (e: CancellationException) {
+                throw e
+            } catch (_: Exception) {
+                app.toast("无法保存 Cookie 登录状态，请重试")
+            } finally {
+                submitting.value = false
+            }
+        }
+    }
+
     override fun onCleared() {
         app.session.loginSession = ""
     }
@@ -157,6 +180,8 @@ fun LoginScreen() {
     var password by remember { mutableStateOf("") }
     var code by remember { mutableStateOf("") }
     var showPassword by remember { mutableStateOf(false) }
+    var cookieMode by rememberSaveable { mutableStateOf(false) }
+    var cookie by remember { mutableStateOf("") }
     // A saved login switches the session, which returns the app to the main page.
     if (openWeb) DisposableEffect(Unit) {
         vm.openWeb.value = false
@@ -177,6 +202,30 @@ fun LoginScreen() {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("遇到人机验证或无法直接登录时，请使用右上角的“网页登录”，在酷安网页中完成验证与登录。")
+            TextButton(onClick = { cookieMode = !cookieMode }, enabled = !submitting) {
+                Text(if (cookieMode) "使用账号密码登录" else "使用 Cookie 登录")
+            }
+            if (cookieMode) {
+                Text("粘贴包含 uid、username 和 token 的 Cookie，例如从本应用其他设备的“导出 Cookie”复制。Cookie 等同于账号密码，不要使用他人提供的 Cookie。")
+                OutlinedTextField(
+                    cookie, { cookie = it }, Modifier.fillMaxWidth(), label = { Text("Cookie") }, minLines = 3, maxLines = 6,
+                    visualTransformation = if (showPassword) VisualTransformation.None else PasswordVisualTransformation(),
+                    keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password, autoCorrectEnabled = false),
+                    trailingIcon = {
+                        IconButton(onClick = { showPassword = !showPassword }) {
+                            Icon(if (showPassword) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility, "显示 Cookie")
+                        }
+                    },
+                )
+                if (submitting) {
+                    LoadingIndicator(Modifier.align(Alignment.CenterHorizontally))
+                } else {
+                    Button(onClick = { vm.loginWithCookie(cookie) }, enabled = cookie.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+                        Text("登录")
+                    }
+                }
+                return@Column
+            }
             OutlinedTextField(
                 account, { account = it }, Modifier.fillMaxWidth(), label = { Text("账号") }, singleLine = true,
                 keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
