@@ -38,6 +38,20 @@ class LocalFollowPagerTest {
     }
 
     @Test
+    fun topicsKeepEveryAuthorAndShareDeduplicationWithUsers() = runTest {
+        val pager = LocalFollowPager(listOf(FollowSource.User("1"), FollowSource.Topic("7", "合成话题"))) { source, page ->
+            when {
+                page.page > 1 -> LoadResult.Empty
+                source is FollowSource.User -> LoadResult.Success(listOf(feed(11, 1, 100), feed(31, 3, 95)))
+                // Topic feeds come from anyone, including a followed user.
+                else -> LoadResult.Success(listOf(feed(11, 1, 100), feed(41, 4, 90), feed(42, 5, 80)))
+            }
+        }
+        assertEquals(listOf("11", "41", "42"), pager.next().map { it.id })
+        assertTrue(pager.isEnd)
+    }
+
+    @Test
     fun failedUserPreservesOthersAndRetriesSamePage() = runTest {
         var fail = true
         val pages = mutableListOf<Int>()

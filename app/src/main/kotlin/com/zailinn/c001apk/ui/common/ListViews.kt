@@ -42,6 +42,8 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
+import androidx.compose.ui.input.nestedscroll.nestedScroll
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -137,6 +139,11 @@ fun PagedListView(
     spacing: Int = 10,
     /** Also run on pull-to-refresh, for what the screen shows above the list. */
     onRefresh: () -> Unit = {},
+    /**
+     * Scrolling seen by the list before pull-to-refresh: a folding header above it opens fully
+     * before a pull at the top starts a refresh.
+     */
+    nestedScroll: NestedScrollConnection? = null,
     header: LazyListScope.() -> Unit = {},
     item: @Composable (index: Int, datum: Datum) -> Unit,
 ) {
@@ -144,6 +151,7 @@ fun PagedListView(
     val context = LocalContext.current
     LaunchedEffect(list) { list.start() }
     LaunchedEffect(list) { list.messages.collect { Toast.makeText(context, it, Toast.LENGTH_SHORT).show() } }
+    val listModifier = Modifier.fillMaxSize().let { if (nestedScroll != null) it.nestedScroll(nestedScroll) else it }
     PullToRefreshBox(
         isRefreshing = state.refreshing,
         onRefresh = {
@@ -153,7 +161,7 @@ fun PagedListView(
         modifier = modifier.fillMaxSize(),
     ) {
         if (state.status !is LoadResult.Success) {
-            LazyColumn(Modifier.fillMaxSize(), state = listState, contentPadding = contentPadding) {
+            LazyColumn(listModifier, state = listState, contentPadding = contentPadding) {
                 header()
                 item { StatusBox(state.status, list::retry, Modifier.fillParentMaxHeight(0.6f)) }
             }
@@ -168,7 +176,7 @@ fun PagedListView(
         }
         LaunchedEffect(nearEnd, state.items.size, state.footer) { if (nearEnd) list.loadMore() }
         LazyColumn(
-            Modifier.fillMaxSize(),
+            listModifier,
             state = listState,
             contentPadding = contentPadding,
             verticalArrangement = Arrangement.spacedBy(spacing.dp),

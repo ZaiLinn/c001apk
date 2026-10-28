@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
@@ -31,6 +32,7 @@ import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.key
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
@@ -42,6 +44,7 @@ import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalFocusManager
+import androidx.compose.ui.platform.LocalSoftwareKeyboardController
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -53,6 +56,7 @@ import com.zailinn.c001apk.ui.cards.ItemCard
 import com.zailinn.c001apk.ui.common.AppDropdownMenu
 import com.zailinn.c001apk.ui.common.PagedList
 import com.zailinn.c001apk.ui.common.PagedListView
+import com.zailinn.c001apk.ui.common.hapticClick
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.SearchResultRoute
 import com.zailinn.c001apk.ui.screens.ContentViewModel
@@ -79,11 +83,16 @@ fun SearchScreen(title: String?, pageType: String?, pageParam: String?) {
     val scope = rememberCoroutineScope()
     var text by rememberSaveable { mutableStateOf("") }
     val focus = remember { FocusRequester() }
+    val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
     val search = { keyword: String ->
         val value = keyword.trim()
         if (value.isNotEmpty()) {
             scope.launch { app.content.addSearch(value) }
+            // The results open without the keyboard; it would otherwise stay up over them.
+            focusManager.clearFocus()
+            keyboard?.hide()
             navigator.navigate(SearchResultRoute(value, title, pageType, pageParam))
         }
     }
@@ -132,7 +141,8 @@ fun SearchScreen(title: String?, pageType: String?, pageParam: String?) {
     }
 }
 
-private val contentTypes = listOf("动态" to "feed", "应用" to "apk", "游戏" to "game", "话题" to "feedTopic", "数码" to "product", "用户" to "user")
+/** Tabs of a global search; 综合 ("all") is built here from the others. */
+private val contentTypes = listOf("综合" to "all", "数码" to "product", "动态" to "feed", "话题" to "feedTopic", "用户" to "user", "应用" to "apk", "游戏" to "game")
 private val feedTypes = listOf("全部" to "all", "动态" to "feed", "文章" to "feedArticle", "酷图" to "picture", "评论" to "comment",
     "评分" to "rating", "回答" to "answer", "问答" to "question", "投票" to "vote")
 private val sortTypes = listOf("最新发布" to ("dateline" to 0), "默认" to ("none" to 0), "热门" to ("hot" to 0),
@@ -165,6 +175,7 @@ fun SearchResultScreen(keyword: String, title: String?, pageType: String?, pageP
     val app = appContainer()
     val scope = rememberCoroutineScope()
     val focusManager = LocalFocusManager.current
+    val keyboard = LocalSoftwareKeyboardController.current
     // The box stays editable: a new keyword searches again on this page.
     var text by rememberSaveable { mutableStateOf(keyword) }
     var active by rememberSaveable { mutableStateOf(keyword) }
@@ -175,9 +186,15 @@ fun SearchResultScreen(keyword: String, title: String?, pageType: String?, pageP
             active = value
             text = value
             focusManager.clearFocus()
+            keyboard?.hide()
         }
     }
     val feedVm = appViewModel(key = "search-feed-$active-$pageType-$pageParam") { SearchViewModel(it, "feed", active, pageType, pageParam) }
+    // 综合 keeps its own feed list, so its sort chips and the 动态 tab do not move each other.
+    val overviewFeeds = if (types.size > 1) appViewModel(key = "search-overview-feed-$active") { SearchViewModel(it, "feed", active, null, null) } else null
+    val pager = rememberPagerState { types.size }
+    // The menus filter what is shown: 综合's feeds there, the 动态 tab elsewhere.
+    val menuVm = if (overviewFeeds != null && pager.currentPage == 0) overviewFeeds else feedVm
     Scaffold(
         topBar = {
             TopAppBar(
@@ -190,38 +207,51 @@ fun SearchResultScreen(keyword: String, title: String?, pageType: String?, pageP
                 },
                 actions = {
                     if (text.isNotEmpty()) IconButton(onClick = { text = "" }) { Icon(Icons.Outlined.Clear, "清除") }
-                    IconButton(onClick = { menu = "type" }) { Icon(Icons.Outlined.FilterList, "内容类型") }
-                    IconButton(onClick = { menu = "sort" }) { Icon(Icons.AutoMirrored.Outlined.Sort, "排序方式") }
+                    val feedsShown = types.size == 1 || types[pager.currentPage].second in setOf("all", "feed")
+                    if (feedsShown) {
+                        IconButton(onClick = hapticClick { menu = "type" }) { Icon(Icons.Outlined.FilterList, "内容类型") }
+                        IconButton(onClick = hapticClick { menu = "sort" }) { Icon(Icons.AutoMirrored.Outlined.Sort, "排序方式") }
+                    }
                     AppDropdownMenu(menu == "type", { menu = null }) {
                         feedTypes.forEach { (label, value) ->
-                            DropdownMenuItem({ Text(label) }, { menu = null; feedVm.setFeedType(value) })
+                            DropdownMenuItem({ Text(label) }, hapticClick { menu = null; menuVm.setFeedType(value) })
                         }
                     }
                     AppDropdownMenu(menu == "sort", { menu = null }) {
                         sortTypes.forEach { item ->
-                            DropdownMenuItem({ Text(item.first) }, { menu = null; feedVm.setSort(item) })
+                            DropdownMenuItem({ Text(item.first) }, { menu = null; menuVm.setSort(item) })
                         }
                     }
                 },
             )
         },
     ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            if (types.size == 1) {
+        // A new keyword starts every list at its top instead of where the last search was scrolled to.
+        key(active) { Column(Modifier.padding(padding).fillMaxSize()) {
+            if (overviewFeeds == null) {
                 PagedListView(feedVm.list) { _, item -> ItemCard(item, feedVm.actions) }
             } else {
-                TabbedPages(types.map { it.first }) { index ->
-                    val vm = if (index == 0) feedVm else appViewModel(key = "search-${types[index].second}-$active") {
-                        SearchViewModel(it, types[index].second, active, pageType, pageParam)
+                TabbedPages(types.map { it.first }, pager = pager) { index ->
+                    when (val type = types[index].second) {
+                        "all" -> {
+                            val overview = appViewModel(key = "search-overview-$active") { SearchOverviewViewModel(it, active) }
+                            SearchOverview(overview, overviewFeeds) { more ->
+                                scope.launch { pager.animateScrollToPage(types.indexOfFirst { it.second == more }) }
+                            }
+                        }
+                        "feed" -> PagedListView(feedVm.list) { _, item -> ItemCard(item, feedVm.actions) }
+                        else -> {
+                            val vm = appViewModel(key = "search-$type-$active") { SearchViewModel(it, type, active, pageType, pageParam) }
+                            PagedListView(vm.list) { _, item -> ItemCard(item, vm.actions) }
+                        }
                     }
-                    PagedListView(vm.list) { _, item -> ItemCard(item, vm.actions) }
                 }
             }
-        }
+        } }
     }
 }
 
-/** The search box of the search page and the result page: 14sp like the home search pill. */
+/** The search box of the search page and the result page: 16sp like the home search pill. */
 @Composable
 private fun SearchField(
     text: String,
@@ -234,9 +264,9 @@ private fun SearchField(
     TextField(
         text, onChange,
         modifier.fillMaxWidth(),
-        textStyle = MaterialTheme.typography.bodyMedium,
-        placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyMedium) },
-        prefix = prefix?.let { { Text(it, style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.outline) } },
+        textStyle = MaterialTheme.typography.bodyLarge,
+        placeholder = { Text(placeholder, style = MaterialTheme.typography.bodyLarge) },
+        prefix = prefix?.let { { Text(it, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.outline) } },
         singleLine = true,
         keyboardOptions = KeyboardOptions(imeAction = ImeAction.Search),
         keyboardActions = KeyboardActions(onSearch = { onSearch() }),

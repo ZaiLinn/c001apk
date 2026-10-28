@@ -1,10 +1,12 @@
 package com.zailinn.c001apk.core.net
 
 import kotlinx.coroutines.async
+import okhttp3.HttpUrl.Companion.toHttpUrl
 import kotlinx.coroutines.awaitAll
 import kotlinx.coroutines.test.runTest
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -22,6 +24,21 @@ class RequestTest {
         assertTrue(account.header("Accept")!!.contains("text/html"))
         assertTrue(api.header("X-App-Token")!!.startsWith("v3"))
         assertEquals("synthetic-test-device", api.header("X-App-Device"))
+    }
+
+    @Test
+    fun topicFeedAsksForTheNewestDiscussion() = runTest {
+        val h = Harness()
+        h.repo.topicFeed("7", "合成 话题", Page())
+        val outer = h.transport.requests.single().url.queryParameter("url").orEmpty()
+        assertTrue(outer.startsWith("/page?url="))
+        val inner = "https://example.invalid$outer".toHttpUrl().queryParameter("url").orEmpty().let { "https://example.invalid$it".toHttpUrl() }
+        assertEquals("/topic/tagFeedList", inner.encodedPath)
+        assertEquals("7", inner.queryParameter("id"))
+        assertEquals("合成 话题", inner.queryParameter("title"))
+        assertEquals("dateline_desc", inner.queryParameter("sortField"))
+        assertTrue(h.repo.topicFeed("7&x=1", "合成", Page()) is com.zailinn.c001apk.core.model.LoadResult.Error)
+        assertEquals(1, h.transport.requests.size)
     }
 
     @Test
@@ -113,14 +130,57 @@ class RequestTest {
         h.session.activate(AccountCredentials("10", "name", "tok"), notify = true)
         h.client.get("https://www.coolapk.com/account")
         h.client.get("https://www.coolapk.com/feed/not-an-id")
-        h.client.get("http://www.coolapk.com/feed/123")
         h.client.get("https://www.coolapk.com.evil.invalid/feed/123")
         h.client.post("https://www.coolapk.com/feed/123")
-        assertEquals(5, h.transport.requests.size)
+        assertEquals(4, h.transport.requests.size)
         for (request in h.transport.requests) {
             assertNull(request.header("X-App-Token"))
             assertNull(request.header("Cookie"))
         }
+    }
+
+    @Test
+    fun credentialsRequireHttpsAndAreRemovedAfterChangingHost() {
+        val session = SessionState().apply { activate(AccountCredentials("10", "name", "tok"), notify = true) }
+        val headers = CoolapkHeaders(session, { syntheticParams })
+        val signed = headers.sign(okhttp3.Request.Builder().url("https://api.coolapk.com/v6/main/indexV8").build())
+        assertEquals("uid=10; username=name; token=tok", signed.header("Cookie"))
+        for (url in listOf("https://example.invalid/", "http://api.coolapk.com/v6/main/indexV8", "http://account.coolapk.com/auth/login")) {
+            val redirected = headers.sign(signed.newBuilder().url(url).build())
+            assertNull(redirected.header("Cookie"))
+            assertNull(redirected.header("X-App-Token"))
+            assertNull(redirected.header("X-App-Device"))
+            assertNull(redirected.header("X-Sdk-Int"))
+            assertNull(redirected.header("X-Requested-With"))
+        }
+        val client = CoolapkClient(session, headers)
+        assertFalse(client.http.followSslRedirects)
+        assertTrue(client.http.networkInterceptors.contains(headers))
+    }
+
+    @Test
+    fun cleartextApiEntryIsUpgradedBeforeSigningAndSending() = runTest {
+        val h = Harness()
+        h.session.activate(AccountCredentials("10", "name", "tok"), notify = true)
+        h.client.get("http://api.coolapk.com/v6/main/indexV8")
+        val request = h.transport.requests.single()
+        assertTrue(request.url.isHttps)
+        assertEquals("uid=10; username=name; token=tok", request.header("Cookie"))
+    }
+
+    @Test
+    fun redirectedThirdPartyResponseCannotReplaceTheApiSessionCookie() = runTest {
+        val session = SessionState().apply { sessid = "SESSID=original" }
+        val transport = okhttp3.Interceptor { chain ->
+            okhttp3.Response.Builder()
+                .request(chain.request().newBuilder().url("https://example.invalid/redirected").build())
+                .protocol(okhttp3.Protocol.HTTP_1_1).code(200).message("OK")
+                .header("Set-Cookie", "SESSID=untrusted; Path=/")
+                .body(okhttp3.ResponseBody.Companion.run { "{}".toResponseBody() }).build()
+        }
+        val client = CoolapkClient(session, CoolapkHeaders(session, { syntheticParams }), transport = transport)
+        client.get("https://api.coolapk.com/v6/main/indexV8")
+        assertEquals("SESSID=original", session.sessid)
     }
 
     @Test

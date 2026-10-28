@@ -11,6 +11,7 @@ import com.zailinn.c001apk.core.net.ApiFailureEvents
 import com.zailinn.c001apk.core.net.CaptchaChallenge
 import com.zailinn.c001apk.core.net.CoolapkClient
 import com.zailinn.c001apk.core.net.CoolapkHeaders
+import com.zailinn.c001apk.core.net.HttpsUpgrade
 import com.zailinn.c001apk.core.net.CoolapkRepository
 import com.zailinn.c001apk.core.net.SessionState
 import com.zailinn.c001apk.core.update.UpdatePreferences
@@ -20,8 +21,8 @@ import com.zailinn.c001apk.data.LocalContent
 import com.zailinn.c001apk.data.LocalStore
 import com.zailinn.c001apk.data.AppSettings
 import com.zailinn.c001apk.data.CaptchaLog
+import com.zailinn.c001apk.data.HiddenLog
 import com.zailinn.c001apk.data.SettingsRepository
-import com.zailinn.c001apk.data.sensitiveFilterOn
 import com.zailinn.c001apk.semantic.SemanticConfig
 import com.zailinn.c001apk.semantic.SemanticModel
 import kotlinx.coroutines.CompletableDeferred
@@ -32,8 +33,10 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -45,6 +48,8 @@ class AppContainer(
     storeName: String = "c001apk",
     /** Test seam: replaces the network for Coolapk requests after signing. */
     transport: okhttp3.Interceptor? = null,
+    /** Replaces only media downloads for offline gallery tests. */
+    imageTransport: okhttp3.Interceptor? = null,
 ) {
     val scope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val store = LocalStore(
@@ -58,15 +63,18 @@ class AppContainer(
     val session = SessionState()
     val accounts = AccountManager(store, session)
     val captchaLog = CaptchaLog(store, scope)
+    val hiddenLog = HiddenLog(store, scope)
 
-    private val baseHttp = OkHttpClient()
+    private val baseHttp = OkHttpClient.Builder().addInterceptor(HttpsUpgrade).followSslRedirects(false).build()
 
     /** Images use the client user agent, but never API credentials. */
     val imageHttp: OkHttpClient = baseHttp.newBuilder()
+        .addInterceptor(HttpsUpgrade.Redirects)
         .addInterceptor { chain ->
             val ua = settings.current.protocol.userAgent
             chain.proceed(if (ua.isEmpty()) chain.request() else chain.request().newBuilder().header("User-Agent", ua).build())
         }
+        .apply { imageTransport?.let(::addInterceptor) }
         .build()
 
     val client = CoolapkClient(
@@ -85,12 +93,25 @@ class AppContainer(
     val semantic = SemanticModel(context, baseHttp, scope)
     val repository = CoolapkRepository(client) {
         val current = settings.current
-        content.filter(current).copy(semantic = semantic.matcher(current.sensitiveFilterOn && current.semanticFold, semanticConfig()))
+        content.filter(current).copy(semantic = semantic.matcher(current.semanticFold, semanticConfig()), onHidden = hiddenLog::add)
     }
 
     fun semanticConfig(current: AppSettings = settings.current) =
         SemanticConfig(content.filterCategories.value.filter { it.enabled }, current.semanticThreshold)
     val uploader = com.zailinn.c001apk.core.upload.OssUploader(repository, baseHttp)
+    val galleryFiles: com.zailinn.c001apk.ui.screens.other.GalleryFiles by lazy {
+        com.zailinn.c001apk.ui.screens.other.GalleryFiles(context, imageHttp, repository) { backups.localMedia(it) }
+    }
+    val archiveIndex by lazy { com.zailinn.c001apk.backup.ArchiveIndex(context) }
+    val backups: com.zailinn.c001apk.backup.FeedBackupStore by lazy {
+        com.zailinn.c001apk.backup.FeedBackupStore(context, store, scope, repository, galleryFiles, ::toast, archiveIndex = archiveIndex)
+    }
+    val archiveSync by lazy {
+        com.zailinn.c001apk.backup.ArchiveSync(repository, backups, archiveIndex, scope,
+            { session.account?.uid.orEmpty() }, { settings.current },
+            { com.zailinn.c001apk.ui.common.isValidatedWifi(context) }, ::toast)
+    }
+    val archiveExporter by lazy { com.zailinn.c001apk.backup.ArchiveExporter(context, backups, archiveIndex) }
     val captcha = CaptchaCoordinator()
 
     /**
@@ -112,6 +133,10 @@ class AppContainer(
             settings.initialize()
             content.migrateCategories()
         }
+        content.favoritesChanged = { favorites ->
+            kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { archiveIndex.localSources(favorites.map { it.id }.toSet()) }
+        }
+        scope.launch(kotlinx.coroutines.Dispatchers.IO) { archiveIndex.localSources(content.favorites.value.map { it.id }.toSet()) }
         client.captchaVerifier = captcha::verify
         client.captchaListener = { captchaLog.add(it, settings.current) }
         // The device ID and 数盟 ID a saved API session is bound to.
@@ -119,7 +144,7 @@ class AppContainer(
         accounts.keepSession(settings.settings.map(::device).stateIn(scope, SharingStarted.Eagerly, device(settings.current)), scope)
         ApiFailureEvents.onDeviceRejected = { if (settings.current.protocol.szlmId.isNotEmpty()) deviceIdRejected.value = true }
         // Start loading the model early so the first pages can already use it.
-        settings.current.let { semantic.matcher(it.sensitiveFilterOn && it.semanticFold, semanticConfig(it)) }
+        settings.current.let { semantic.matcher(it.semanticFold, semanticConfig(it)) }
     }
 }
 

@@ -34,6 +34,8 @@ import com.zailinn.c001apk.semantic.SemanticStatus
 import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.common.AppAlertDialog
 import com.zailinn.c001apk.ui.common.SectionTitle
+import com.zailinn.c001apk.ui.common.hapticChange
+import com.zailinn.c001apk.ui.common.hapticClick
 import com.zailinn.c001apk.ui.screens.appContainer
 import kotlinx.coroutines.launch
 
@@ -101,11 +103,11 @@ fun SemanticSection() {
                 Text(if (installed) "关键词没命中时再按意思判断，按上面的开关折叠或隐藏" else "下载模型后可开启")
             },
             trailingContent = {
-                Switch(settings.semanticFold, { scope.launch { app.settings.set(SettingKeys.semanticFold, it) } }, enabled = installed)
+                Switch(settings.semanticFold, hapticChange { scope.launch { app.settings.set(SettingKeys.semanticFold, it) } }, enabled = installed)
             },
-            modifier = Modifier.clickable(enabled = installed) {
+            modifier = Modifier.clickable(enabled = installed, onClick = hapticClick {
                 scope.launch { app.settings.set(SettingKeys.semanticFold, !settings.semanticFold) }
-            },
+            }),
         )
         var threshold by remember(settings.semanticThreshold) { mutableFloatStateOf(settings.semanticThreshold) }
         ListItem(

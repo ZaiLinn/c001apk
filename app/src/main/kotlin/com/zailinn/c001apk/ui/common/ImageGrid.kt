@@ -17,6 +17,8 @@ import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
@@ -33,10 +35,10 @@ private val Corner = RoundedCornerShape(12.dp)
  * Sizes come from weights and aspect ratios, so no subcomposition is needed.
  */
 @Composable
-fun ImageGrid(pics: List<String>, modifier: Modifier = Modifier, article: Boolean = false, gallery: List<String> = pics) {
+fun ImageGrid(pics: List<String>, modifier: Modifier = Modifier, article: Boolean = false, gallery: List<String> = pics, media: List<com.zailinn.c001apk.core.model.GalleryMedia> = emptyList()) {
     if (pics.isEmpty()) return
     val navigator = LocalNavigator.current
-    val open = { url: String, index: Int -> navigator.openImages(gallery, gallery.indexOf(url).takeIf { it >= 0 } ?: index) }
+    val open = { url: String, index: Int -> navigator.openImages(gallery, gallery.indexOf(url).takeIf { it >= 0 } ?: index, media) }
     if (article || pics.size == 1) {
         val url = pics.first()
         val ratio = imageAspectRatio(url) ?: 1f
@@ -47,14 +49,14 @@ fun ImageGrid(pics: List<String>, modifier: Modifier = Modifier, article: Boolea
             else -> 1f / 3f
         }
         Box(modifier.fillMaxWidth()) {
-            ImageCell(url, Modifier.fillMaxWidth(share).aspectRatio(max(ratio, 9f / 22f)), long = 1f / ratio > 22f / 9f) { open(url, 0) }
+            ImageCell(url, Modifier.fillMaxWidth(share).aspectRatio(max(ratio, 9f / 22f)), long = 1f / ratio > 22f / 9f, media = media.firstOrNull { it.matches(url) }) { open(url, 0) }
         }
     } else {
         Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space)) {
             pics.chunked(3).forEachIndexed { row, items ->
                 Row(horizontalArrangement = Arrangement.spacedBy(Space)) {
                     items.forEachIndexed { column, url ->
-                        ImageCell(url, Modifier.weight(1f).aspectRatio(1f)) { open(url, row * 3 + column) }
+                        ImageCell(url, Modifier.weight(1f).aspectRatio(1f), media = media.firstOrNull { it.matches(url) }) { open(url, row * 3 + column) }
                     }
                     repeat(3 - items.size) { Spacer(Modifier.weight(1f)) }
                 }
@@ -64,10 +66,13 @@ fun ImageGrid(pics: List<String>, modifier: Modifier = Modifier, article: Boolea
 }
 
 @Composable
-private fun ImageCell(url: String, modifier: Modifier, long: Boolean = false, onClick: () -> Unit) {
-    Box(modifier.clip(Corner).clickable(onClick = onClick)) {
+private fun ImageCell(url: String, modifier: Modifier, long: Boolean = false, media: com.zailinn.c001apk.core.model.GalleryMedia? = null, onClick: () -> Unit) {
+    Box(modifier.clip(Corner).clickable(onClick = onClick).semantics { contentDescription = "查看图片" }) {
         NetworkImage(thumbnail(url), Modifier.fillMaxSize())
-        if (rememberUltraHdr(url)) CellLabel("HDR", Modifier.align(Alignment.TopStart))
+        val item = media ?: com.zailinn.c001apk.core.model.GalleryMedia.fromUrl(url)
+        val header = rememberJpegFlags(url)
+        if (item.isHdr || header.hdr) CellLabel("HDR", Modifier.align(Alignment.TopStart))
+        if (item.isLive || header.live) CellLabel("Live", Modifier.align(Alignment.TopEnd))
         val label = when {
             url.endsWith(".gif") -> "GIF"
             long -> "长图"

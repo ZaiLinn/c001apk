@@ -17,6 +17,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
@@ -28,6 +29,7 @@ import com.zailinn.c001apk.core.update.UpdateResult
 import com.zailinn.c001apk.core.update.UpdateStatus
 import com.zailinn.c001apk.data.AppSettings
 import com.zailinn.c001apk.ui.common.AppAlertDialog
+import com.zailinn.c001apk.ui.common.rememberAppHapticFeedback
 import com.zailinn.c001apk.ui.nav.AboutRoute
 import com.zailinn.c001apk.ui.nav.AccountsRoute
 import com.zailinn.c001apk.ui.nav.AppNavigator
@@ -42,6 +44,7 @@ import com.zailinn.c001apk.ui.nav.CoolpicRoute
 import com.zailinn.c001apk.ui.nav.CopyRoute
 import com.zailinn.c001apk.ui.nav.DyhRoute
 import com.zailinn.c001apk.ui.nav.EventRoute
+import com.zailinn.c001apk.ui.nav.ArchiveSearchRoute
 import com.zailinn.c001apk.ui.nav.FeedRoute
 import com.zailinn.c001apk.ui.nav.HistoryRoute
 import com.zailinn.c001apk.ui.nav.ImageViewerRoute
@@ -145,6 +148,7 @@ fun C001apkApp(app: AppContainer, deepLink: Uri?, onDeepLinkHandled: () -> Unit)
             LocalNavigator provides navigator,
             LocalSession provides session,
             LocalAppSettings provides settings,
+            LocalHapticFeedback provides rememberAppHapticFeedback(settings.hapticFeedback),
         ) {
             NavHost(
                 nav,
@@ -156,7 +160,7 @@ fun C001apkApp(app: AppContainer, deepLink: Uri?, onDeepLinkHandled: () -> Unit)
                 popExitTransition = { slideOutHorizontally(tween(300)) { it / 4 } + fadeOut(tween(300)) },
             ) {
                 composable<MainRoute> { MainScreen(generation) }
-                composable<FeedRoute> { it.toRoute<FeedRoute>().let { r -> FeedScreen(r.id, r.toReplies) } }
+                composable<FeedRoute> { it.toRoute<FeedRoute>().let { r -> FeedScreen(r.id, r.toReplies, r.backupFallback) } }
                 composable<EventRoute> { com.zailinn.c001apk.ui.screens.detail.EventScreen(it.toRoute<EventRoute>().id) }
                 composable<UserRoute> { UserScreen(it.toRoute<UserRoute>().uid) }
                 composable<AppRoute> { AppScreen(it.toRoute<AppRoute>().id) }
@@ -168,7 +172,7 @@ fun C001apkApp(app: AppContainer, deepLink: Uri?, onDeepLinkHandled: () -> Unit)
                 composable<CarouselRoute> { it.toRoute<CarouselRoute>().let { r -> CarouselScreen(r.url, r.title) } }
                 composable<DyhRoute> { it.toRoute<DyhRoute>().let { r -> DyhScreen(r.id, r.title) } }
                 composable<CoolpicRoute> { CoolpicScreen(it.toRoute<CoolpicRoute>().tag) }
-                composable<ImageViewerRoute> { it.toRoute<ImageViewerRoute>().let { r -> ImageViewerScreen(r.urls, r.index) } }
+                composable<ImageViewerRoute> { it.toRoute<ImageViewerRoute>().let { r -> ImageViewerScreen(r.urls, r.index, r.mediaJson) } }
                 composable<WebRoute> { it.toRoute<WebRoute>().let { r -> WebScreen(r.url, r.isLogin) } }
                 composable<LoginRoute> { LoginScreen(it.toRoute<LoginRoute>().cookie) }
                 composable<AccountsRoute> { AccountsScreen() }
@@ -178,8 +182,15 @@ fun C001apkApp(app: AppContainer, deepLink: Uri?, onDeepLinkHandled: () -> Unit)
                 composable<DeviceIdentityRoute> { DeviceIdentityScreen() }
                 composable<CaptchaLogRoute> { CaptchaLogScreen() }
                 composable<AboutRoute> { AboutScreen() }
+                composable<com.zailinn.c001apk.ui.nav.ArchiveExportRoute> { it.toRoute<com.zailinn.c001apk.ui.nav.ArchiveExportRoute>().let { r -> com.zailinn.c001apk.backup.ArchiveExportScreen(r.scope, r.query, r.collection) } }
+                composable<com.zailinn.c001apk.ui.nav.ArchiveSyncRoute> { com.zailinn.c001apk.backup.ArchiveSyncScreen(it.toRoute<com.zailinn.c001apk.ui.nav.ArchiveSyncRoute>().local) }
+                composable<ArchiveSearchRoute> { com.zailinn.c001apk.backup.ArchiveSearchScreen(it.toRoute<ArchiveSearchRoute>().scope) }
+                composable<com.zailinn.c001apk.ui.nav.BackupsRoute> { com.zailinn.c001apk.backup.BackupsScreen() }
+                composable<com.zailinn.c001apk.ui.nav.BackupDetailRoute> { com.zailinn.c001apk.backup.BackupDetailScreen(it.toRoute<com.zailinn.c001apk.ui.nav.BackupDetailRoute>().id) }
                 composable<HistoryRoute> { HistoryScreen(it.toRoute<HistoryRoute>().favorites) }
                 composable<BlacklistRoute> { BlacklistScreen(it.toRoute<BlacklistRoute>().users) }
+                composable<com.zailinn.c001apk.ui.nav.TopicBlockRoute> { com.zailinn.c001apk.ui.screens.settings.TopicBlockScreen() }
+                composable<com.zailinn.c001apk.ui.nav.HiddenLogRoute> { com.zailinn.c001apk.ui.screens.settings.HiddenLogScreen() }
                 composable<LocalFollowRoute> { LocalFollowManageScreen() }
                 composable<ContentFilterRoute> { ContentFilterScreen() }
                 composable<CategoryEditRoute> { CategoryEditScreen(it.toRoute<CategoryEditRoute>().id) }
@@ -188,6 +199,7 @@ fun C001apkApp(app: AppContainer, deepLink: Uri?, onDeepLinkHandled: () -> Unit)
                 composable<ChatRoute> { it.toRoute<ChatRoute>().let { r -> ChatScreen(r.ukey, r.uid, r.username) } }
                 composable<CopyRoute> { CopyScreen(it.toRoute<CopyRoute>().text) }
             }
+            com.zailinn.c001apk.backup.BackupHost(app)
             captcha?.let { CaptchaDialog(it) }
             if (deviceIdRejected && !deviceIdAsked) {
                 DeviceIdRejectedDialog(

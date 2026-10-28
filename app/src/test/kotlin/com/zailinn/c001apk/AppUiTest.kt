@@ -13,6 +13,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performScrollToNode
 import androidx.compose.ui.test.performImeAction
 import androidx.compose.ui.test.performScrollTo
 import androidx.compose.ui.test.performScrollToIndex
@@ -21,6 +22,8 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.longClick
+import androidx.compose.ui.test.swipeDown
+import androidx.compose.ui.test.swipeUp
 import androidx.test.core.app.ApplicationProvider
 import com.github.takahirom.roborazzi.captureRoboImage
 import com.zailinn.c001apk.ui.C001apkApp
@@ -98,31 +101,28 @@ class AppUiTest {
     }
 
     @Test
-    fun sensitiveFeedsFoldUntilTapped() {
+    fun homeLeavesOutSensitiveFeedsEvenWhenFolding() {
         kotlinx.coroutines.runBlocking {
-            app.settings.set(com.zailinn.c001apk.data.SettingKeys.sensitiveFold, true)
+            // Folding is the default, but the home tabs never show folded rows.
+            assertTrue(app.settings.current.filterFold)
             addWord("三张图")
             kotlinx.coroutines.withTimeout(5_000) {
-                while (!app.settings.current.sensitiveFold || !hasWord("三张图")) kotlinx.coroutines.delay(20)
+                while (!hasWord("三张图")) kotlinx.coroutines.delay(20)
             }
         }
         launch()
-        compose.onNodeWithText("已折叠 · 自定义 · 三张图").assertIsDisplayed()
         assertTrue(compose.onAllNodesWithText("第二条合成动态，带三张图").fetchSemanticsNodes().isEmpty())
-        shot("folded")
-        compose.onNodeWithText("已折叠 · 自定义 · 三张图").performClick()
-        compose.onNodeWithText("第二条合成动态，带三张图").assertIsDisplayed()
+        assertTrue(compose.onAllNodesWithText("已折叠", substring = true).fetchSemanticsNodes().isEmpty())
+        compose.onNodeWithText("合成应用").assertIsDisplayed()
     }
 
     @Test
     fun hiddenSensitiveFeedsLeaveNoTrace() {
         kotlinx.coroutines.runBlocking {
-            // Hiding wins when both switches are on.
-            app.settings.set(com.zailinn.c001apk.data.SettingKeys.sensitiveFold, true)
-            app.settings.set(com.zailinn.c001apk.data.SettingKeys.sensitiveHide, true)
+            app.settings.set(com.zailinn.c001apk.data.SettingKeys.filterFold, false)
             addWord("三张图")
             kotlinx.coroutines.withTimeout(5_000) {
-                while (!app.settings.current.sensitiveHide || !hasWord("三张图")) kotlinx.coroutines.delay(20)
+                while (app.settings.current.filterFold || !hasWord("三张图")) kotlinx.coroutines.delay(20)
             }
         }
         launch()
@@ -401,6 +401,24 @@ class AppUiTest {
         assertTrue("header at ${header.boundsInRoot.top / density}dp", header.boundsInRoot.top / density < 200f)
     }
 
+    /** Reading down slides the search row, tabs and bottom bar away; scrolling back up returns them. */
+    @Test
+    @Config(sdk = [35], qualifiers = "w411dp-h480dp-xxhdpi")
+    fun barsHideWhileScrollingDownAndReturnOnTheWayUp() {
+        launch()
+        val search = "搜索动态、应用、话题和用户"
+        fun shown(text: String) = compose.onAllNodesWithText(text).fetchSemanticsNodes().any { it.boundsInRoot.height > 1f && it.boundsInRoot.bottom > 0f }
+        assertTrue(shown(search) && shown("关注"))
+        val list = compose.onAllNodes(androidx.compose.ui.test.hasScrollToIndexAction()).onFirst()
+        list.performTouchInput { swipeUp(startY = bottom * .8f, endY = top + 10f) }
+        compose.waitForIdle()
+        assertTrue("search row hidden", !shown(search))
+        assertTrue("bottom bar hidden", !shown("关注"))
+        list.performTouchInput { swipeDown(startY = top + 10f, endY = bottom * .8f) }
+        compose.waitForIdle()
+        assertTrue(shown(search) && shown("关注"))
+    }
+
     /** A blocked user's page shows the profile only; their posts are not even requested. */
     @Test
     fun blockedUserPostsAreNotRequested() {
@@ -420,15 +438,21 @@ class AppUiTest {
         compose.waitUntil(5_000) { compose.onAllNodesWithText("内容过滤").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("内容过滤").performClick()
         compose.waitUntil(5_000) { compose.onAllNodesWithText("用户黑名单").fetchSemanticsNodes().isNotEmpty() }
-        compose.onNodeWithText("直接隐藏").performClick()
-        compose.waitUntil(5_000) { app.settings.current.sensitiveHide }
+        assertTrue(app.settings.current.filterFold)
+        compose.onNodeWithText("折叠").performClick()
+        compose.waitUntil(5_000) { !app.settings.current.filterFold }
+        compose.onNodeWithText("折叠").performClick()
+        compose.waitUntil(5_000) { app.settings.current.filterFold }
+        compose.onNodeWithText("我屏蔽的话题").assertExists()
+        assertTrue(compose.onAllNodesWithText("话题黑名单").fetchSemanticsNodes().isEmpty())
         shot("content-filter")
+        compose.onNode(androidx.compose.ui.test.hasScrollToNodeAction()).performScrollToNode(androidx.compose.ui.test.hasText("两性对立"))
         compose.onNodeWithText("两性对立").performClick()
-        compose.waitUntil(5_000) { compose.onAllNodesWithText("舔狗").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(5_000) { compose.onAllNodesWithText("渣女").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("启用此分类").performClick()
         compose.waitUntil(5_000) { app.content.filterCategories.value.single { it.id == "gender" }.enabled.not() }
-        compose.onNodeWithContentDescription("删除 舔狗").performClick()
-        compose.waitUntil(5_000) { "舔狗" !in app.content.filterCategories.value.single { it.id == "gender" }.keywords }
+        compose.onNodeWithContentDescription("删除 渣女").performClick()
+        compose.waitUntil(5_000) { "渣女" !in app.content.filterCategories.value.single { it.id == "gender" }.keywords }
         shot("category-edit")
     }
 }

@@ -12,6 +12,7 @@ import androidx.core.net.toUri
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.toRoute
+import com.zailinn.c001apk.core.net.HttpsUpgrade
 import com.zailinn.c001apk.core.protocol.Constants
 import com.zailinn.c001apk.data.SettingsRepository
 
@@ -57,8 +58,9 @@ class AppNavigator(
         context.startActivity(Intent.createChooser(intent, null).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK))
     }
 
-    fun openImages(urls: List<String>, index: Int = 0) {
-        if (urls.isNotEmpty()) navigate(ImageViewerRoute(urls, index.coerceIn(0, urls.lastIndex)))
+    fun openImages(urls: List<String>, index: Int = 0, media: List<com.zailinn.c001apk.core.model.GalleryMedia> = emptyList()) {
+        if (urls.isNotEmpty()) navigate(ImageViewerRoute(urls, index.coerceIn(0, urls.lastIndex),
+            media.takeIf { it.isNotEmpty() }?.let { kotlinx.serialization.json.Json.encodeToString(kotlinx.serialization.builtins.ListSerializer(com.zailinn.c001apk.core.model.GalleryMedia.serializer()), it) }))
     }
 
     fun launchBrowser(url: String) {
@@ -84,24 +86,43 @@ class AppNavigator(
     /** Routes Coolapk paths and links to native pages; other links open in the web view or browser. */
     fun openLink(url: String, title: String? = null, converted: Boolean = false) {
         if (url.isEmpty()) return
-        var path = url
-        if (converted) {
-            if (url.startsWith(Constants.PREFIX_COOLMARKET)) {
-                path = url.replaceFirst(Constants.PREFIX_COOLMARKET, "/")
-            } else {
-                val uri = runCatching { Uri.parse(url) }.getOrNull()
-                if (uri?.host?.contains(Constants.CHANNEL) == true) {
-                    path = uri.encodedPath.orEmpty() + (uri.encodedQuery?.let { "?$it" } ?: "")
-                }
+        when (val route = route(if (converted) convertedPath(url) else url, title)) {
+            is UserLink -> openUser(route.name)
+            null -> when {
+                !converted -> openLink(url, title, converted = true)
+                url.startsWith(Constants.PREFIX_HTTP) ->
+                    // The in-app browser blocks cleartext; unencrypted sites go to the system browser.
+                    if (settings.current.openInBrowser || (url.startsWith("http:", ignoreCase = true) && !HttpsUpgrade.isCoolapk(url))) {
+                        launchBrowser(url)
+                    } else navigate(WebRoute(url))
+                else -> toast("暂不支持此链接")
             }
+            else -> navigate(route)
         }
-        val route: Any? = when {
+    }
+
+    private class UserLink(val name: String)
+
+    // Pure functions of the link, so lists can also leave out what has nowhere to go.
+    companion object {
+        /** Whether [openLink] has a page or a browser for this link, rather than 暂不支持此链接. */
+        fun canOpen(url: String): Boolean =
+            url.isNotEmpty() && (route(url, null) != null || route(convertedPath(url), null) != null || url.startsWith(Constants.PREFIX_HTTP))
+
+        /** A Coolapk web or `coolmarket://` link as the app path it stands for. */
+        private fun convertedPath(url: String): String {
+            if (url.startsWith(Constants.PREFIX_COOLMARKET)) return url.replaceFirst(Constants.PREFIX_COOLMARKET, "/")
+            val uri = runCatching { Uri.parse(url) }.getOrNull()
+            return if (uri?.host?.contains(Constants.CHANNEL) == true) uri.encodedPath.orEmpty() + (uri.encodedQuery?.let { "?$it" } ?: "") else url
+        }
+
+        /** The native page for an app path, or null. */
+        private fun route(path: String, title: String?): Any? = when {
             path.startsWith(Constants.PREFIX_FEED) ->
                 path.removePrefix(Constants.PREFIX_FEED).takeWhile { it.isDigit() }.takeIf { it.isNotEmpty() }?.let(::FeedRoute)
             path.startsWith(PREFIX_EVENT) ->
                 path.removePrefix(PREFIX_EVENT).takeWhile { it.isDigit() }.takeIf { it.isNotEmpty() }?.let(::EventRoute)
-            path.startsWith(Constants.PREFIX_USER) ->
-                return openUser(Uri.decode(path.removePrefix(Constants.PREFIX_USER).substringBefore('?')))
+            path.startsWith(Constants.PREFIX_USER) -> UserLink(Uri.decode(path.removePrefix(Constants.PREFIX_USER).substringBefore('?')))
             path.startsWith(Constants.PREFIX_APP) -> AppRoute(path.removePrefix(Constants.PREFIX_APP).substringBefore('?'))
             path.startsWith(Constants.PREFIX_GAME) -> AppRoute(path.removePrefix(Constants.PREFIX_GAME).substringBefore('?'))
             path.startsWith(Constants.PREFIX_TOPIC) -> {
@@ -114,13 +135,6 @@ class AppNavigator(
             path.startsWith(Constants.PREFIX_USER_LIST) -> UserListRoute("USER_FOLLOW")
             path.startsWith(Constants.PREFIX_DYH) -> DyhRoute(path.removePrefix(Constants.PREFIX_DYH).substringBefore('?'), title.orEmpty())
             else -> null
-        }
-        when {
-            route != null -> navigate(route)
-            !converted -> openLink(url, title, converted = true)
-            url.startsWith(Constants.PREFIX_HTTP) ->
-                if (settings.current.openInBrowser) launchBrowser(url) else navigate(WebRoute(url))
-            else -> toast("暂不支持此链接")
         }
     }
 }

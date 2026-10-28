@@ -82,6 +82,16 @@ class PagedList(
         job = scope.launch { fetch(isRefresh = true) }
     }
 
+    /** Starts over with an empty list, for a new query whose shown items no longer apply. */
+    fun reset() {
+        job?.cancel()
+        beforeRefresh = null
+        cursor = Page()
+        end = false
+        _state.value = ListState()
+        job = scope.launch { fetch(isRefresh = true) }
+    }
+
     fun loadMore() {
         if (end || job?.isActive == true || _state.value.status !is LoadResult.Success) return
         _state.update { it.copy(footer = Footer.Loading) }

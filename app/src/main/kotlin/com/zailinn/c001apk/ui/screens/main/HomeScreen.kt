@@ -11,14 +11,19 @@ import com.zailinn.c001apk.ui.screens.appContainer
 import com.zailinn.c001apk.ui.screens.settings.HomeTabsDialog
 import kotlinx.coroutines.withTimeoutOrNull
 import androidx.compose.foundation.clickable
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.statusBarsPadding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.itemsIndexed
@@ -32,7 +37,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.material3.Tab
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
@@ -62,11 +66,14 @@ import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.cards.ItemCard
 import com.zailinn.c001apk.ui.common.FillingTabRow
+import com.zailinn.c001apk.ui.common.HidingBar
+import com.zailinn.c001apk.ui.common.LocalScrollBars
 import com.zailinn.c001apk.ui.common.OnCountIncrease
 import com.zailinn.c001apk.ui.common.PagedList
 import com.zailinn.c001apk.ui.common.SearchPill
 import com.zailinn.c001apk.ui.common.PagedListView
 import com.zailinn.c001apk.ui.common.StatusBox
+import com.zailinn.c001apk.ui.common.hapticClick
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.SearchRoute
 import com.zailinn.c001apk.ui.screens.ContentViewModel
@@ -95,7 +102,7 @@ class HomeFeedViewModel(app: AppContainer, tab: HomeTab, url: String?, title: St
         if (tab == HomeTab.Feed) {
             app.repository.homeFeed(page, firstLaunch = 1, installTime = app.settings.current.installTime)
         } else {
-            app.repository.dataList(url!!, title!!, page)
+            app.repository.dataList(url!!, title!!, page, hideFolded = true)
         }
     }
 }
@@ -115,40 +122,46 @@ fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
     OnCountIncrease(reselect) { reselectTab.intValue++ }
     // "返回首页时自动刷新": each new return scrolls the current list to the top and refreshes it once.
     OnCountIncrease(homeReturns) { reselectTab.intValue++ }
-    // The search row slides away while reading and returns on the first scroll up; tabs stay pinned.
-    val scrollBehavior = TopAppBarDefaults.enterAlwaysScrollBehavior()
+    // Reading down slides the search row, tabs and bottom bar away; scrolling up brings them back.
+    val bars = LocalScrollBars.current
+    LaunchedEffect(pager.currentPage) { bars.show() }
     Scaffold(
-        modifier = Modifier.nestedScroll(scrollBehavior.nestedScrollConnection),
+        modifier = Modifier.nestedScroll(bars.connection),
         topBar = {
-            Column(Modifier.background(MaterialTheme.colorScheme.surface)) {
-                TopAppBar(
-                    title = { SearchPill("搜索动态、应用、话题和用户", Modifier.padding(end = 16.dp)) { navigator.navigate(SearchRoute()) } },
-                    scrollBehavior = scrollBehavior,
-                    colors = TopAppBarDefaults.topAppBarColors(scrolledContainerColor = MaterialTheme.colorScheme.surface),
-                    windowInsets = TopAppBarDefaults.windowInsets,
-                )
-                FillingTabRow(pager.currentPage.coerceAtMost(tabs.lastIndex), tabs.size, divider = {}) {
-                    tabs.forEachIndexed { index, tab ->
-                        val selected = pager.currentPage == index
-                        Tab(
-                            selected = selected,
-                            modifier = Modifier.onLongPress { editingTabs = true },
-                            onClick = {
-                                if (selected) reselectTab.intValue++
-                                else scope.launch { pager.animateScrollToPage(index) }
-                            },
-                            text = {
-                                Text(tab.label, style = MaterialTheme.typography.titleSmall, fontWeight = if (selected) FontWeight.Bold else null)
-                            },
-                            unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+            Column(Modifier.background(MaterialTheme.colorScheme.surface).statusBarsPadding()) {
+                HidingBar(bars, fromTop = true) {
+                    Column {
+                        TopAppBar(
+                            title = { SearchPill("搜索动态、应用、话题和用户", Modifier.padding(end = 16.dp)) { navigator.navigate(SearchRoute()) } },
+                            windowInsets = WindowInsets(0),
                         )
+                        FillingTabRow(pager.currentPage.coerceAtMost(tabs.lastIndex), tabs.size, divider = {}) {
+                            tabs.forEachIndexed { index, tab ->
+                                val selected = pager.currentPage == index
+                                Tab(
+                                    selected = selected,
+                                    modifier = Modifier.onLongPress { editingTabs = true },
+                                    onClick = hapticClick {
+                                        if (selected) reselectTab.intValue++
+                                        else scope.launch { pager.animateScrollToPage(index) }
+                                    },
+                                    text = {
+                                        Text(tab.label, style = MaterialTheme.typography.titleSmall, fontWeight = if (selected) FontWeight.Bold else null)
+                                    },
+                                    unselectedContentColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                                )
+                            }
+                        }
                     }
                 }
             }
         },
         floatingActionButton = {
-            if (session.isLogin && tabs.getOrNull(pager.currentPage) == HomeTab.Feed) {
-                FloatingActionButton(onClick = { composing = true }) { Icon(Icons.Filled.Add, "发布动态") }
+            AnimatedVisibility(
+                session.isLogin && tabs.getOrNull(pager.currentPage) == HomeTab.Feed && bars.hidden < .5f,
+                enter = scaleIn(), exit = scaleOut(),
+            ) {
+                FloatingActionButton(onClick = hapticClick { composing = true }) { Icon(Icons.Filled.Add, "发布动态") }
             }
         },
     ) { padding ->
@@ -167,6 +180,7 @@ fun HomeScreen(generation: Int, reselect: Int, homeReturns: Int = 0) {
                     val listState = rememberLazyListState()
                     OnCountIncrease(reselectTab.intValue) {
                         if (active) {
+                            bars.show()
                             listState.animateScrollToItem(0)
                             vm.list.refresh(showIndicator = true)
                         }

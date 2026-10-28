@@ -22,7 +22,9 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.painter.ColorPainter
 
-private fun String.isWebUrl() = startsWith("https://") || startsWith("http://")
+val LocalOfflineBackup = androidx.compose.runtime.staticCompositionLocalOf { false }
+
+private fun String.isWebUrl() = startsWith("https://") || startsWith("http://") || startsWith(com.zailinn.c001apk.core.backup.BACKUP_MEDIA_SCHEME)
 
 /** Remote image with the themed placeholder used across the app. */
 @Composable
@@ -36,7 +38,8 @@ fun NetworkImage(
     // A plain color placeholder: no subcomposition per image while scrolling.
     val tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
     val placeholder = remember(tint) { ColorPainter(tint) }
-    if (url.isNullOrEmpty() || !url.isWebUrl()) {
+    val offline = LocalOfflineBackup.current
+    if (url.isNullOrEmpty() || !url.isWebUrl() || (offline && !url.startsWith(com.zailinn.c001apk.core.backup.BACKUP_MEDIA_SCHEME))) {
         Box(modifier.background(MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)), contentAlignment = Alignment.Center) {
             if (isAvatar) Icon(Icons.Default.Person, null, tint = MaterialTheme.colorScheme.outline)
         }
@@ -78,4 +81,4 @@ fun imageAspectRatio(url: String): Float? {
 }
 
 /** Server-side thumbnail, used for every list image; the viewer loads originals. */
-fun thumbnail(url: String) = if (url.endsWith(".s.jpg")) url else "$url.s.jpg"
+fun thumbnail(url: String) = if (url.startsWith(com.zailinn.c001apk.core.backup.BACKUP_MEDIA_SCHEME) || url.endsWith(".s.jpg")) url else "$url.s.jpg"

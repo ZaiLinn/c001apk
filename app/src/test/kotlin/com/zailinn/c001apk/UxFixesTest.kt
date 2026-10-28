@@ -10,6 +10,7 @@ import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.hasText
 import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onRoot
 import androidx.compose.ui.test.performClick
@@ -263,7 +264,7 @@ class UxFixesTest {
     }
 
     @Test
-    fun aFailedImageSaysSoAndATapClosesTheViewer() {
+    fun aFailedImageOffersRetryAndBackClosesTheViewer() {
         var closed = 0
         compose.setContent {
             val context = androidx.compose.ui.platform.LocalContext.current
@@ -283,8 +284,9 @@ class UxFixesTest {
         }
         compose.waitUntil(15_000) { compose.onAllNodesWithText("图片加载失败").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("点击重试").assertExists()
-        // A single tap on the image, away from the buttons and the retry message, closes the viewer.
+        // A tap reveals the controls after their idle timeout; back leaves the viewer.
         compose.onRoot().performTouchInput { click(androidx.compose.ui.geometry.Offset(width * 0.2f, height * 0.7f)) }
+        compose.onNodeWithContentDescription("返回").performClick()
         compose.waitUntil(5_000) { closed == 1 }
     }
 

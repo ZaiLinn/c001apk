@@ -4,7 +4,7 @@ import kotlinx.serialization.Serializable
 
 @Serializable data object MainRoute
 /** [toReplies]: open scrolled to the replies, as from a reply count in a list. */
-@Serializable data class FeedRoute(val id: String, val toReplies: Boolean = false)
+@Serializable data class FeedRoute(val id: String, val toReplies: Boolean = false, val backupFallback: Boolean = false)
 @Serializable data class EventRoute(val id: String)
 @Serializable data class UserRoute(val uid: String)
 @Serializable data class AppRoute(val id: String)
@@ -19,7 +19,7 @@ import kotlinx.serialization.Serializable
 @Serializable data class CarouselRoute(val url: String, val title: String = "")
 @Serializable data class DyhRoute(val id: String, val title: String = "")
 @Serializable data class CoolpicRoute(val tag: String)
-@Serializable data class ImageViewerRoute(val urls: List<String>, val index: Int = 0)
+@Serializable data class ImageViewerRoute(val urls: List<String>, val index: Int = 0, val mediaJson: String? = null)
 @Serializable data class WebRoute(val url: String, val isLogin: Boolean = false)
 @Serializable data class LoginRoute(val cookie: Boolean = false)
 @Serializable data object AccountsRoute
@@ -31,6 +31,8 @@ import kotlinx.serialization.Serializable
 @Serializable data object AboutRoute
 @Serializable data class HistoryRoute(val favorites: Boolean)
 @Serializable data class BlacklistRoute(val users: Boolean)
+@Serializable data object TopicBlockRoute
+@Serializable data object HiddenLogRoute
 @Serializable data object LocalFollowRoute
 @Serializable data object ContentFilterRoute
 @Serializable data class CategoryEditRoute(val id: String)
@@ -38,3 +40,11 @@ import kotlinx.serialization.Serializable
 @Serializable data class NotificationRoute(val type: String)
 @Serializable data class ChatRoute(val ukey: String, val uid: String, val username: String)
 @Serializable data class CopyRoute(val text: String)
+
+@Serializable data object BackupsRoute
+@Serializable data class BackupDetailRoute(val id: String)
+
+@Serializable data class ArchiveSearchRoute(val scope: String = "all")
+@Serializable data class ArchiveExportRoute(val scope: String = "all", val query: String = "", val collection: String = "")
+
+@Serializable data class ArchiveSyncRoute(val local: Boolean = false)

@@ -46,5 +46,7 @@ object Constants {
         "imageCarouselCard_1", "iconLinkGridCard", "iconMiniScrollCard", "iconMiniGridCard",
         "imageSquareScrollCard", "titleCard", "iconScrollCard", "imageTextScrollCard",
         "iconTabLinkGridCard", "verticalColumnsFullPageCard", "noMoreDataCard", "time", "messageCard",
+        // Event topics' 活动详情 tab and the product 参数 tab.
+        "textCard", "imageScaleCard", "productConfigList",
     )
 }

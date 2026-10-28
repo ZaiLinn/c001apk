@@ -1,9 +1,11 @@
 package com.zailinn.c001apk.core.net
 
 import com.zailinn.c001apk.core.model.ContentFilter
+import com.zailinn.c001apk.core.model.HiddenItem
 import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.core.model.SensitiveCategory
 import com.zailinn.c001apk.core.model.SensitiveMatcher
+import com.zailinn.c001apk.core.model.TopicRule
 import com.zailinn.c001apk.core.model.cursorFirstId
 import com.zailinn.c001apk.core.model.cursorLastId
 import com.zailinn.c001apk.core.model.foldReason
@@ -35,10 +37,39 @@ class ResponseTest {
     }
 
     @Test
+    fun sortConfigurationIsAvailableWithoutChangingFeedCursorsOrFiltering() = runTest {
+        val body = """{"data":[{"entityType":"card","entityTemplate":"sortSelectCard","entityId":997,"entities":[
+            {"entityType":"page","title":"默认","url":"/page?url=default"},
+            {"entityType":"page","title":"最新","url":"/page?url=newest"},
+            {"entityType":"page","title":"热度","url":"/page?url=hot"}]},
+            {"entityType":"feed","id":"1","uid":"10"},{"entityType":"feed","id":"2","uid":"99"}]}"""
+        val repository = repo(body = body, filter = ContentFilter(blockedUsers = setOf("99")))
+        val items = (repository.dataList("#/topic/tagFeedList?id=7&withSortCard=1", "讨论", Page(), includeConfigCard = true) as LoadResult.Success).value
+        assertEquals(listOf("默认", "最新", "热度"), items.first().entities.map { it.title })
+        assertEquals(listOf("1"), items.filter { it.entityType == "feed" }.map { it.id })
+        assertEquals("1", items.cursorFirstId)
+        assertEquals("2", items.cursorLastId)
+        val plain = (repository.dataList("/page?url=other", "", Page()) as LoadResult.Success).value
+        assertEquals(listOf("1"), plain.map { it.id })
+    }
+
+    @Test
     fun topicKeywordsAreFiltered() = runTest {
         val body = """{"data":[{"entityType":"feed","id":"1","tags":"合成话题"},{"entityType":"feed","id":"2"}]}"""
-        val state = repo(body = body, filter = ContentFilter(blockedTopics = listOf("合成"))).dataListFromUrl("/x")
+        val state = repo(body = body, filter = ContentFilter(blockedTopics = listOf(TopicRule("合成", contains = true)))).dataListFromUrl("/x")
         assertEquals(listOf("2"), (state as LoadResult.Success).value.map { it.id })
+    }
+
+    @Test
+    fun anExactTopicRuleLeavesSimilarTopicsAndReportsWhatItHid() = runTest {
+        val body = """{"data":[{"entityType":"feed","id":"1","tags":"合成话题"},{"entityType":"feed","id":"2","tags":"合成话题二"},""" +
+            """{"entityType":"feed","id":"3","message":"来自 #合成话题# 的帖子"},{"entityType":"feed","id":"4","uid":"9","username":"甲"}]}"""
+        val hidden = mutableListOf<HiddenItem>()
+        val filter = ContentFilter(setOf("9"), listOf(TopicRule("合成话题")), onHidden = { hidden += it })
+        val items = (repo(body = body, filter = filter).dataListFromUrl("/x") as LoadResult.Success).value
+        assertEquals(listOf("2"), items.map { it.id })
+        assertEquals(listOf("1" to "#合成话题#", "3" to "#合成话题#", "4" to "甲"), hidden.map { it.item.id to it.reason.hit })
+        assertEquals(listOf("我屏蔽的话题", "我屏蔽的话题", "用户黑名单"), hidden.map { it.reason.title })
     }
 
     @Test
@@ -61,7 +92,7 @@ class ResponseTest {
     @Test
     fun hiddenSensitiveFeedsAreRemovedButPagingContinues() = runTest {
         val body = """{"data":[{"entityType":"feed","id":"1","message":"刷机"},{"entityType":"feed","id":"2","message":"晒女友"}]}"""
-        val filter = ContentFilter(sensitive = SensitiveMatcher(SensitiveCategory.builtIn), hideSensitive = true)
+        val filter = ContentFilter(sensitive = SensitiveMatcher(SensitiveCategory.builtIn), fold = false)
         val items = (repo(body = body, filter = filter).dataListFromUrl("/x") as LoadResult.Success).value
         assertEquals(listOf("1"), items.map { it.id })
         assertEquals("2", items.cursorLastId)

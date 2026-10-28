@@ -114,6 +114,7 @@ fun CollectionPickerSheet(feedId: String, onDismiss: () -> Unit) {
                 state = (state as? LoadResult.Success)?.let { current ->
                     LoadResult.Success(current.value.map { if (it.id == id) it.with("isBeCollected", now) else it })
                 } ?: state
+                app.archiveSync.favoriteChanged(feedId, id, item.title.orEmpty(), now == 1)
                 app.toast(if (now == 1) "已收藏到「${item.title.orEmpty()}」" else "已从「${item.title.orEmpty()}」移除")
             } finally {
                 busy = null

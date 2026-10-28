@@ -34,6 +34,7 @@ class UploadImage(val name: String, val width: Int, val height: Int, val bytes: 
  */
 class OssUploader(private val repository: CoolapkRepository, http: OkHttpClient = OkHttpClient()) {
     private val client = http.newBuilder()
+        .followRedirects(false).followSslRedirects(false)
         .connectTimeout(10, TimeUnit.SECONDS).writeTimeout(5, TimeUnit.MINUTES).readTimeout(60, TimeUnit.SECONDS)
         .build()
 

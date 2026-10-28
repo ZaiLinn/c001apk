@@ -193,6 +193,7 @@ fun MineScreen(generation: Int) {
                 }
                 item {
                     val shortcuts = listOf(
+                        Shortcut("我的备份", Icons.Outlined.Archive, false, com.zailinn.c001apk.ui.nav.BackupsRoute),
                         Shortcut("本地收藏", Icons.Outlined.Archive, false, HistoryRoute(favorites = true)),
                         Shortcut("浏览历史", Icons.Outlined.History, false, HistoryRoute(favorites = false)),
                         Shortcut("我的常去", Icons.Outlined.MyLocation, true, UserListRoute("RECENT")),

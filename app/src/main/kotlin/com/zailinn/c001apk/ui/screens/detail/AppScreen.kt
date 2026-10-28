@@ -41,6 +41,7 @@ import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.common.RoundedImage
 import com.zailinn.c001apk.ui.common.StatusBox
 import com.zailinn.c001apk.ui.common.fromToday
+import com.zailinn.c001apk.ui.common.hapticClick
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.SearchRoute
 import com.zailinn.c001apk.ui.screens.appViewModel
@@ -75,7 +76,8 @@ class AppDetailViewModel(private val app: AppContainer, private val id: String) 
                 if (url == null) return@launch app.toast("无法获取下载链接，请稍后重试")
                 val name = "${data.title}-${data.text("apkversionname")}-${data.text("apkversioncode")}.apk"
                 val enqueued = runCatching {
-                    val request = DownloadManager.Request(url.toUri())
+                    val secureUrl = com.zailinn.c001apk.core.net.HttpsUpgrade.url(url) ?: throw ApiFailure.invalidResponse
+                    val request = DownloadManager.Request(secureUrl.toUri())
                         .setTitle(name)
                         .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                         .setDestinationInExternalPublicDir(Environment.DIRECTORY_DOWNLOADS, name)
@@ -113,7 +115,7 @@ fun AppScreen(id: String) {
         },
         floatingActionButton = {
             if (data != null && session.isLogin && commentsOpen) {
-                FloatingActionButton(onClick = { composing = true }) { Icon(Icons.Filled.Add, "评论") }
+                FloatingActionButton(onClick = hapticClick { composing = true }) { Icon(Icons.Filled.Add, "评论") }
             }
         },
     ) { padding ->

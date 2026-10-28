@@ -113,6 +113,7 @@ fun HtmlText(
     maxLines: Int = Int.MAX_VALUE,
     color: Color = Color.Unspecified,
     picArr: List<String> = emptyList(),
+    media: List<com.zailinn.c001apk.core.model.GalleryMedia> = emptyList(),
     onClick: (() -> Unit)? = null,
     onShowReplies: (() -> Unit)? = null,
     onViewFans: (() -> Unit)? = null,
@@ -125,7 +126,7 @@ fun HtmlText(
         when {
             url.isEmpty() -> onClick?.invoke()
             url.contains("/feed/replyList") -> onShowReplies?.invoke()
-            url.contains("image.coolapk.com") -> navigator.openImages(picArr.ifEmpty { listOf(url) }, picArr.indexOf(url).coerceAtLeast(0))
+            url.contains("image.coolapk.com") || url.startsWith(com.zailinn.c001apk.core.backup.BACKUP_MEDIA_SCHEME) -> navigator.openImages(picArr.ifEmpty { listOf(url) }, picArr.indexOf(url).coerceAtLeast(0), media)
             url == "/contacts/fans" -> onViewFans?.invoke()
             else -> navigator.openLink(url)
         }

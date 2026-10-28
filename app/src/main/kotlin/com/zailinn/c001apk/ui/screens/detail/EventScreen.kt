@@ -29,6 +29,7 @@ import com.zailinn.c001apk.ui.common.HtmlText
 import com.zailinn.c001apk.ui.common.NetworkImage
 import com.zailinn.c001apk.ui.common.StatusBox
 import com.zailinn.c001apk.ui.common.formatTime
+import com.zailinn.c001apk.ui.common.hapticClick
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.appViewModel
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
@@ -85,7 +86,7 @@ fun EventScreen(id: String) {
             }
             data.string("content")?.takeIf { it.isNotBlank() }?.let { HtmlText(it, fontSize = MaterialTheme.typography.bodyLarge.fontSize) }
             data.string("action_url")?.trim()?.takeIf { it.startsWith("https://") || it.startsWith("http://") }?.let { url ->
-                Button(onClick = { navigator.openLink(url, data.string("title")) }, Modifier.fillMaxWidth()) { Text("查看报名页面") }
+                Button(onClick = hapticClick { navigator.openLink(url, data.string("title")) }, Modifier.fillMaxWidth()) { Text("查看报名页面") }
             }
         }
     }

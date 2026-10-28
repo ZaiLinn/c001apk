@@ -23,7 +23,7 @@ enum class ReplySort(val label: String, val listType: String, val fromAuthor: In
     Author("楼主", "", 1),
 }
 
-class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
+class FeedViewModel(app: AppContainer, val id: String, private val backupFallback: Boolean = false) : ContentViewModel(app) {
     val feed = MutableStateFlow<LoadResult<Datum>>(LoadResult.Loading)
     val articles = MutableStateFlow<List<FeedArticle>>(emptyList())
     /** Set when only the public representation could be read. */
@@ -128,7 +128,7 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
         if (!verify && previous !is LoadResult.Success) feed.value = LoadResult.Loading
         viewModelScope.launch {
             try {
-                val result = app.repository.feedDetail(id, verify)
+                val result = app.repository.feedDetail(id, verify, allowListCopy = !backupFallback)
                 if (result is LoadResult.Success) {
                     val data = result.value
                     val parsed = try {
@@ -153,7 +153,7 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
                     if (app.settings.current.recordHistory) app.content.addHistory(data)
                 } else if (verify) {
                     notice.value = (result as? LoadResult.Error)?.message ?: "账号详情暂不可用，请稍后重试"
-                    if (previous is LoadResult.Success) feed.value = previous
+                    if (previous is LoadResult.Success) feed.value = previous else feed.value = result
                 } else {
                     feed.value = result
                 }
@@ -184,6 +184,7 @@ class FeedViewModel(app: AppContainer, val id: String) : ContentViewModel(app) {
         viewModelScope.launch {
             val added = app.content.toggleFavorite(data)
             favorite.value = added
+            app.archiveSync.favoriteChanged(id, collected = added, local = true)
             app.toast(if (added) "已收藏" else "已取消收藏")
         }
     }
@@ -229,7 +230,7 @@ class ReplyThreadViewModel(app: AppContainer, private val origin: Datum) : Conte
 
     private fun preview(): List<Datum> {
         val rules = app.content.filter()
-        return listOf(origin) + rules.markAll(origin.replyRows.filter { rules.accepts(it) })
+        return listOf(origin) + rules.apply(origin.replyRows)
     }
 
     /**

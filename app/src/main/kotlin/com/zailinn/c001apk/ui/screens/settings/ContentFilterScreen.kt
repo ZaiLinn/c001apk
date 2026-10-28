@@ -16,11 +16,12 @@ import androidx.compose.material.icons.automirrored.outlined.KeyboardArrowRight
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.Close
+import androidx.compose.material.icons.outlined.FilterAlt
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.Edit
 import androidx.compose.material.icons.outlined.MoreVert
 import androidx.compose.material.icons.outlined.PersonOff
-import androidx.compose.material.icons.outlined.Tag
+import androidx.compose.material.icons.outlined.History
 import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.AssistChip
 import androidx.compose.material3.AssistChipDefaults
@@ -54,14 +55,18 @@ import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.common.AppAlertDialog
 import com.zailinn.c001apk.ui.common.AppDropdownMenu
 import com.zailinn.c001apk.ui.common.SectionTitle
+import com.zailinn.c001apk.ui.common.hapticChange
+import com.zailinn.c001apk.ui.common.hapticClick
 import com.zailinn.c001apk.ui.nav.BlacklistRoute
 import com.zailinn.c001apk.ui.nav.CategoryEditRoute
+import com.zailinn.c001apk.ui.nav.HiddenLogRoute
+import com.zailinn.c001apk.ui.nav.TopicBlockRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.appContainer
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
 import kotlinx.coroutines.launch
 
-/** Blacklists, sensitive-topic categories with the fold and hide switches, and semantic blocking. */
+/** User blacklist, the hidden-items log, filter categories with the fold switch, and semantic blocking. */
 @Composable
 fun ContentFilterScreen() {
     val app = appContainer()
@@ -70,6 +75,7 @@ fun ContentFilterScreen() {
     val categories by app.content.filterCategories.collectAsStateWithLifecycle()
     val users by app.content.blockedUsers.collectAsStateWithLifecycle()
     val topics by app.content.blockedTopics.collectAsStateWithLifecycle()
+    val hidden by app.hiddenLog.records.collectAsStateWithLifecycle()
     val scope = rememberCoroutineScope()
     var menu by remember { mutableStateOf(false) }
     var adding by remember { mutableStateOf(false) }
@@ -77,7 +83,7 @@ fun ContentFilterScreen() {
     Scaffold(
         topBar = {
             SimpleTopBar("内容过滤") {
-                IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }
+                IconButton(onClick = hapticClick { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }
                 AppDropdownMenu(menu, { menu = false }) {
                     DropdownMenuItem(text = { Text("恢复内置分类") }, onClick = { menu = false; restoring = true })
                 }
@@ -90,20 +96,33 @@ fun ContentFilterScreen() {
                 NavItem(Icons.Outlined.PersonOff, "用户黑名单", "${users.size} 位用户，其动态和回复始终隐藏") {
                     navigator.navigate(BlacklistRoute(users = true))
                 }
-                NavItem(Icons.Outlined.Tag, "话题黑名单", "${topics.size} 个关键词，相关话题的内容始终隐藏") {
-                    navigator.navigate(BlacklistRoute(users = false))
+                NavItem(Icons.Outlined.History, "最近隐藏", if (hidden.isEmpty()) "还没有被隐藏的内容" else "${hidden.size} 条，查看被隐藏的内容和原因") {
+                    navigator.navigate(HiddenLogRoute)
                 }
                 HorizontalDivider()
-                SectionTitle("敏感话题")
-                SwitchRow(Icons.Outlined.VisibilityOff, "折叠", "命中下方分类的动态和回复折叠成一行，点击展开", settings.sensitiveFold) {
-                    scope.launch { app.settings.set(SettingKeys.sensitiveFold, it) }
+                SectionTitle("过滤分类")
+                SwitchRow(
+                    Icons.Outlined.VisibilityOff, "折叠",
+                    "命中分类的动态和回复折叠成一行，点击展开；关闭后直接隐藏。“我屏蔽的话题”始终隐藏", settings.filterFold,
+                ) {
+                    scope.launch { app.settings.set(SettingKeys.filterFold, it) }
                 }
-                SwitchRow(Icons.Outlined.Block, "直接隐藏", "命中的内容完全不显示，也没有折叠条。与折叠同时开启时以隐藏为准", settings.sensitiveHide) {
-                    scope.launch { app.settings.set(SettingKeys.sensitiveHide, it) }
+                SwitchRow(
+                    Icons.Outlined.FilterAlt, "严格模式",
+                    "分类里的“严格关键词”也参与匹配，例如 小姐姐、单身狗、表白。拦得更多，也更容易误伤普通帖子", settings.filterStrict,
+                ) {
+                    scope.launch { app.settings.set(SettingKeys.filterStrict, it) }
                 }
                 ListItem(
                     headlineContent = {},
                     supportingContent = { Text("只在本机过滤，下拉刷新列表后生效。点击分类可编辑其中的关键词、话题、句式和语义例句。") },
+                )
+                ListItem(
+                    headlineContent = { Text("我屏蔽的话题") },
+                    supportingContent = { Text(if (topics.isEmpty()) "在话题页点“屏蔽”添加 · 始终隐藏" else "${topics.size} 个话题 · 始终隐藏") },
+                    leadingContent = { Icon(Icons.Outlined.Block, null, Modifier.padding(12.dp)) },
+                    trailingContent = { Icon(Icons.AutoMirrored.Outlined.KeyboardArrowRight, null) },
+                    modifier = Modifier.clickable { navigator.navigate(TopicBlockRoute) },
                 )
             }
             items(categories, key = { it.id }) { category ->
@@ -145,6 +164,8 @@ fun ContentFilterScreen() {
 
 private fun summary(category: SensitiveCategory): String = listOf(
     category.keywords.size to "个关键词",
+    category.strictKeywords.size to "个严格关键词",
+    category.authors.size to "位用户",
     category.tags.size to "个话题",
     category.patterns.size to "条句式",
     category.examples.size to "条语义例句",
@@ -162,16 +183,17 @@ private fun NavItem(icon: ImageVector, title: String, subtitle: String?, onClick
 
 @Composable
 private fun SwitchRow(icon: ImageVector, title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    val change = hapticChange(onChange)
     ListItem(
         headlineContent = { Text(title) },
         supportingContent = { Text(subtitle) },
         leadingContent = { Icon(icon, null) },
-        trailingContent = { Switch(checked, onChange) },
-        modifier = Modifier.clickable { onChange(!checked) },
+        trailingContent = { Switch(checked, change) },
+        modifier = Modifier.clickable { change(!checked) },
     )
 }
 
-/** One category: switch, name, and its four editable lists. */
+/** One category: switch, name, and its editable lists. */
 @Composable
 fun CategoryEditScreen(id: String) {
     val app = appContainer()
@@ -197,18 +219,30 @@ fun CategoryEditScreen(id: String) {
             ListItem(
                 headlineContent = { Text("启用此分类") },
                 supportingContent = { Text("关闭后不参与折叠和隐藏") },
-                trailingContent = { Switch(category.enabled, { on -> update { it.copy(enabled = on) } }) },
-                modifier = Modifier.clickable { update { it.copy(enabled = !category.enabled) } },
+                trailingContent = { Switch(category.enabled, hapticChange { on -> update { it.copy(enabled = on) } }) },
+                modifier = Modifier.clickable(onClick = hapticClick { update { it.copy(enabled = !category.enabled) } }),
             )
             HorizontalDivider()
             WordList(
-                "关键词", "文字中出现就命中，不区分大小写，忽略空格。可一次添加多个，用空格、逗号或顿号分隔。",
+                "关键词", "文字中出现就命中，不区分大小写；英文词只按整词匹配。可一次添加多个，用空格、逗号或顿号分隔。",
                 category.keywords, multiple = true,
             ) { list -> update { it.copy(keywords = list) } }
+            WordList(
+                "严格关键词", "只在内容过滤页开启“严格模式”后生效。放常被用在普通语境里的词，例如 小姐姐、表白。",
+                category.strictKeywords, multiple = true,
+            ) { list -> update { it.copy(strictKeywords = list) } }
+            WordList(
+                "例外词", "一句话里出现这些词时，这句不按本分类匹配，例如 举报、反对。只影响这一句，不影响整条帖子。",
+                category.exceptions, multiple = true,
+            ) { list -> update { it.copy(exceptions = list) } }
             WordList(
                 "话题", "动态所属的话题，或正文里的 #话题#，例如 相亲、酷安夜话。可一次添加多个。",
                 category.tags, multiple = true, display = { "#$it#" }, clean = { it.trim('#', ' ') },
             ) { list -> update { it.copy(tags = list) } }
+            WordList(
+                "用户", "这些用户的动态和回复都归入本分类，按分类折叠或隐藏。填用户 ID（个人主页链接 /u/ 后的数字）。",
+                category.authors, multiple = true, validate = { it.all(Char::isDigit) },
+            ) { list -> update { it.copy(authors = list) } }
             WordList(
                 "句式（高级）", "正则表达式，用来匹配更灵活的说法，例如 (想|好想)找个?女朋友。",
                 category.patterns, multiple = false,

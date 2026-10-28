@@ -69,10 +69,16 @@ class CoolapkClient(
     private val clock: () -> Long = System::currentTimeMillis,
 ) {
     val http: OkHttpClient = baseClient.newBuilder()
+        .followSslRedirects(false)
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
-        .addInterceptor(headers)
-        .apply { transport?.let(::addInterceptor) }
+        .apply { if (HttpsUpgrade !in baseClient.interceptors) addInterceptor(HttpsUpgrade) }
+        // Re-check the destination on every redirect before adding credentials.
+        .addNetworkInterceptor(headers)
+        .apply {
+            // Synthetic transports finish before network interceptors run.
+            if (transport != null) addInterceptor(headers).addInterceptor(transport)
+        }
         .build()
     private val noRedirect: OkHttpClient = http.newBuilder().followRedirects(false).followSslRedirects(false).build()
 
@@ -239,7 +245,7 @@ class CoolapkClient(
      * versions did for signed-in accounts, made every page ask again.
      */
     private fun keepSessionCookie(request: Request, response: ApiResponse) {
-        if (!request.url.isHttps || request.url.host !in CoolapkHeaders.apiHosts) return
+        if (!response.url.isHttps || response.url.host !in CoolapkHeaders.apiHosts) return
         // Issued to another account than the session's.
         if (request.tag(RequestOptions::class.java)?.account != null) return
         val value = response.cookies.map { it.substringBefore(';').trim() }

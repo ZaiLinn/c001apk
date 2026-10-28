@@ -19,13 +19,16 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Message
+import androidx.compose.material.icons.automirrored.outlined.OpenInNew
 import androidx.compose.material.icons.filled.ThumbUp
+import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.ContentCopy
 import androidx.compose.material.icons.outlined.Delete
 import androidx.compose.material.icons.outlined.ErrorOutline
 import androidx.compose.material.icons.outlined.KeyboardArrowDown
 import androidx.compose.material.icons.outlined.Link
+import androidx.compose.material.icons.outlined.ShoppingBag
 import androidx.compose.material.icons.outlined.Smartphone
 import androidx.compose.material.icons.outlined.ThumbUp
 import androidx.compose.material.icons.automirrored.outlined.Reply
@@ -43,6 +46,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,6 +71,7 @@ import com.zailinn.c001apk.ui.common.fromToday
 import com.zailinn.c001apk.ui.common.htmlToCopy
 import com.zailinn.c001apk.ui.common.htmlToPlain
 import com.zailinn.c001apk.ui.common.rememberConfirm
+import com.zailinn.c001apk.ui.common.hapticClick
 import com.zailinn.c001apk.ui.nav.CopyRoute
 import com.zailinn.c001apk.ui.nav.FeedRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
@@ -120,9 +125,10 @@ fun FeedCard(data: Datum, actions: ItemActions = ItemActions(), detail: Boolean 
                         selectable = detail,
                     )
                 }
-                if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(start = pad, end = pad, top = 10.dp))
+                if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(start = pad, end = pad, top = 10.dp), media = data.mediaImages)
                 if (!data.string("forwardSourceType").isNullOrEmpty()) ForwardSource(data.obj("forwardSourceFeed"), pad, detail)
                 data.string("extra_url")?.takeIf { it.isNotEmpty() }?.let { ExtraLink(data, it, pad, detail) }
+                data.obj("ershou_info")?.let { TradeLink(it, pad, detail) }
                 data.replyRows.firstOrNull()?.takeIf { !detail }?.let { HotReply(it, open) }
                 if (footer) FeedFooter(data, actions, detail)
             }
@@ -189,9 +195,12 @@ private fun FeedHeader(data: Datum, detail: Boolean, actions: ItemActions) {
         }
     }
     val confirmDelete = rememberConfirm("删除这条动态？", "删除后无法恢复。", "删除")
+    val backupApp = com.zailinn.c001apk.ui.screens.appContainer()
+    val offlineBackup = com.zailinn.c001apk.ui.common.LocalOfflineBackup.current
     if (menu) {
         ActionSheet(
             buildList {
+                if (!offlineBackup) add(SheetAction(Icons.Outlined.Archive, "备份") { backupApp.backups.request(data) })
                 add(SheetAction(Icons.Outlined.ContentCopy, "复制链接") { navigator.copy("https://www.coolapk.com/feed/${data.id}") })
                 data.uid?.let { uid -> add(SheetAction(Icons.Outlined.Block, "屏蔽作者") { actions.onBlock?.invoke(uid, null) }) }
                 add(SheetAction(Icons.Outlined.ErrorOutline, "举报") { navigator.report(data.id.orEmpty(), "feed") })
@@ -228,7 +237,7 @@ private fun ForwardSource(source: Datum?, pad: androidx.compose.ui.unit.Dp, deta
                 } else {
                     HtmlText(user + source.message.orEmpty(), maxLines = 8)
                 }
-                if (source.picArr.isNotEmpty()) ImageGrid(source.picArr, Modifier.padding(top = 10.dp))
+                if (source.picArr.isNotEmpty()) ImageGrid(source.picArr, Modifier.padding(top = 10.dp), media = source.mediaImages)
             }
         }
     }
@@ -262,6 +271,60 @@ private fun ExtraLink(data: Datum, url: String, pad: androidx.compose.ui.unit.Dp
     }
 }
 
+/**
+ * A 交易 post's price and listing link (`ershou_info`), usually a 闲鱼 short
+ * link. It opens outside the app, so the 闲鱼 app can take it when installed.
+ * `ershou_status` -1 marks a finished deal: the price is greyed and tagged.
+ */
+@Composable
+private fun TradeLink(info: Datum, pad: androidx.compose.ui.unit.Dp, detail: Boolean) {
+    val navigator = LocalNavigator.current
+    val link = info.string("link_url")?.takeIf { info.int("is_link") == 1 && it.startsWith("https://", ignoreCase = true) }
+    val price = info.string("product_price")?.takeIf { (it.toDoubleOrNull() ?: 0.0) > 0 }
+    if (link == null && price == null) return
+    val done = info.int("ershou_status") == -1
+    val source = info.string("link_source")?.takeIf { it.isNotBlank() }
+    val label = source?.let { "在${it}查看" } ?: "打开商品链接"
+    val config = info.string("product_config_data")
+        ?.let { runCatching { (kotlinx.serialization.json.Json.parseToJsonElement(it) as? kotlinx.serialization.json.JsonObject)?.get("configTitle") }.getOrNull() }
+        ?.let { (it as? kotlinx.serialization.json.JsonPrimitive)?.content }
+    val meta = listOfNotNull(config, info.string("city")).filter { it.isNotBlank() }.joinToString(" · ")
+    Surface(
+        color = if (detail) cardColor() else MaterialTheme.colorScheme.surface,
+        shape = CardShape,
+        onClick = { link?.let(navigator::launchBrowser) },
+        enabled = link != null,
+        modifier = Modifier.fillMaxWidth().padding(start = pad, end = pad, top = 10.dp),
+    ) {
+        Row(Modifier.padding(horizontal = 12.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Outlined.ShoppingBag, null, tint = if (done) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    price?.let {
+                        Text(
+                            "¥${it.removeSuffix(".00")}", fontWeight = FontWeight.Bold,
+                            color = if (done) MaterialTheme.colorScheme.outline else MaterialTheme.colorScheme.primary,
+                        )
+                    }
+                    if (done) {
+                        Text(
+                            "交易完成",
+                            Modifier.padding(start = if (price != null) 8.dp else 0.dp)
+                                .background(MaterialTheme.colorScheme.surfaceContainerHighest, RoundedCornerShape(4.dp))
+                                .padding(horizontal = 6.dp, vertical = 1.dp),
+                            fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+                val line = listOf(meta, if (link != null) label else "").filter { it.isNotEmpty() }.joinToString(" · ")
+                if (line.isNotEmpty()) Text(line, fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.outline, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            }
+            if (link != null) Icon(Icons.AutoMirrored.Outlined.OpenInNew, null, tint = MaterialTheme.colorScheme.outline)
+        }
+    }
+}
+
 @Composable
 private fun HotReply(reply: Datum, open: () -> Unit) {
     val pics = reply.picArr
@@ -277,7 +340,7 @@ private fun HotReply(reply: Datum, open: () -> Unit) {
             Modifier.padding(10.dp),
             fontSize = TextSizes.Nested,
             maxLines = 4,
-            picArr = pics,
+            picArr = pics, media = reply.mediaImages,
             onShowReplies = open,
         )
     }
@@ -311,7 +374,7 @@ fun CountButton(icon: androidx.compose.ui.graphics.vector.ImageVector, value: St
     if (onClick == null) {
         Row(Modifier.height(36.dp).padding(horizontal = 10.dp), verticalAlignment = Alignment.CenterVertically, content = content)
     } else {
-        TextButton(onClick = onClick, modifier = Modifier.height(36.dp), contentPadding = PaddingValues(horizontal = 10.dp), content = content)
+        TextButton(onClick = hapticClick(onClick), modifier = Modifier.height(36.dp), contentPadding = PaddingValues(horizontal = 10.dp), content = content)
     }
 }
 
@@ -375,9 +438,10 @@ fun ReplyCard(
     var menu by remember { mutableStateOf(false) }
     val feedUid = data.string("feedUid")
     val press = remember { ContentPress() }
+    val replyClick = hapticClick { actions.onReply?.invoke(data, null) }
     val clickable = Modifier.combinedClickable(
         onClick = {
-            if (isFeedReply && actions.onReply != null) actions.onReply.invoke(data, null) else navigator.openLink(data.url.orEmpty())
+            if (isFeedReply && actions.onReply != null) replyClick() else navigator.openLink(data.url.orEmpty())
         },
         onLongClick = { if (!press.active) menu = true },
     )
@@ -393,8 +457,8 @@ fun ReplyCard(
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         HtmlText(replyTitle(data, nested, isTop, feedUid, floorUid), Modifier.padding(end = 28.dp), fontSize = TextSizes.Name)
-                        HtmlText(data.message.orEmpty(), picArr = data.picArr, selectable = true)
-                        if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(top = 10.dp))
+                        HtmlText(data.message.orEmpty(), picArr = data.picArr, media = data.mediaImages, selectable = true)
+                        if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(top = 10.dp), media = data.mediaImages)
                         data.obj("feed")?.takeIf { !isFeedReply && !nested }?.let { SourceFeed(it) }
                         Row(Modifier.padding(top = 4.dp), verticalAlignment = Alignment.CenterVertically) {
                             Text(fromToday(data.dateline), Modifier.weight(1f), color = MaterialTheme.colorScheme.outline, fontSize = TextSizes.Meta)
@@ -478,10 +542,10 @@ private fun NestedReplies(parent: Datum, actions: ItemActions, more: Int) {
                 HtmlText(
                     """<a href="/u/${reply.uid}">${reply.displayName}${tag(reply.uid, feedUid, parent.uid)}</a>回复$rUser: ${reply.message.orEmpty()}$pic""",
                     Modifier.fillMaxWidth()
-                        .combinedClickable(onClick = { actions.onReply?.invoke(reply, parent) }, onLongClick = { if (!press.active) menuFor = reply })
+                        .combinedClickable(onClick = if (actions.onReply != null) hapticClick { actions.onReply.invoke(reply, parent) } else ({}), onLongClick = { if (!press.active) menuFor = reply })
                         .padding(horizontal = 8.dp, vertical = 4.dp),
                     fontSize = TextSizes.Nested,
-                    picArr = reply.picArr,
+                    picArr = reply.picArr, media = reply.mediaImages,
                     onShowReplies = { actions.onShowReplies?.invoke(parent) },
                 )
             }

@@ -57,7 +57,8 @@ class Datum(val json: JsonObject) {
     val messageTitle: String? get() = string("message_title")
     val dateline: Long? get() = long("dateline")
     val description: String? get() = string("description")
-    val picArr: List<String> get() = strings("picArr")
+    val mediaImages: List<GalleryMedia> get() = galleryMedia(json)
+    val picArr: List<String> get() = strings("picArr").ifEmpty { mediaImages.map { it.sourceUrl } }
     val entities: List<Datum> get() = list("entities")
     val userInfo: Datum? get() = obj("userInfo")
     val userAction: Datum? get() = obj("userAction")

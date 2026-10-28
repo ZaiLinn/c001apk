@@ -47,6 +47,7 @@ class ApiFailure(
         val invalidResponse get() = ApiFailure(ApiFailureKind.InvalidResponse, "服务器响应格式异常，请稍后重试")
 
         fun from(error: Throwable): ApiFailure = when (error) {
+            is ArchiveCaptchaException -> ApiFailure(ApiFailureKind.Captcha, "需要完成验证后继续")
             is ApiFailure -> error
             is SocketTimeoutException -> ApiFailure(ApiFailureKind.Transport, "请求超时，请稍后重试")
             is SSLPeerUnverifiedException, is SSLHandshakeException ->

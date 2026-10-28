@@ -6,16 +6,44 @@ import com.zailinn.c001apk.core.net.CoolapkHeaders
 import com.zailinn.c001apk.core.net.CoolapkRepository
 import com.zailinn.c001apk.core.net.Page
 import com.zailinn.c001apk.core.net.SessionState
+import com.zailinn.c001apk.core.net.readApiObject
 import com.zailinn.c001apk.core.protocol.ProtocolParams
 import kotlinx.coroutines.runBlocking
 import org.junit.Assume.assumeTrue
 import org.junit.Test
+import kotlinx.serialization.json.JsonArray
+import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.JsonPrimitive
 
 /**
- * Opt-in guest read against the real API: COOLAPK_LIVE_PROBE=1. Prints only
+ * Opt-in guest reads: COOLAPK_LIVE_PROBE=1 for feeds, COOLAPK_TOPIC_PROBE=1 for topic sorts. Prints only
  * the shape of the result, never content or credentials.
  */
 class LiveProbeTest {
+    @Test
+    fun guestTopicSortConfiguration() = runBlocking {
+        assumeTrue(System.getenv("COOLAPK_TOPIC_PROBE") == "1")
+        val session = SessionState()
+        val params = ProtocolParams.generate()
+        val client = CoolapkClient(session, CoolapkHeaders(session, { params }))
+        val data = readApiObject(client.get("https://api.coolapk.com/v6/topic/newTagDetail", listOf("tag" to "酷安")))["data"] as JsonObject
+        val repo = CoolapkRepository(client)
+        val tab = (data["tabList"] as JsonArray).filterIsInstance<JsonObject>().first()
+        val url = (tab["url"] as JsonPrimitive).content
+        val page = readApiObject(client.get("https://api.coolapk.com/v6/page/dataList", listOf("url" to url, "page" to "1")))
+        val card = (page["data"] as JsonArray).filterIsInstance<JsonObject>().first {
+            (it["entityTemplate"] as? JsonPrimitive)?.content == "sortSelectCard"
+        }
+        val options = (card["entities"] as JsonArray).filterIsInstance<JsonObject>()
+        check(options.map { (it["title"] as JsonPrimitive).content } == listOf("默认", "最新", "热度"))
+        for (option in options) {
+            val title = (option["title"] as JsonPrimitive).content
+            val result = repo.dataList((option["url"] as JsonPrimitive).content, title, Page())
+            println("topic sort $title: ${describe(result)}")
+            check(result is LoadResult.Success) { "topic sort failed: ${describe(result)}" }
+        }
+    }
+
     @Test
     fun guestHomeFeedAndDetail() = runBlocking {
         assumeTrue(System.getenv("COOLAPK_LIVE_PROBE") == "1")

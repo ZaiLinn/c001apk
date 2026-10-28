@@ -1,5 +1,7 @@
 package com.zailinn.c001apk.ui.screens.compose
 
+import kotlinx.coroutines.flow.first
+import androidx.compose.runtime.snapshotFlow
 import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -30,6 +32,7 @@ import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.outlined.EmojiEmotions
 import androidx.compose.material.icons.outlined.Image
 import androidx.compose.material.icons.outlined.Keyboard
+import androidx.compose.material.icons.outlined.Tag
 import androidx.compose.material3.Button
 import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
@@ -75,6 +78,8 @@ import com.zailinn.c001apk.ui.common.AppBottomSheet
 import com.zailinn.c001apk.ui.common.emojiBitmap
 import com.zailinn.c001apk.ui.common.EmojiPanel
 import com.zailinn.c001apk.ui.common.readUploadImage
+import com.zailinn.c001apk.ui.common.hapticChange
+import com.zailinn.c001apk.ui.common.hapticClick
 import com.zailinn.c001apk.ui.screens.appContainer
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.Dispatchers
@@ -109,6 +114,7 @@ fun ComposerSheet(
     var text by rememberSaveable(stateSaver = TextFieldValue.Saver) { mutableStateOf(TextFieldValue(initial, TextRange(initial.length))) }
     var checked by rememberSaveable { mutableStateOf(false) }
     var emoji by remember { mutableStateOf(false) }
+    var pickingTopic by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf<String?>(null) }
     var captcha by remember { mutableStateOf<ByteArray?>(null) }
     val images = rememberSaveable(saver = listSaver(save = { it.toList() }, restore = { it.toMutableStateList() })) { mutableStateListOf<Uri>() }
@@ -128,7 +134,11 @@ fun ComposerSheet(
     val picker = rememberLauncherForActivityResult(ActivityResultContracts.PickMultipleVisualMedia(9)) { uris ->
         images.addAll(uris.filter { it !in images }.take(9 - images.size))
     }
-    LaunchedEffect(Unit) { runCatching { focus.requestFocus() } }
+    // The keyboard waits for the sheet to finish sliding up; asked at once, it would rise first.
+    LaunchedEffect(Unit) {
+        snapshotFlow { sheet.currentValue == SheetValue.Expanded }.first { it }
+        runCatching { focus.requestFocus() }
+    }
 
     fun insert(value: String) {
         val start = text.selection.min
@@ -232,24 +242,40 @@ fun ComposerSheet(
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {
-                IconButton(onClick = { emoji = !emoji }) {
+                IconButton(onClick = hapticClick { emoji = !emoji }) {
                     Icon(if (emoji) Icons.Outlined.Keyboard else Icons.Outlined.EmojiEmotions, "表情")
                 }
-                IconButton(onClick = {
+                IconButton(onClick = hapticClick {
                     picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                 }, enabled = images.size < 9) { Icon(Icons.Outlined.Image, "图片") }
-                Checkbox(checked, { checked = it })
+                if (target is ComposeTarget.NewFeed) {
+                    IconButton(onClick = hapticClick { pickingTopic = true }) { Icon(Icons.Outlined.Tag, "话题") }
+                }
+                Checkbox(checked, hapticChange { checked = it })
                 Text(if (target is ComposeTarget.NewFeed) "仅自己可见" else "回复并转发")
                 Spacer(Modifier.weight(1f))
                 if (busy != null) {
                     LoadingIndicator(Modifier.size(32.dp))
                     Text(busy!!, Modifier.padding(horizontal = 8.dp))
                 } else {
-                    Button(onClick = publish, enabled = text.text.isNotBlank() || images.isNotEmpty()) { Text("发布") }
+                    Button(onClick = hapticClick(publish), enabled = text.text.isNotBlank() || images.isNotEmpty()) { Text("发布") }
                 }
             }
             if (emoji) EmojiPanel(::insert)
             Spacer(Modifier.height(8.dp))
+        }
+    }
+
+    if (pickingTopic) {
+        TopicPicker(onDismiss = { pickingTopic = false }) { title ->
+            pickingTopic = false
+            val tag = "#$title#"
+            if (tag !in text.text) {
+                // A space keeps the next word out of the topic.
+                val before = text.text.getOrNull(text.selection.min - 1)
+                insert((if (before == null || before.isWhitespace()) "" else " ") + "$tag ")
+            }
+            runCatching { focus.requestFocus() }
         }
     }
 

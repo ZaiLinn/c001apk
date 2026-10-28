@@ -23,12 +23,20 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.ui.input.nestedscroll.nestedScroll
+import com.zailinn.c001apk.ui.common.HidingBar
+import com.zailinn.c001apk.ui.common.LocalScrollBars
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewModelScope
 import com.zailinn.c001apk.AppContainer
+import com.zailinn.c001apk.core.follow.FollowSource
 import com.zailinn.c001apk.core.follow.LocalFollowPager
 import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.ui.LocalAppSettings
@@ -71,16 +79,22 @@ class AccountFollowViewModel(app: AppContainer, type: Int) : ContentViewModel(ap
     override val list = PagedList(viewModelScope) { page -> app.repository.dataList(followUrl(type), followTitle(type), page) }
 }
 
-/** Timelines of users followed only on this device, merged by time. */
+/** Timelines of users and topics followed only on this device, merged by time. */
 class LocalFollowFeedViewModel(app: AppContainer) : ContentViewModel(app) {
     val warning = MutableStateFlow<String?>(null)
     private var pager: LocalFollowPager? = null
 
     override val list = PagedList(viewModelScope) { page ->
         if (page.page == 1 || pager == null) {
-            pager = LocalFollowPager(
-                app.content.localFollows.value.map { it.uid }.filter { !app.content.isUserBlocked(it) },
-            ) { uid, cursor -> app.repository.userFeed(uid, cursor, includeTop = false) }
+            val filter = app.content.filter()
+            val users = app.content.localFollows.value.filter { !app.content.isUserBlocked(it.uid) }.map { FollowSource.User(it.uid) }
+            val topics = app.content.localFollowTopics.value.filter { !filter.isTopicBlocked(it.title) }.map { FollowSource.Topic(it.id, it.title) }
+            pager = LocalFollowPager(users + topics) { source, cursor ->
+                when (source) {
+                    is FollowSource.User -> app.repository.userFeed(source.uid, cursor, includeTop = false)
+                    is FollowSource.Topic -> app.repository.topicFeed(source.id, source.title, cursor)
+                }
+            }
         }
         val current = pager!!
         val items = current.next()
@@ -94,7 +108,8 @@ class LocalFollowFeedViewModel(app: AppContainer) : ContentViewModel(app) {
 
     init {
         viewModelScope.launch {
-            combine(app.content.localFollows, app.content.blockedUsers) { a, b -> a to b }.drop(1).collect { list.refresh() }
+            combine(app.content.localFollows, app.content.localFollowTopics, app.content.blockedUsers, app.content.blockedTopics) { a, b, c, d -> listOf(a, b, c, d) }
+                .drop(1).collect { list.refresh() }
         }
     }
 }
@@ -112,29 +127,39 @@ fun FollowScreen(generation: Int, reselect: Int) {
     val scope = rememberCoroutineScope()
     val selected = LocalAppSettings.current.followType
     val local = selected == LOCAL_FOLLOW
+    val bars = LocalScrollBars.current
+    LaunchedEffect(selected) { bars.show() }
     Scaffold(
+        modifier = Modifier.nestedScroll(bars.connection),
         topBar = {
-            TopAppBar(
-                title = { Text("关注") },
-                actions = { IconButton(onClick = { navigator.navigate(SearchRoute()) }) { Icon(Icons.Outlined.Search, "搜索") } },
-            )
-        },
-    ) { padding ->
-        Column(Modifier.padding(padding).fillMaxSize()) {
-            if (session.isLogin) {
-                Row(
-                    Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                ) {
-                    followCategories.forEach { (type, label) ->
-                        FilterChip(
-                            selected = selected == type,
-                            onClick = { scope.launch { app.settings.set(SettingKeys.followType, type) } },
-                            label = { Text(label) },
+            Column(Modifier.background(MaterialTheme.colorScheme.surface).statusBarsPadding()) {
+                HidingBar(bars, fromTop = true) {
+                    Column {
+                        TopAppBar(
+                            title = { Text("关注") },
+                            actions = { IconButton(onClick = { navigator.navigate(SearchRoute()) }) { Icon(Icons.Outlined.Search, "搜索") } },
+                            windowInsets = WindowInsets(0),
                         )
+                        if (session.isLogin) {
+                            Row(
+                                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 12.dp, vertical = 4.dp),
+                                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                            ) {
+                                followCategories.forEach { (type, label) ->
+                                    FilterChip(
+                                        selected = selected == type,
+                                        onClick = { scope.launch { app.settings.set(SettingKeys.followType, type) } },
+                                        label = { Text(label) },
+                                    )
+                                }
+                            }
+                        }
                     }
                 }
             }
+        },
+    ) { padding ->
+        Column(Modifier.padding(padding).fillMaxSize()) {
             if (!session.isLogin || local) {
                 LocalFollowFeed(generation, reselect)
             } else {
@@ -155,13 +180,14 @@ private fun LocalFollowFeed(generation: Int, reselect: Int) {
     val label = if (session.isLogin) "悄悄关注" else "本地关注"
     val vm = appViewModel(key = "follow-local-$generation") { LocalFollowFeedViewModel(it) }
     val users by vm.app.content.localFollows.collectAsStateWithLifecycle()
+    val topics by vm.app.content.localFollowTopics.collectAsStateWithLifecycle()
     val warning by vm.warning.collectAsStateWithLifecycle()
     val listState = rememberLazyListState()
     OnCountIncrease(reselect) { listState.animateScrollToItem(0) }
     Column {
         ListItem(
             headlineContent = { Text("${label}动态") },
-            supportingContent = { Text("读取本机名单中的用户动态，不会同步账号关注") },
+            supportingContent = { Text("读取本机名单中的用户和话题动态，不会同步账号关注") },
             trailingContent = { TextButton(onClick = { navigator.navigate(LocalFollowRoute) }) { Text("管理") } },
         )
         warning?.let { message ->
@@ -170,10 +196,10 @@ private fun LocalFollowFeed(generation: Int, reselect: Int) {
                 trailingContent = { TextButton(onClick = vm.list::retry) { Text("重试") } },
             )
         }
-        if (users.isEmpty()) {
+        if (users.isEmpty() && topics.isEmpty()) {
             MessageBox(
-                if (session.isLogin) "还没有悄悄关注的用户\n在设置中开启后，长按用户主页的关注按钮即可添加"
-                else "还没有本地关注的用户\n在用户主页点击“本地关注”，即可在这里查看动态",
+                if (session.isLogin) "还没有悄悄关注的用户或话题\n在设置中开启后，长按用户主页的关注按钮，或在话题页菜单中选择“悄悄关注”即可添加"
+                else "还没有本地关注的用户或话题\n在用户主页点击“本地关注”，或在话题页菜单中选择“本地关注”，即可在这里查看动态",
             )
         } else {
             PagedListView(vm.list, listState = listState) { _, item -> ItemCard(item, vm.actions) }

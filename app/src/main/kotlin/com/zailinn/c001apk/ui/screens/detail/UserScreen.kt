@@ -59,6 +59,7 @@ import com.zailinn.c001apk.ui.common.PagedListView
 import com.zailinn.c001apk.ui.common.StatusBox
 import com.zailinn.c001apk.ui.common.fromToday
 import com.zailinn.c001apk.ui.common.rememberConfirm
+import com.zailinn.c001apk.ui.common.hapticClick
 import com.zailinn.c001apk.ui.nav.ChatRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.nav.SearchRoute
@@ -172,7 +173,7 @@ fun UserScreen(uid: String) {
                     IconButton(onClick = {
                         navigator.navigate(SearchRoute(title = data.username, pageType = "user", pageParam = data.uid))
                     }) { Icon(Icons.Outlined.Search, "搜索") }
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }
+                    IconButton(onClick = hapticClick { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }
                     AppDropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem({ Text("复制链接") }, { menu = false; navigator.copy("https://www.coolapk.com/u/${data.uid}") },
                             leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) })

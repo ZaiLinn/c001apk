@@ -137,7 +137,8 @@ fun CarouselCard(items: List<Datum>) {
             pager.animateScrollToPage((pager.currentPage + 1) % shown.size)
         }
     }
-    Box(Modifier.fillMaxWidth().aspectRatio(3f).clip(CardShape)) {
+    // Same fixed 4.5:1 box the official client uses.
+    Box(Modifier.fillMaxWidth().aspectRatio(BANNER_RATIO).clip(CardShape)) {
         HorizontalPager(pager, Modifier.fillMaxSize()) { page ->
             val item = shown[page]
             NetworkImage(item.pic, Modifier.fillMaxSize().clickable { navigator.openLink(item.url.orEmpty(), item.title) })
@@ -156,6 +157,8 @@ fun CarouselCard(items: List<Datum>) {
         }
     }
 }
+
+private const val BANNER_RATIO = 4.5f
 
 /** Icon grid with five per row, paged when longer than two rows. */
 @Composable
@@ -370,8 +373,8 @@ fun NotificationCard(data: Datum, actions: ItemActions) {
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f).padding(end = 24.dp)) {
                         HtmlText(data.string("fromusername").orEmpty(), fontSize = TextSizes.Name)
-                        HtmlText(note, fontSize = TextSizes.Nested, picArr = data.picArr)
-                        if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(top = 6.dp))
+                        HtmlText(note, fontSize = TextSizes.Nested, picArr = data.picArr, media = data.mediaImages)
+                        if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(top = 6.dp), media = data.mediaImages)
                         Text(fromToday(data.dateline), fontSize = TextSizes.Meta, color = MaterialTheme.colorScheme.outline)
                     }
                 }

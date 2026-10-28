@@ -14,6 +14,10 @@ import kotlinx.serialization.json.JsonElement
 import kotlinx.serialization.json.JsonNull
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.buildJsonObject
+import kotlinx.serialization.json.put
+import okhttp3.HttpUrl.Companion.toHttpUrlOrNull
+import java.net.URLEncoder
 
 private const val API = Constants.URL_API_SERVICE
 private const val API2 = Constants.URL_API2_SERVICE
@@ -60,19 +64,71 @@ class CoolapkRepository(
 
     // region Lists
 
-    suspend fun homeFeed(page: Page, firstLaunch: Int, installTime: String) = list {
+    /** The home 动态 tab; category matches are left out rather than shown folded. */
+    suspend fun homeFeed(page: Page, firstLaunch: Int, installTime: String) = list(hideFolded = true) {
         client.get("$API2/v6/main/indexV8", page.query() + listOf(
             "firstLaunch" to firstLaunch.toString(), "installTime" to installTime, "ids" to "",
         ))
     }
 
-    suspend fun dataList(url: String, title: String, page: Page, subTitle: String = "", includeConfigCard: Boolean = false) =
-        list(includeConfigCard) {
+    /** With [hideFolded], category matches are left out rather than shown folded, as on the home tabs. */
+    suspend fun dataList(url: String, title: String, page: Page, subTitle: String = "", includeConfigCard: Boolean = false, hideFolded: Boolean = false) =
+        list(includeConfigCard, hideFolded) {
             client.get("$API/v6/page/dataList", listOf("url" to url, "title" to title, "subTitle" to subTitle) + page.query())
         }
 
     suspend fun dataListFromUrl(url: String, query: List<Pair<String, String>> = emptyList()) =
         list { client.get(API + url, query) }
+
+    private suspend fun archiveRead(url: String, query: List<Pair<String, String>>, verify: Boolean): JsonObject {
+        val response = client.get(url, query, skipCaptcha = !verify)
+        try { return readApiObject(response) }
+        catch (e: CancellationException) { throw e }
+        catch (e: Exception) {
+            if (ApiFailure.from(e).kind == ApiFailureKind.Captcha) throw ArchiveCaptchaException(response.url.toString())
+            throw e
+        }
+    }
+
+    suspend fun verifyArchiveRequest(value: String) {
+        val url = value.toHttpUrlOrNull() ?: throw ApiFailure.invalidResponse
+        require(url.isHttps && url.host in setOf("api.coolapk.com", "api2.coolapk.com") && url.encodedPath in setOf("/v6/feed/detail", "/v6/feed/replyList", "/v6/collection/list", "/v6/collection/itemList"))
+        readApiObject(client.get(url.toString(), skipCaptcha = false))
+    }
+
+    /** Archive requests intentionally bypass UI filters and summary/hot-reply fallbacks. */
+    suspend fun backupFeed(id: String, verify: Boolean = true): JsonObject {
+        val root = try {
+            archiveRead("$API/v6/feed/detail", listOf("id" to id), verify)
+        } catch (e: CancellationException) { throw e }
+        catch (original: Exception) {
+            if (!verify && ApiFailure.from(original).kind == ApiFailureKind.Captcha) throw original
+            // Guests may archive a complete official public page, never the
+            // list-summary fallback used by ordinary online browsing.
+            try {
+                readApiObject(publicFeedPage(client.get("${Constants.URL_COOLAPK}feed/$id"))).also { if (it["data"] !is JsonObject) throw original }
+            }
+            catch (e: CancellationException) { throw e }
+            catch (_: Exception) { throw original }
+        }
+        val data = root["data"] as? JsonObject ?: throw ApiFailure.invalidResponse
+        require((data["issummary"] as? JsonPrimitive)?.content != "1") { "无法读取完整动态，请登录后重试备份" }
+        return data
+    }
+
+    suspend fun backupReplies(id: String, page: Page, feedType: String = "feed", verify: Boolean = true): List<Datum> {
+        val query = replyQuery(id, "lastupdate_desc", page, 0).filter { it.first != "feedType" } + ("feedType" to feedType)
+        return backupRows(archiveRead("$API2/v6/feed/replyList", query, verify))
+    }
+
+    suspend fun backupSubReplies(id: String, page: Page, verify: Boolean = true): List<Datum> =
+        backupRows(archiveRead("$API/v6/feed/replyList", subReplyQuery(id, page), verify))
+
+    private fun backupRows(root: JsonObject): List<Datum> = when (val rows = root["data"]) {
+        is JsonArray -> rows.filterIsInstance<JsonObject>().map(::Datum)
+        JsonNull -> emptyList()
+        else -> throw ApiFailure.invalidResponse
+    }
 
     suspend fun feedReplies(id: String, listType: String, page: Page, fromFeedAuthor: Int = 0) = list {
         client.get("$API2/v6/feed/replyList", replyQuery(id, listType, page, fromFeedAuthor))
@@ -99,7 +155,7 @@ class CoolapkRepository(
         } catch (e: Exception) {
             val failure = ApiFailure.from(e)
             if (failure.kind != ApiFailureKind.Captcha) {
-                ReplyPage(LoadResult.Error(failure.message))
+                ReplyPage(LoadResult.Error(failure.message, failure.kind))
             } else {
                 val hot = hotReplies(id, page)
                 when {
@@ -108,7 +164,7 @@ class CoolapkRepository(
                         when (val web = webReplies(id)) {
                             is LoadResult.Success -> web
                             LoadResult.Empty -> LoadResult.Success(emptyList(), isPublic = true)
-                            else -> LoadResult.Error(failure.message)
+                            else -> LoadResult.Error(failure.message, failure.kind)
                         },
                         ReplySource.Web,
                     )
@@ -133,7 +189,7 @@ class CoolapkRepository(
             is LoadResult.Success -> {
                 val rows = (feed.value.list("hotReplyRows") + feed.value.list("replyRows")).distinctBy { it.id ?: it.hashCode().toString() }
                 val rules = filter()
-                val shown = rules.markAll(rows.filter { rules.accepts(it, false) })
+                val shown = rules.apply(rows)
                 if (rows.isEmpty()) LoadResult.Empty else LoadResult.Success(shown, isPublic = true)
             }
             is LoadResult.Error -> if (feed.message == PUBLIC_PAGE_APP_ONLY) LoadResult.Empty else feed
@@ -159,7 +215,7 @@ class CoolapkRepository(
             throw e
         } catch (e: Exception) {
             val failure = ApiFailure.from(e)
-            ReplyPage(LoadResult.Error(failure.message), if (failure.kind == ApiFailureKind.Captcha) ReplySource.Web else ReplySource.Api)
+            ReplyPage(LoadResult.Error(failure.message, failure.kind), if (failure.kind == ApiFailureKind.Captcha) ReplySource.Web else ReplySource.Api)
         }
 
     /** Sub-replies of a reply through the captcha prompt; the proof rides in the validate cookie. */
@@ -228,13 +284,37 @@ class CoolapkRepository(
         else -> LoadResult.Error("缺少话题参数")
     }
 
+    /** A topic's feeds, newest first: the "最新" option of its discussion tab. */
+    suspend fun topicFeed(id: String, title: String, page: Page): LoadResult<List<Datum>> {
+        if (!Regex("^[0-9]+$").matches(id)) return LoadResult.Error("话题编号无效")
+        val inner = "/topic/tagFeedList?id=$id&title=${URLEncoder.encode(title, "UTF-8")}&sortField=dateline_desc"
+        return dataList("/page?url=" + URLEncoder.encode(inner, "UTF-8"), title, page)
+    }
+
+    /** Resolve the video separately; API credentials never follow it to the CDN. */
+    suspend fun livePhotoVideo(media: com.zailinn.c001apk.core.model.GalleryMedia): String {
+        media.videoUrl?.let { return HttpsUpgrade.url(it) ?: throw ApiFailure.invalidResponse }
+        val id = media.contentId?.takeIf { it.matches(Regex("[0-9]+")) } ?: throw ApiFailure(ApiFailureKind.Business, "缺少实况图片的来源信息")
+        val image = media.sourceUrl.toHttpUrlOrNull() ?: throw ApiFailure.invalidResponse
+        if (image.host != "image.coolapk.com") throw ApiFailure.invalidResponse
+        // picUrl is an identifier inside the HTTPS API query, not a cleartext request.
+        val original = image.newBuilder().scheme("http").build().toString()
+        val type = media.contentType.takeIf { it in listOf("feed", "reply", "article") } ?: "feed"
+        val response = client.get("$API/v6/livePhoto/showVideo", listOf("picUrl" to original, "id" to "${type}_$id"), skipCaptcha = true, followRedirects = false)
+        val target = if (response.code in 300..399) response.headers["Location"]?.let { response.url.resolve(it)?.toString() } else {
+            val body = readApiObject(response)
+            (body["data"] as? JsonPrimitive)?.content ?: (body["data"] as? JsonObject)?.get("url")?.let { (it as? JsonPrimitive)?.content }
+        }
+        return target?.let(HttpsUpgrade::url) ?: throw ApiFailure(ApiFailureKind.Business, "暂时无法获取实况视频，请重试")
+    }
+
     suspend fun appInfo(id: String) = data { client.get("$API/v6/apk/detail", listOf("id" to id, "installed" to "1")) }
 
     /**
      * Account detail first; on login or captcha restrictions fall back to the
      * official public representation, which cannot carry this account's like state.
      */
-    suspend fun feedDetail(id: String, verify: Boolean = false): LoadResult<Datum> {
+    suspend fun feedDetail(id: String, verify: Boolean = false, allowListCopy: Boolean = true): LoadResult<Datum> {
         if (!Regex("^[0-9]+$").matches(id)) return LoadResult.Error("动态编号无效")
         var verification: String? = null
         try {
@@ -253,14 +333,16 @@ class CoolapkRepository(
                         verification == "submitted" && failure.kind == ApiFailureKind.Captcha ->
                             "验证已完成，但服务端仍未允许读取账号信息，请稍后重试"
                         else -> failure.message
-                    },
+                    }, failure.kind,
                 )
             }
             if (failure.kind != ApiFailureKind.Captcha && failure.kind != ApiFailureKind.Authentication) {
-                return LoadResult.Error(failure.message)
+                return LoadResult.Error(failure.message, failure.kind)
             }
+            if (!allowListCopy && failure.kind == ApiFailureKind.Captcha) return LoadResult.Error(failure.message, failure.kind)
             val public = data { publicFeedPage(client.get("${Constants.URL_COOLAPK}feed/$id")) }
-            val shown = (public as? LoadResult.Success)?.value ?: listCopy(id) ?: return public
+            val shown = (public as? LoadResult.Success)?.value ?: (if (allowListCopy) listCopy(id) else null)
+                ?: return if (allowListCopy) public else LoadResult.Error(failure.message, failure.kind)
             return LoadResult.Success(shown.with("userAction", null as JsonElement?), isPublic = true)
         }
     }
@@ -353,6 +435,17 @@ class CoolapkRepository(
             add("page" to "1")
         })
     }
+
+    /** Unfiltered archive discovery; never prompts or retries a captcha. */
+    suspend fun archiveCollections(showDefault: Boolean, page: Page): List<Datum> = backupRows(
+        archiveRead("$API/v6/collection/list", page.query() + listOf("uid" to "", "showDefault" to if (showDefault) "1" else "0"), false))
+
+    suspend fun verifyArchiveCollections() {
+        readApiObject(client.get("$API/v6/collection/list", listOf("showDefault" to "1", "page" to "1"), skipCaptcha = false))
+    }
+
+    suspend fun collectionItems(id: String, page: Page): List<Datum> = backupRows(
+        archiveRead("$API/v6/collection/itemList", listOf("id" to id) + page.query(), false))
 
     /** Adds a feed to a collection or takes it out; `data` holds the new `favnum` and `collect`. */
     suspend fun setCollected(collectionId: String, feedId: String, collected: Boolean) = action {
@@ -478,13 +571,14 @@ class CoolapkRepository(
 
     private suspend fun list(
         includeConfigCard: Boolean = false,
+        hideFolded: Boolean = false,
         request: suspend () -> ApiResponse,
     ): LoadResult<List<Datum>> {
         var verification: String? = null
         return try {
             val response = request()
             verification = response.captchaVerification
-            toList(readApiObject(response), includeConfigCard)
+            toList(readApiObject(response), includeConfigCard, hideFolded)
         } catch (e: CancellationException) {
             throw e
         } catch (e: Exception) {
@@ -492,7 +586,7 @@ class CoolapkRepository(
         }
     }
 
-    private suspend fun toList(body: JsonObject, includeConfigCard: Boolean = false): LoadResult<List<Datum>> {
+    private suspend fun toList(body: JsonObject, includeConfigCard: Boolean = false, hideFolded: Boolean = false): LoadResult<List<Datum>> {
         val items = expandListCards((body["data"] as? JsonArray).orEmpty()).toList()
         synchronized(listCopies) {
             items.forEach { item -> item.id?.takeIf { item.entityType == "feed" }?.let { listCopies[it] = item } }
@@ -500,12 +594,12 @@ class CoolapkRepository(
         return if (items.isEmpty()) {
             LoadResult.Empty
         } else {
-            val rules = filter()
+            val rules = filter().let { if (hideFolded) it.copy(fold = false) else it }
             withContext(Dispatchers.Default) {
                 // Cursor ids come from every known item, including blocked ones, so a
                 // fully blocked page still moves the next request forward.
                 val known = ContentFilter()
-                val shown = rules.markAll(items.filter { rules.accepts(it, includeConfigCard) })
+                val shown = rules.apply(items, includeConfigCard)
                 LoadResult.Success(DatumPage(
                     shown,
                     rawFirstId = items.firstOrNull { known.accepts(it, includeConfigCard) && it.id != null }?.id,
@@ -542,7 +636,15 @@ class CoolapkRepository(
                 val item = element as? JsonObject ?: continue
                 val datum = Datum(item)
                 if (datum.entityType == "card" && datum.entityTemplate == "listCard") {
-                    (item["entities"] as? JsonArray)?.let { yieldAll(expandListCards(it, depth + 1)) }
+                    val children = item["entities"] as? JsonArray
+                    // A product page's 同价位 / 同SoC groups keep their heading.
+                    val title = datum.title.orEmpty()
+                    if (title.isNotEmpty() && children.orEmpty().any { (it as? JsonObject)?.get("entityType")?.let { t -> (t as? JsonPrimitive)?.content } == "product" }) {
+                        yield(Datum(buildJsonObject {
+                            put("entityType", "card"); put("entityTemplate", "titleCard"); put("title", title); put("url", datum.url.orEmpty())
+                        }))
+                    }
+                    children?.let { yieldAll(expandListCards(it, depth + 1)) }
                 } else {
                     yield(datum)
                 }

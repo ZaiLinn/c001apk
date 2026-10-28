@@ -24,6 +24,9 @@ fun ItemCard(data: Datum, actions: ItemActions = ItemActions(), onSurface: Boole
             "imageTextScrollCard" -> ImageTextScrollCard(data)
             "noMoreDataCard" -> TextCard(data.title.orEmpty(), end = true)
             "messageCard" -> TextCard(data.description.orEmpty())
+            "textCard" -> SectionTextCard(data)
+            "imageScaleCard" -> ImageScaleCard(data)
+            "productConfigList" -> ProductConfigCard(data)
             "refreshCard" -> TextCard(data.title.orEmpty())
             else -> Unsupported()
         }

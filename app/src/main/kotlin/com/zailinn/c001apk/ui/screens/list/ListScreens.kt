@@ -1,5 +1,14 @@
 package com.zailinn.c001apk.ui.screens.list
 
+import androidx.compose.ui.semantics.Role
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.selection.selectable
+import androidx.compose.foundation.background
+import androidx.compose.ui.Alignment
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.material.icons.outlined.Add
 import androidx.compose.material.icons.outlined.CleaningServices
 import androidx.compose.material.icons.outlined.Delete
@@ -19,8 +28,13 @@ import com.zailinn.c001apk.core.net.ConversationAction
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.foundation.pager.HorizontalPager
+import androidx.compose.foundation.pager.PagerState
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.outlined.Sync
+import androidx.compose.material.icons.outlined.Search
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.outlined.ClearAll
@@ -38,6 +52,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.input.nestedscroll.NestedScrollConnection
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -48,9 +63,11 @@ import com.zailinn.c001apk.data.FeedRecord
 import com.zailinn.c001apk.ui.cards.FeedCard
 import com.zailinn.c001apk.ui.cards.ItemActions
 import com.zailinn.c001apk.ui.cards.ItemCard
+import com.zailinn.c001apk.ui.cards.openableImages
 import com.zailinn.c001apk.ui.common.MessageBox
 import com.zailinn.c001apk.ui.common.PagedList
 import com.zailinn.c001apk.ui.common.PagedListView
+import com.zailinn.c001apk.ui.common.hapticClick
 import com.zailinn.c001apk.ui.nav.ChatRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.ContentViewModel
@@ -59,6 +76,7 @@ import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
+import kotlinx.serialization.json.Json
 
 @Composable
 fun BackButton() {
@@ -87,25 +105,106 @@ fun SimpleTopBar(
 class DataListViewModel(app: AppContainer, url: String, title: String, private val discoverTabs: Boolean) : ContentViewModel(app) {
     val tabs = MutableStateFlow<List<Datum>>(emptyList())
     val pageTitle = MutableStateFlow<String?>(null)
+    val sorts = MutableStateFlow<List<Datum>>(emptyList())
+    /** The label beside the sort options, such as 全部讨论. */
+    val sortTitle = MutableStateFlow("")
+    val selectedSort = MutableStateFlow<String?>(null)
+    private var currentUrl = url
     private var checked = false
+
+    fun selectSort(option: Datum) {
+        val url = option.url?.takeIf { it.isNotBlank() } ?: return
+        if (option !in sorts.value || selectedSort.value == url) return
+        currentUrl = url
+        selectedSort.value = url
+        // The old order's items would stay up, unmarked, until the new first page arrives.
+        list.reset()
+    }
 
     override val list = PagedList(
         viewModelScope,
-        transform = { _, items ->
+        transform = { page, items ->
+            if (page == 1) {
+                items.firstOrNull { it.entityTemplate == "sortSelectCard" }?.let { card ->
+                    val options = card.entities.filter { !it.title.isNullOrBlank() && !it.url.isNullOrBlank() }
+                    if (options.isNotEmpty()) {
+                        sorts.value = options
+                        sortTitle.value = card.title.orEmpty()
+                        if (selectedSort.value == null) {
+                            val extra = card.obj("extraData") ?: runCatching {
+                                (Json.parseToJsonElement(card.text("extraData")) as? JsonObject)?.let(::Datum)
+                            }.getOrNull()
+                            selectedSort.value = (options.firstOrNull { it.title == extra?.string("selectedTab") } ?: options.first()).url
+                        }
+                    }
+                }
+            }
             if (discoverTabs && !checked) {
                 checked = true
                 items.firstOrNull { it.entityTemplate == "iconTabLinkGridCard" }?.let { tabs.value = it.entities }
                 pageTitle.value = items.lastOrNull()?.obj("extraDataArr")?.string("pageTitle")
             }
-            items
+            // A banner card with nothing openable would draw nothing yet still add the list's spacing.
+            items.filterNot {
+                it.entityTemplate == "configCard" || it.entityTemplate == "sortSelectCard" ||
+                    (it.entityTemplate == "imageScaleCard" && it.openableImages().isEmpty())
+            }
         },
-    ) { page -> app.repository.dataList(url, title, page, includeConfigCard = discoverTabs) }
+    ) { page -> app.repository.dataList(currentUrl, title, page, includeConfigCard = true) }
 }
 
 @Composable
-fun DataListContent(url: String, title: String, key: String = "data-$url-$title", onSurface: Boolean = false) {
+fun DataListContent(
+    url: String,
+    title: String,
+    key: String = "data-$url-$title",
+    onSurface: Boolean = false,
+    nestedScroll: NestedScrollConnection? = null,
+) {
     val vm = appViewModel(key = key) { DataListViewModel(it, url, title, discoverTabs = false) }
-    PagedListView(vm.list) { _, item -> ItemCard(item, vm.actions, onSurface = onSurface) }
+    val sorts by vm.sorts.collectAsStateWithLifecycle()
+    val sortTitle by vm.sortTitle.collectAsStateWithLifecycle()
+    val selected by vm.selectedSort.collectAsStateWithLifecycle()
+    val listState = rememberLazyListState()
+    val scope = rememberCoroutineScope()
+    Column(Modifier.fillMaxSize()) {
+        if (sorts.isNotEmpty()) {
+            // As in the official app: the list's name on the left, a small switch on the right. No
+            // padding below: the list's own 10dp top padding spaces it from the first card.
+            Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 12.dp, top = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+                Text(sortTitle, Modifier.weight(1f), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                SortSwitch(sorts.map { it.title.orEmpty() }, sorts.indexOfFirst { it.url == selected }) { index ->
+                    vm.selectSort(sorts[index])
+                    scope.launch { listState.scrollToItem(0) }
+                }
+            }
+        }
+        PagedListView(vm.list, Modifier.weight(1f), listState = listState, nestedScroll = nestedScroll) { _, item -> ItemCard(item, vm.actions, onSurface = onSurface) }
+    }
+}
+
+/**
+ * A small switch of options, the chosen one raised. Plain selectable boxes rather than clickable
+ * surfaces, which would each grow to the 48dp touch size and make the row as tall as a button.
+ */
+@Composable
+fun SortSwitch(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+    Row(
+        Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(2.dp),
+    ) {
+        labels.forEachIndexed { index, label ->
+            val chosen = index == selected
+            Text(
+                label,
+                Modifier.clip(RoundedCornerShape(4.dp))
+                    .background(if (chosen) MaterialTheme.colorScheme.surface else Color.Transparent)
+                    .selectable(chosen, role = Role.Tab, onClick = hapticClick { if (!chosen) onSelect(index) })
+                    .padding(horizontal = 8.dp, vertical = 2.dp),
+                style = MaterialTheme.typography.labelMedium,
+                color = if (chosen) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+        }
+    }
 }
 
 @Composable
@@ -127,12 +226,17 @@ fun CarouselScreen(url: String, title: String) {
 }
 
 @Composable
-fun TabbedPages(titles: List<String>, initial: Int = 0, page: @Composable (Int) -> Unit) {
-    val pager = rememberPagerState(initialPage = initial.coerceIn(0, (titles.size - 1).coerceAtLeast(0))) { titles.size }
+fun TabbedPages(
+    titles: List<String>,
+    initial: Int = 0,
+    /** Hoisted when the pages themselves switch tabs. */
+    pager: PagerState = rememberPagerState(initialPage = initial.coerceIn(0, (titles.size - 1).coerceAtLeast(0))) { titles.size },
+    page: @Composable (Int) -> Unit,
+) {
     val scope = rememberCoroutineScope()
     val tabs = @Composable {
         titles.forEachIndexed { index, text ->
-            Tab(selected = pager.currentPage == index, onClick = { scope.launch { pager.animateScrollToPage(index) } }, text = { Text(text) })
+            Tab(selected = pager.currentPage == index, onClick = hapticClick { scope.launch { pager.animateScrollToPage(index) } }, text = { Text(text) })
         }
     }
     FillingTabRow(pager.currentPage, titles.size) { tabs() }
@@ -173,6 +277,7 @@ fun CoolpicScreen(tag: String) {
 @Composable
 fun UserListScreen(type: String, uid: String?, title: String?) {
     val app = com.zailinn.c001apk.ui.screens.appContainer()
+    val archiveNav = com.zailinn.c001apk.ui.nav.LocalNavigator.current
     val owner = uid ?: app.session.account?.uid
     val isMe = owner == app.session.account?.uid
     val heading = title ?: when (type) {
@@ -190,6 +295,8 @@ fun UserListScreen(type: String, uid: String?, title: String?) {
     Scaffold(
         topBar = {
             SimpleTopBar(heading) {
+                if (type == "COLLECTION" && app.session.isLogin) IconButton(onClick = { archiveNav.navigate(com.zailinn.c001apk.ui.nav.ArchiveSyncRoute()) }) { Icon(Icons.Outlined.Sync, "同步到本地备份") }
+                if (type == "COLLECTION") IconButton(onClick = { archiveNav.navigate(com.zailinn.c001apk.ui.nav.ArchiveSearchRoute("cloud")) }) { Icon(Icons.Outlined.Search, "搜索云端收藏缓存") }
                 if (type == "COLLECTION") IconButton(onClick = { creating = true }) { Icon(Icons.Outlined.Add, "新建收藏夹") }
             }
         },
@@ -387,6 +494,7 @@ fun HistoryScreen(favorites: Boolean) {
     val scope = rememberCoroutineScope()
     var confirm by remember { mutableStateOf(false) }
     val label = if (favorites) "本地收藏" else "浏览历史"
+    val archiveNavigator = com.zailinn.c001apk.ui.nav.LocalNavigator.current
     val actions = ItemActions(
         onDelete = { item, _ ->
             scope.launch { item.id?.let { if (favorites) app.content.removeFavorite(it) else app.content.removeHistory(it) } }
@@ -397,6 +505,7 @@ fun HistoryScreen(favorites: Boolean) {
     Scaffold(
         topBar = {
             SimpleTopBar(label) {
+                if (favorites) IconButton(onClick = { archiveNavigator.navigate(com.zailinn.c001apk.ui.nav.ArchiveSearchRoute("local")) }) { Icon(Icons.Outlined.Search, "搜索收藏") }
                 IconButton(onClick = { confirm = true }, enabled = records.isNotEmpty()) { Icon(Icons.Outlined.ClearAll, "清除全部") }
             }
         },

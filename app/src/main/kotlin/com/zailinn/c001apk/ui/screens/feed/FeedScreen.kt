@@ -12,6 +12,7 @@ import androidx.compose.foundation.lazy.rememberLazyListState
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.filled.Star
+import androidx.compose.material.icons.outlined.Archive
 import androidx.compose.material.icons.outlined.Block
 import androidx.compose.material.icons.outlined.CollectionsBookmark
 import androidx.compose.material.icons.outlined.ContentCopy
@@ -67,6 +68,7 @@ import com.zailinn.c001apk.ui.common.ImageGrid
 import com.zailinn.c001apk.ui.common.PagedListView
 import com.zailinn.c001apk.ui.common.StatusBox
 import com.zailinn.c001apk.ui.common.htmlToPlain
+import com.zailinn.c001apk.ui.common.hapticClick
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.collection.CollectionPickerSheet
 import com.zailinn.c001apk.ui.screens.appViewModel
@@ -78,10 +80,10 @@ import com.zailinn.c001apk.ui.theme.TextSizes
 private data class ReplyRequest(val target: Datum?, val parent: Datum?)
 
 @Composable
-fun FeedScreen(id: String, toReplies: Boolean = false) {
+fun FeedScreen(id: String, toReplies: Boolean = false, backupFallback: Boolean = false) {
     val navigator = LocalNavigator.current
     val session = LocalSession.current
-    val vm = appViewModel(key = "feed-$id") { FeedViewModel(it, id) }
+    val vm = appViewModel(key = "feed-$id-$backupFallback") { FeedViewModel(it, id, backupFallback) }
     val feed by vm.feed.collectAsStateWithLifecycle()
     val articles by vm.articles.collectAsStateWithLifecycle()
     val notice by vm.notice.collectAsStateWithLifecycle()
@@ -95,6 +97,18 @@ fun FeedScreen(id: String, toReplies: Boolean = false) {
     var showNotice by remember { mutableStateOf(false) }
     var collecting by remember { mutableStateOf(false) }
     val data = (feed as? LoadResult.Success)?.value
+    val offlineError = (feed as? LoadResult.Error)?.takeIf { backupFallback && com.zailinn.c001apk.core.backup.ArchiveFailure.canFallback(it.kind, it.message) }
+    val fallbackApp = com.zailinn.c001apk.ui.screens.appContainer()
+    val fallbackRecords by fallbackApp.backups.records.collectAsStateWithLifecycle()
+    if (offlineError != null && fallbackRecords.any { it.feed.id == id }) {
+        LaunchedEffect(offlineError) {
+            if (com.zailinn.c001apk.core.backup.ArchiveFailure.isGone(offlineError.kind, offlineError.message)) {
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) { fallbackApp.archiveIndex.state(id, "gone") }
+            }
+        }
+        com.zailinn.c001apk.backup.BackupDetailScreen(id, onlineReason = offlineError.message, retryOnline = { vm.loadDetail(verify = true) })
+        return
+    }
 
     val reply: (Datum?, Datum?) -> Unit = { target, parent ->
         if (session.isLogin) replying = ReplyRequest(target, parent) else navigator.toast("登录后才能回复")
@@ -109,7 +123,7 @@ fun FeedScreen(id: String, toReplies: Boolean = false) {
             SimpleTopBar(data?.string("feedTypeName") ?: "动态", scrollBehavior) {
                 if (notice.isNotEmpty()) IconButton(onClick = { showNotice = true }) { Icon(Icons.Outlined.Info, "账号详情") }
                 if (data != null) {
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }
+                    IconButton(onClick = hapticClick { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }
                     AppDropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem({ Text("复制链接") }, { menu = false; navigator.copy("https://www.coolapk.com/feed/$id") },
                             leadingIcon = { Icon(Icons.Outlined.ContentCopy, null) })
@@ -119,6 +133,8 @@ fun FeedScreen(id: String, toReplies: Boolean = false) {
                             DropdownMenuItem({ Text("收藏到收藏夹") }, { menu = false; collecting = true },
                                 leadingIcon = { Icon(Icons.Outlined.CollectionsBookmark, null) })
                         }
+                        DropdownMenuItem({ Text("备份") }, { menu = false; vm.app.backups.request(id) },
+                            leadingIcon = { Icon(Icons.Outlined.Archive, null) })
                         DropdownMenuItem({ Text(if (favorite) "取消本地收藏" else "本地收藏") }, { menu = false; vm.toggleFavorite() },
                             leadingIcon = { Icon(if (favorite) Icons.Filled.Star else Icons.Outlined.StarBorder, null) })
                         DropdownMenuItem({ Text("屏蔽作者") }, { menu = false; vm.blockAuthor() },
@@ -131,7 +147,7 @@ fun FeedScreen(id: String, toReplies: Boolean = false) {
         },
         floatingActionButton = {
             if (data != null && session.isLogin) {
-                FloatingActionButton(onClick = { reply(null, null) }) { Icon(Icons.AutoMirrored.Outlined.Reply, "回复") }
+                FloatingActionButton(onClick = hapticClick { reply(null, null) }) { Icon(Icons.AutoMirrored.Outlined.Reply, "回复") }
             }
         },
     ) { padding ->
@@ -173,7 +189,7 @@ fun FeedScreen(id: String, toReplies: Boolean = false) {
                                     // While replies come from the hot/web fallback the reply API's
                                     // sorting is unavailable; disable it instead of silently ignoring taps.
                                     enabled = repliesSource == ReplySource.Api,
-                                    onClick = { vm.setSort(item) },
+                                    onClick = hapticClick { vm.setSort(item) },
                                     shape = SegmentedButtonDefaults.itemShape(index, ReplySort.entries.size),
                                     icon = {},
                                 ) { Text(item.label, fontSize = TextSizes.Tag) }
@@ -227,7 +243,7 @@ fun FeedScreen(id: String, toReplies: Boolean = false) {
 
 /** Structured article: header, title, text and image blocks, then the like row. */
 @Composable
-private fun ArticleBody(data: Datum, blocks: List<FeedArticle>, actions: ItemActions) {
+internal fun ArticleBody(data: Datum, blocks: List<FeedArticle>, actions: ItemActions) {
     val navigator = LocalNavigator.current
     val images = blocks.filter { it.type == "image" }.mapNotNull { it.url }
     Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -241,7 +257,7 @@ private fun ArticleBody(data: Datum, blocks: List<FeedArticle>, actions: ItemAct
                 "text" -> HtmlText(block.message.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = TextSizes.Body, selectable = true)
                 "image" -> Column(Modifier.padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
                     val url = block.url.orEmpty()
-                    ImageGridWithIndex(url, images)
+                    ImageGrid(listOf(url), article = true, gallery = images, media = data.mediaImages)
                     block.description?.takeIf { it.isNotEmpty() }?.let {
                         Text(it, fontSize = TextSizes.Nested, color = MaterialTheme.colorScheme.outline, textAlign = TextAlign.Center)
                     }
@@ -256,9 +272,6 @@ private fun ArticleBody(data: Datum, blocks: List<FeedArticle>, actions: ItemAct
         Column(Modifier.padding(bottom = 12.dp)) { FeedFooter(data, actions) }
     }
 }
-
-@Composable
-private fun ImageGridWithIndex(url: String, all: List<String>) = ImageGrid(listOf(url), article = true, gallery = all)
 
 @Composable
 private fun ReplyThreadSheet(origin: Datum, onDismiss: () -> Unit) {

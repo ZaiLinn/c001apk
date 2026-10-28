@@ -4,6 +4,7 @@ import android.annotation.SuppressLint
 import android.app.DownloadManager
 import android.graphics.Bitmap
 import android.net.Uri
+import android.view.ViewGroup
 import android.webkit.CookieManager
 import android.webkit.URLUtil
 import android.webkit.WebChromeClient
@@ -42,7 +43,9 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.net.toUri
 import com.zailinn.c001apk.AppContainer
 import com.zailinn.c001apk.core.protocol.Constants
+import com.zailinn.c001apk.core.net.HttpsUpgrade
 import com.zailinn.c001apk.ui.common.AppDropdownMenu
+import com.zailinn.c001apk.ui.common.hapticClick
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.appContainer
 import com.zailinn.c001apk.ui.screens.list.SimpleTopBar
@@ -130,11 +133,11 @@ fun WebScreen(url: String, isLogin: Boolean) {
         topBar = {
             Column {
                 SimpleTopBar(title) {
-                    IconButton(onClick = { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }
+                    IconButton(onClick = hapticClick { menu = true }) { Icon(Icons.Outlined.MoreVert, "更多") }
                     AppDropdownMenu(menu, { menu = false }) {
                         DropdownMenuItem({ Text("刷新") }, { menu = false; web?.reload() })
                         DropdownMenuItem({ Text("复制") }, { menu = false; web?.url?.let { navigator.copy(it) } })
-                        DropdownMenuItem({ Text("在浏览器中打开") }, { menu = false; web?.url?.let { navigator.launchBrowser(it) } })
+                        DropdownMenuItem({ Text("在浏览器中打开") }, { menu = false; navigator.launchBrowser(web?.url ?: url) })
                         DropdownMenuItem({ Text("清理缓存") }, {
                             menu = false
                             web?.clearCache(true)
@@ -152,9 +155,14 @@ fun WebScreen(url: String, isLogin: Boolean) {
                 AndroidView(
                     factory = { context ->
                         WebView(context).apply {
+                            // AndroidView's default WRAP_CONTENT height makes WebView lay pages out with zero
+                            // height, so 100% and 100vh are 0 and full-height pages (配置对比) show nothing.
+                            layoutParams = ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT)
                             settings.javaScriptEnabled = true
                             settings.domStorageEnabled = true
                             settings.userAgentString = app.settings.current.protocol.userAgent.ifEmpty { settings.userAgentString }
+                            // Images only: Coolapk pages still link product pictures over http. Those reach
+                            // shouldInterceptRequest below and load over https; scripts stay blocked.
                             settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_COMPATIBILITY_MODE
                             CookieManager.getInstance().setAcceptThirdPartyCookies(this, true)
                             webChromeClient = object : WebChromeClient() {
@@ -164,10 +172,44 @@ fun WebScreen(url: String, isLogin: Boolean) {
                             webViewClient = object : WebViewClient() {
                                 override fun shouldOverrideUrlLoading(view: WebView, request: WebResourceRequest): Boolean {
                                     val target = request.url.toString()
-                                    if (target.startsWith("http")) return false
+                                    if (request.url.scheme == "https") return false
+                                    if (request.url.scheme == "http") {
+                                        // Frames stay blocked; only the page itself may move on.
+                                        if (!request.isForMainFrame) return true
+                                        val secureUrl = HttpsUpgrade.url(target)
+                                        if (HttpsUpgrade.isCoolapk(target)) {
+                                            if (request.method == "GET" && secureUrl != null) view.loadUrl(secureUrl)
+                                            else error = "网页尝试使用不安全连接，已阻止"
+                                        } else {
+                                            // Other sites may have no HTTPS; the browser decides how to open them.
+                                            app.toast("该网页未加密，已在系统中打开")
+                                            navigator.launchBrowser(target)
+                                        }
+                                        return true
+                                    }
                                     app.toast("当前网页将要打开外部链接，已在系统中打开")
                                     navigator.launchBrowser(target)
                                     return true
+                                }
+
+                                override fun shouldInterceptRequest(view: WebView, request: WebResourceRequest): WebResourceResponse? {
+                                    val target = request.url.toString()
+                                    if (request.isForMainFrame || request.method != "GET" || request.url.scheme != "http" || !HttpsUpgrade.isCoolapk(target)) return null
+                                    // Cleartext is not permitted, so the http address would fail; the app's client fetches it over https.
+                                    val secureUrl = HttpsUpgrade.url(target) ?: return null
+                                    return runCatching {
+                                        val response = app.imageHttp.newCall(okhttp3.Request.Builder().url(secureUrl).build()).execute()
+                                        val body = response.body ?: return@runCatching null.also { response.close() }
+                                        val type = body.contentType()
+                                        WebResourceResponse(
+                                            type?.let { "${it.type}/${it.subtype}" } ?: "application/octet-stream",
+                                            type?.charset()?.name(),
+                                            response.code,
+                                            response.message.ifEmpty { "OK" },
+                                            response.headers.toMap(),
+                                            body.byteStream(),
+                                        )
+                                    }.getOrNull()
                                 }
 
                                 override fun onPageStarted(view: WebView, page: String?, favicon: Bitmap?) { error = null }
@@ -193,17 +235,29 @@ fun WebScreen(url: String, isLogin: Boolean) {
                                 }
                             }
                             setDownloadListener { link, _, disposition, mime, _ ->
-                                val name = URLUtil.guessFileName(link, disposition, mime)
-                                navigator.copy(link, toast = false)
+                                val secureLink = HttpsUpgrade.url(link)
+                                if (secureLink == null) {
+                                    app.toast("不支持此下载链接")
+                                    return@setDownloadListener
+                                }
+                                val name = URLUtil.guessFileName(secureLink, disposition, mime)
+                                navigator.copy(secureLink, toast = false)
                                 runCatching {
-                                    val request = DownloadManager.Request(link.toUri()).setTitle(name)
+                                    val request = DownloadManager.Request(secureLink.toUri()).setTitle(name)
                                         .setNotificationVisibility(DownloadManager.Request.VISIBILITY_VISIBLE_NOTIFY_COMPLETED)
                                         .setDestinationInExternalPublicDir(android.os.Environment.DIRECTORY_DOWNLOADS, name)
                                     context.getSystemService(DownloadManager::class.java).enqueue(request)
                                     app.toast("已开始下载 $name")
-                                }.onFailure { navigator.launchBrowser(link) }
+                                }.onFailure { navigator.launchBrowser(secureLink) }
                             }
-                            loadUrl(url, mapOf("X-Requested-With" to Constants.APP_ID))
+                            val secureUrl = HttpsUpgrade.url(url)
+                            when {
+                                secureUrl == null -> error = "不支持此网页链接"
+                                // openLink sends these to the browser; other entries land here.
+                                url.startsWith("http:", ignoreCase = true) && !HttpsUpgrade.isCoolapk(url) ->
+                                    error = "该网页未加密，请从右上角菜单在浏览器中打开"
+                                else -> loadUrl(secureUrl, mapOf("X-Requested-With" to Constants.APP_ID))
+                            }
                             web = this
                         }
                     },

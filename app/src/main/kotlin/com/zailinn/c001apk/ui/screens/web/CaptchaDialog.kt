@@ -82,6 +82,7 @@ fun CaptchaDialog(pending: CaptchaCoordinator.Pending) {
                     factory = { context ->
                         WebView(context).apply {
                             settings.javaScriptEnabled = true
+                            settings.mixedContentMode = android.webkit.WebSettings.MIXED_CONTENT_NEVER_ALLOW
                             settings.userAgentString = app.settings.current.protocol.userAgent.ifEmpty { settings.userAgentString }
                             settings.javaScriptCanOpenWindowsAutomatically = false
                             setBackgroundColor(0)
