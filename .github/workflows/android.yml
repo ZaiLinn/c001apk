@@ -117,20 +117,23 @@ jobs:
           keytool -exportcert -keystore "$KEYSTORE" -alias "$KEY_ALIAS" -storepass:env REVIA_KS_PASS -file "$RUNNER_TEMP/c001apk-signing/cert.der"
           actual=$(sha256sum "$RUNNER_TEMP/c001apk-signing/cert.der" | cut -d ' ' -f 1 | tr '[:lower:]' '[:upper:]')
           test "$actual" = "$EXPECTED_CERT_SHA256" || { echo 'Unexpected release signing certificate'; exit 1; }
-      - name: Build signed APK
+      - name: Build signed APKs
         env:
           REVIA_KS_PASS: ${{ secrets.REVIA_KS_PASS }}
-        run: ./gradlew --no-daemon :app:assembleRelease
-      - name: Verify signature and package
+        run: ./gradlew --no-daemon -Pc001apk.abiSplits=true :app:assembleRelease
+      - name: Verify signatures and package
         run: |
           version=$(sed -n 's/^c001apk.versionName=//p' gradle.properties | tr -d '\r')
-          apk=app/build/outputs/apk/release/app-release.apk
-          report=$("$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$apk")
-          actual=$(printf '%s\n' "$report" | sed -n 's/^.*[Ss]igner.*certificate SHA-256 digest: //p' | head -n 1 | tr '[:lower:]' '[:upper:]')
-          test "$actual" = "$EXPECTED_CERT_SHA256" || { echo 'Unexpected APK certificate'; exit 1; }
           mkdir -p build/distribution
-          # The in-app updater looks for c001apk-<version>-android-universal.apk.
-          cp "$apk" "build/distribution/c001apk-$version-android-universal.apk"
+          # The in-app updater picks c001apk-<version>-android-<abi>.apk, then android-universal.apk.
+          for abi in universal arm64-v8a armeabi-v7a x86_64 x86; do
+            apk="app/build/outputs/apk/release/app-$abi-release.apk"
+            test -f "$apk" || { echo "Missing $apk"; exit 1; }
+            report=$("$ANDROID_HOME/build-tools/37.0.0/apksigner" verify --print-certs "$apk")
+            actual=$(printf '%s\n' "$report" | sed -n 's/^.*[Ss]igner.*certificate SHA-256 digest: //p' | head -n 1 | tr '[:lower:]' '[:upper:]')
+            test "$actual" = "$EXPECTED_CERT_SHA256" || { echo "Unexpected certificate on $apk"; exit 1; }
+            cp "$apk" "build/distribution/c001apk-$version-android-$abi.apk"
+          done
           (cd build/distribution && sha256sum ./*.apk > SHA256SUMS.txt)
       - name: Remove temporary signing material
         if: always()

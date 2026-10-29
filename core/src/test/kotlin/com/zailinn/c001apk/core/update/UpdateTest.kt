@@ -51,6 +51,8 @@ class UpdateTest {
         val release = AppRelease.fromJson(Json.parseToJsonElement(releaseJson()) as JsonObject)
         assertTrue(release.androidDownload(listOf("x86", "armeabi-v7a")).encodedPath.endsWith("android-armeabi-v7a.apk"))
         assertEquals(release.page, release.androidDownload(listOf("mips")))
+        val split = AppRelease.fromJson(Json.parseToJsonElement(releaseJson(names = listOf("android-x86.apk", "android-universal.apk"))) as JsonObject)
+        assertTrue(split.androidDownload(listOf("x86")).encodedPath.endsWith("android-x86.apk"))
         assertTrue(runCatching { AppRelease.fromJson(Json.parseToJsonElement(releaseJson(draft = true)) as JsonObject) }.isFailure)
     }
 

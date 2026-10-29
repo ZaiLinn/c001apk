@@ -11,6 +11,8 @@ plugins {
 // Release version lives in gradle.properties; the release workflow checks the tag against it.
 val appVersionName = providers.gradleProperty("c001apk.versionName").get()
 val appVersionCode = providers.gradleProperty("c001apk.versionCode").get().toInt()
+// The release workflow passes -Pc001apk.abiSplits=true to publish one APK per ABI next to the universal one.
+val abiSplits = providers.gradleProperty("c001apk.abiSplits").map(String::toBoolean).getOrElse(false)
 
 val keystoreProperties = Properties().apply {
     val file = rootProject.file("key.properties")
@@ -83,6 +85,15 @@ android {
 
     testOptions {
         unitTests.isIncludeAndroidResources = true
+    }
+
+    splits {
+        abi {
+            isEnable = abiSplits
+            reset()
+            include("arm64-v8a", "armeabi-v7a", "x86_64", "x86")
+            isUniversalApk = true
+        }
     }
 
     packaging {

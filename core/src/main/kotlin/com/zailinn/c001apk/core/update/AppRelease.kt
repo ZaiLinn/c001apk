@@ -32,7 +32,7 @@ class AppRelease private constructor(
 ) {
     /** Best APK for the device ABIs, then the universal APK, or the release page when none matches. */
     fun androidDownload(abis: List<String>): HttpUrl {
-        val suffixes = abis.filter { it in setOf("arm64-v8a", "armeabi-v7a", "x86_64") }.map { "android-$it.apk" } +
+        val suffixes = abis.filter { it in setOf("arm64-v8a", "armeabi-v7a", "x86_64", "x86") }.map { "android-$it.apk" } +
             "android-universal.apk"
         for (suffix in suffixes) {
             val pattern = Regex("^c001apk-${Regex.escape(version.toString())}(?:\\+\\d+)?-${Regex.escape(suffix)}$")
