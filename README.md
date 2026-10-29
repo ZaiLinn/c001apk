@@ -55,7 +55,15 @@ c001apk 是一个第三方酷安客户端，只提供 Android 版。基于 [c001
 ## 安装
 
 1. 打开 [最新版本](https://github.com/ZaiLinn/c001apk/releases/latest)。
-2. 下载 `c001apk-<版本>-android-universal.apk` 并安装。
+2. 按设备架构下载对应的安装包并安装：
+
+   | 安装包 | 适用设备 |
+   | --- | --- |
+   | `c001apk-<版本>-android-arm64-v8a.apk` | 绝大多数近年的手机和平板 |
+   | `c001apk-<版本>-android-armeabi-v7a.apk` | 较旧的 32 位手机 |
+   | `c001apk-<版本>-android-x86_64.apk` | 64 位模拟器、x86 平板 |
+   | `c001apk-<版本>-android-x86.apk` | 32 位模拟器 |
+   | `c001apk-<版本>-android-universal.apk` | 所有设备；不确定架构时选它 |
 
 支持 Android 7.0 及以上的所有设备。应用会自动检查新版本，可在 设置 → 存储与更新 中关闭。
 
