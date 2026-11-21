@@ -71,42 +71,137 @@ class FeedBackupTest {
         assertThrows(IllegalArgumentException::class.java) { FeedBackup.parse("""{"feed":{"data":{"id":"42"}},"formatVersion":99}""") }
     }
 
-    @Test fun collectorPaginatesUnfilteredRepliesAndFetchesCompleteThreads() = runBlocking {
-        val calls = mutableListOf<okhttp3.HttpUrl>()
-        val session = SessionState()
-        val transport = Interceptor { chain ->
-            val request = chain.request(); calls += request.url
-            val body = when {
-                request.url.encodedPath.endsWith("/feed/detail") -> """{"data":{"id":"42","replynum":3}}"""
-                request.url.queryParameter("page") != "1" -> """{"data":[]}"""
-                request.url.queryParameter("feedType") == "feed_reply" -> """{"data":[{"entityType":"feed_reply","id":"11","uid":"9"},{"entityType":"feed_reply","id":"12","uid":"9"}]}"""
-                else -> """{"data":[{"entityType":"feed_reply","id":"10","uid":"9","replynum":2,"replyRows":[{"id":"11","uid":"9"}]}]}"""
-            }
-            Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK").body(body.toResponseBody()).build()
-        }
-        val repository = CoolapkRepository(CoolapkClient(session, CoolapkHeaders(session, { ProtocolParams.generate() }), transport = transport)) {
-            ContentFilter(blockedUsers = setOf("9"))
-        }
-        val backup = FeedBackupCollector(repository).collect("42")
-        assertEquals(1, backup.replies.size)
-        val root = Datum(backup.replies.single())
-        assertEquals(listOf("11", "12"), root.replyRows.map { it.id })
+    @Test fun backupsNeverRequestOrRetainCommentsEvenWithOldOptions() = runBlocking {
+        val h = Harness { _, _ -> 200 to """{"data":{"id":"42","message":"完整正文","replynum":999,
+            "picArr":["https://image.coolapk.com/body.png"],
+            "topReplyRows":[{"id":"10","message":"置顶评论","picArr":["https://image.coolapk.com/comment.png"]}],
+            "hotReplyRows":[{"id":"11"}],"replyMeRows":[{"id":"12"}],"replyRows":[{"id":"13"}],
+            "relationRows":[{"replyRows":[{"message":"嵌套评论"}]}]}}""" }
+        val backup = FeedBackupCollector(h.repo).collect("42", BackupOptions(replies = true))
+        assertTrue(backup.replies.isEmpty())
+        assertFalse(backup.includesReplies)
         assertTrue(backup.warnings.isEmpty())
-        assertEquals("10", calls.first { it.queryParameter("feedType") == "feed" && it.queryParameter("page") == "2" }.queryParameter("lastItem"))
-        assertTrue(calls.any { it.queryParameter("feedType") == "feed_reply" && it.queryParameter("page") == "2" })
+        assertFalse(backup.feed.toString().contains("评论"))
+        assertEquals(listOf("https://image.coolapk.com/body.png"), backupImageUrls(backup))
+        assertEquals(listOf("/v6/feed/detail"), h.transport.requests.map { it.url.encodedPath })
     }
 
-    @Test fun repeatedPagesStopAndFailuresAreMarkedPartial() = runBlocking {
-        val session = SessionState()
-        val transport = Interceptor { chain ->
-            val request = chain.request()
-            val body = if (request.url.encodedPath.endsWith("/feed/detail")) """{"data":{"id":"42","replynum":100}}"""
-                else """{"data":[{"entityType":"feed_reply","id":"10"}]}"""
-            Response.Builder().request(request).protocol(Protocol.HTTP_1_1).code(200).message("OK").body(body.toResponseBody()).build()
-        }
-        val repository = CoolapkRepository(CoolapkClient(session, CoolapkHeaders(session, { ProtocolParams.generate() }), transport = transport))
-        val backup = FeedBackupCollector(repository).collect("42")
+    @Test fun completePublicPostCanBeBackedUpWithoutSzlmOrCaptcha() = runBlocking {
+        val h = Harness { request, _ -> 200 to if (request.url.host == "www.coolapk.com")
+            """{"data":{"id":"42","message":"网页版完整正文","replynum":100}}"""
+            else """{"messageStatus":"err_request_captcha_v2","data":null}""" }
+        var prompts = 0
+        h.client.captchaVerifier = { prompts++; null }
+        val backup = FeedBackupCollector(h.repo).collect("42")
+        assertEquals("网页版完整正文", backup.data.message)
+        assertEquals(0, prompts)
+        assertEquals(2, h.transport.requests.size)
+        assertNull(h.transport.requests.last().header("Cookie"))
+        assertTrue(backup.replies.isEmpty())
+    }
+
+    @Test fun summariesAreNeverSavedAsCompletePosts() = runBlocking {
+        val h = Harness { _, _ -> 200 to """{"data":{"id":"42","message":"摘要","issummary":1}}""" }
+        val failure = runCatching { FeedBackupCollector(h.repo).collect("42") }.exceptionOrNull()
+        assertTrue(failure is BackupRestrictedException)
+        // A guest sees a summary because of the missing account, not the device.
+        assertTrue((failure as BackupRestrictedException).needsLogin)
+    }
+
+    @Test fun summaryForAnAccountAsksForAnIdentityNotALogin() = runBlocking {
+        val h = Harness { _, _ -> 200 to """{"data":{"id":"42","message":"摘要","issummary":1}}""" }
+        h.session.activate(com.zailinn.c001apk.core.net.AccountCredentials("synthetic-uid", "u", "synthetic-token"), notify = true)
+        val failure = runCatching { FeedBackupCollector(h.repo).collect("42") }.exceptionOrNull()
+        assertFalse((failure as BackupRestrictedException).needsLogin)
+    }
+
+    @Test fun expiredLoginAsksForLoginNotAnIdentity() = runBlocking {
+        val h = Harness { request, _ -> 200 to if (request.url.host == "www.coolapk.com")
+            "<html><body>请用酷安手机APP扫码查看详情</body></html>"
+            else """{"status":-1,"message":"请先登录","messageStatus":"err_request_login","data":null}""" }
+        val failure = runCatching { FeedBackupCollector(h.repo).collect("42") }.exceptionOrNull()
+        assertTrue((failure as BackupRestrictedException).needsLogin)
+    }
+
+    @Test fun restrictedApiAndPublicPageRequestAnIdentityWithoutPromptingCaptcha() = runBlocking {
+        val h = Harness { request, _ -> 200 to if (request.url.host == "www.coolapk.com")
+            "<html><body>请用酷安手机APP扫码查看详情</body></html>"
+            else """{"messageStatus":"err_request_captcha_v2","data":null}""" }
+        var prompts = 0
+        h.client.captchaVerifier = { prompts++; null }
+        val failure = runCatching { FeedBackupCollector(h.repo).collect("42") }.exceptionOrNull()
+        assertFalse((failure as BackupRestrictedException).needsLogin)
+        assertEquals(0, prompts)
+    }
+
+    @Test fun networkFailureDoesNotRequestAnIdentity() = runBlocking {
+        val h = Harness { _, _ -> throw java.io.IOException("synthetic offline") }
+        val failure = runCatching { FeedBackupCollector(h.repo).collect("42") }.exceptionOrNull()
+        assertTrue(failure is java.io.IOException)
+        assertFalse(failure is BackupRestrictedException)
+    }
+
+    @Test fun optionalCommentsRespectTheLimitPrioritizePinnedAndExcludeNestedReplies() = runBlocking {
+        val h = Harness { request, _ -> 200 to if (request.url.encodedPath.endsWith("/detail"))
+            """{"data":{"id":"42","message":"正文","topReplyRows":[{"id":"10","message":"置顶","replyRows":[{"id":"99","message":"楼中楼"}]}]}}"""
+            else """{"data":[{"id":"10","entityType":"feed_reply","message":"置顶"},{"id":"11","entityType":"feed_reply","message":"第二条","replyRows":[{"id":"98"}]},{"id":"12","entityType":"feed_reply","message":"超出数量"}]}""" }
+        val backup = FeedBackupCollector(h.repo).collect("42", BackupOptions(replies = true, commentLimit = 2))
+        assertEquals(listOf("10", "11"), backup.replies.map { Datum(it).id })
+        assertTrue(backup.replies.all { Datum(it).replyRows.isEmpty() })
+        assertEquals(2, backup.commentLimit)
+        assertTrue(backup.includesReplies)
+        assertEquals(2, h.transport.requests.size)
+        assertTrue(backup.warnings.isEmpty())
+    }
+
+    @Test fun pinnedCommentsCanSatisfyTheLimitWithoutCallingTheCommentApi() = runBlocking {
+        val h = Harness { _, _ -> 200 to """{"data":{"id":"42","topReplyRows":[{"id":"10","message":"置顶"}]}}""" }
+        val backup = FeedBackupCollector(h.repo).collect("42", BackupOptions(replies = true, commentLimit = 1))
         assertEquals(1, backup.replies.size)
-        assertTrue(backup.warnings.any { it.contains("重复") })
+        assertEquals(1, h.transport.requests.size)
+    }
+
+    @Test fun restrictedOptionalCommentsDoNotDiscardOrPauseThePostBackup() = runBlocking {
+        val h = Harness { request, _ -> 200 to if (request.url.encodedPath.endsWith("/detail"))
+            """{"data":{"id":"42","message":"正文"}}"""
+            else """{"messageStatus":"err_request_captcha_v2","data":null}""" }
+        var prompts = 0
+        h.client.captchaVerifier = { prompts++; null }
+        val backup = FeedBackupCollector(h.repo).collect("42", BackupOptions(replies = true, commentLimit = 3))
+        assertEquals("正文", backup.data.message)
+        assertTrue(backup.replies.isEmpty())
+        assertTrue(backup.warnings.single().contains("读取主回复失败"))
+        assertEquals(0, prompts)
+    }
+
+    @Test fun nestedRepliesShareTheSameTotalLimitAndDoNotTriggerMissingReplyWarnings() = runBlocking {
+        val h = Harness { request, _ -> 200 to if (request.url.encodedPath.endsWith("/detail"))
+            """{"data":{"id":"42","replynum":999,"topReplyRows":[{"id":"10","replynum":100,"replyRows":[{"id":"11","message":"子评论一"},{"id":"12","message":"子评论二"}]}]}}"""
+            else error("The limit must be satisfied without another request") }
+        val backup = FeedBackupCollector(h.repo).collect("42", BackupOptions(replies = true, commentLimit = 3, includeSubReplies = true))
+        assertEquals(1, backup.replies.size)
+        assertEquals(listOf("11", "12"), Datum(backup.replies.single()).replyRows.map { it.id })
+        assertTrue(backup.warnings.isEmpty())
+        assertEquals(1, h.transport.requests.size)
+    }
+
+    @Test fun nestedPagesFillOnlyTheRemainingBudget() = runBlocking {
+        val h = Harness { request, _ -> 200 to when {
+            request.url.encodedPath.endsWith("/detail") -> """{"data":{"id":"42","replynum":999,"topReplyRows":[{"id":"10","replynum":10,"replyRows":[{"id":"11","message":"预览"}]}]}}"""
+            request.url.queryParameter("feedType") == "feed_reply" -> """{"data":[{"id":"11","entityType":"feed_reply"},{"id":"12","entityType":"feed_reply"},{"id":"13","entityType":"feed_reply"},{"id":"14","entityType":"feed_reply"}]}"""
+            else -> error("Nested replies should fill the limit before loading main replies")
+        } }
+        val backup = FeedBackupCollector(h.repo).collect("42", BackupOptions(replies = true, commentLimit = 4, includeSubReplies = true))
+        assertEquals(listOf("11", "12", "13"), Datum(backup.replies.single()).replyRows.map { it.id })
+        assertTrue(backup.warnings.isEmpty())
+        assertEquals(2, h.transport.requests.size)
+    }
+
+    @Test fun fewerVisibleRepliesThanTheServerCountIsNotARequestFailure() = runBlocking {
+        val h = Harness { request, _ -> 200 to if (request.url.encodedPath.endsWith("/detail"))
+            """{"data":{"id":"42","replynum":999}}""" else """{"data":[]}""" }
+        val backup = FeedBackupCollector(h.repo).collect("42", BackupOptions(replies = true, commentLimit = 10))
+        assertTrue(backup.replies.isEmpty())
+        assertTrue(backup.warnings.isEmpty())
     }
 }

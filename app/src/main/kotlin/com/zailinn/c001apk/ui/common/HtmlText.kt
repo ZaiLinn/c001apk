@@ -62,6 +62,7 @@ import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.TextUnit
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.em
+import com.zailinn.c001apk.core.model.GalleryMedia
 import com.zailinn.c001apk.ui.LocalAppSettings
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.theme.TextSizes
@@ -113,7 +114,7 @@ fun HtmlText(
     maxLines: Int = Int.MAX_VALUE,
     color: Color = Color.Unspecified,
     picArr: List<String> = emptyList(),
-    media: List<com.zailinn.c001apk.core.model.GalleryMedia> = emptyList(),
+    media: List<GalleryMedia> = emptyList(),
     onClick: (() -> Unit)? = null,
     onShowReplies: (() -> Unit)? = null,
     onViewFans: (() -> Unit)? = null,
@@ -126,7 +127,12 @@ fun HtmlText(
         when {
             url.isEmpty() -> onClick?.invoke()
             url.contains("/feed/replyList") -> onShowReplies?.invoke()
-            url.contains("image.coolapk.com") || url.startsWith(com.zailinn.c001apk.core.backup.BACKUP_MEDIA_SCHEME) -> navigator.openImages(picArr.ifEmpty { listOf(url) }, picArr.indexOf(url).coerceAtLeast(0), media)
+            url.contains("image.coolapk.com") || url.startsWith(com.zailinn.c001apk.core.backup.BACKUP_MEDIA_SCHEME) -> {
+                val exact = picArr.indexOf(url)
+                val index = if (exact >= 0) exact else GalleryMedia.align(picArr, media).indexOfFirst { it.matches(url) }
+                if (index >= 0) navigator.openImages(picArr, index, media)
+                else navigator.openImages(listOf(url), media = media)
+            }
             url == "/contacts/fans" -> onViewFans?.invoke()
             else -> navigator.openLink(url)
         }
@@ -219,13 +225,22 @@ fun HtmlText(
             onTextLayout = { layout.value = it },
         )
     }
-    if (selectable) {
-        val clipboard = LocalClipboard.current
-        val selection = rememberSelectionState()
-        val linked = remember(clipboard, selection) { LinkClipboard(clipboard, selection) }
-        CompositionLocalProvider(LocalClipboard provides linked) { SelectionContainer(selection) { text() } }
-    } else {
-        text()
+    if (selectable) HtmlSelection(text) else text()
+}
+
+private val LocalHtmlSelection = staticCompositionLocalOf { false }
+
+@Composable
+internal fun HtmlSelection(content: @Composable () -> Unit) {
+    if (LocalHtmlSelection.current) {
+        content()
+        return
+    }
+    val clipboard = LocalClipboard.current
+    val selection = rememberSelectionState()
+    val linked = remember(clipboard, selection) { LinkClipboard(clipboard, selection) }
+    CompositionLocalProvider(LocalClipboard provides linked, LocalHtmlSelection provides true) {
+        SelectionContainer(selection, content = content)
     }
 }
 
@@ -251,9 +266,9 @@ private class LinkClipboard(private val base: Clipboard, private val selection: 
 
     override suspend fun setClipEntry(clipEntry: ClipEntry?) {
         val copied = clipEntry?.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.text?.toString()
-        val selected = selection.selectedTexts.singleOrNull()
-        if (copied == null || selected == null || selected.text != copied) return base.setClipEntry(clipEntry)
-        base.setClipEntry(ClipEntry(ClipData.newPlainText("c001apk", copyWithLinks(selected))))
+        val selected = selection.selectedTexts
+        if (copied == null || selected.isEmpty() || selected.joinToString("\n") { it.text } != copied) return base.setClipEntry(clipEntry)
+        base.setClipEntry(ClipEntry(ClipData.newPlainText("c001apk", selected.joinToString("\n", transform = ::copyWithLinks))))
     }
 }
 

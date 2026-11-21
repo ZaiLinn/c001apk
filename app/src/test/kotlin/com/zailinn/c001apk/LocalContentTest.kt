@@ -3,12 +3,17 @@ package com.zailinn.c001apk
 import androidx.datastore.preferences.core.booleanPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.test.core.app.ApplicationProvider
+import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.core.model.SensitiveCategory
 import com.zailinn.c001apk.core.model.TopicRule
 import com.zailinn.c001apk.data.LocalContent
+import kotlinx.coroutines.CoroutineStart
+import kotlinx.coroutines.async
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.runBlocking
 import kotlinx.coroutines.withTimeout
+import kotlinx.serialization.json.Json
+import kotlinx.serialization.json.jsonObject
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
@@ -26,6 +31,18 @@ class LocalContentTest {
     private val app = AppContainer(ApplicationProvider.getApplicationContext(), "test-${UUID.randomUUID()}")
 
     private fun waitFor(check: () -> Boolean) = runBlocking { withTimeout(5_000) { while (!check()) delay(20) } }
+
+    @Test
+    fun concurrentFavoriteTogglesApplyToTheLatestStoredValue() = runBlocking {
+        val feed = Datum(Json.parseToJsonElement("""{"id":"42","entityType":"feed","message":"正文"}""").jsonObject)
+        val changes = mutableListOf<List<String>>()
+        app.content.favoritesChanged = { records -> changes += records.map { it.id } }
+        val first = async(start = CoroutineStart.UNDISPATCHED) { app.content.toggleFavorite(feed) }
+        val second = async(start = CoroutineStart.UNDISPATCHED) { app.content.toggleFavorite(feed) }
+        assertTrue(first.await())
+        assertFalse(second.await())
+        assertEquals(listOf(listOf("42"), emptyList<String>()), changes)
+    }
 
     @Test
     fun legacyListsBecomeCategories() = runBlocking {

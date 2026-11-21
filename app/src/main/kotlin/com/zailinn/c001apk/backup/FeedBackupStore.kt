@@ -27,9 +27,20 @@ import java.util.zip.ZipFile
 import java.util.zip.ZipOutputStream
 
 @Serializable
-data class BackupRecord(val feed: FeedRecord, val base: String, val savedAt: Long, val warnings: List<String> = emptyList())
+data class BackupRecord(val feed: FeedRecord, val base: String, val savedAt: Long, val warnings: List<String> = emptyList(),
+    /** A [BackupImageQuality] name; empty for rows that are not backed by a file. */
+    val imageQuality: String = "", val includesReplies: Boolean = false)
+/** A finished manual backup, for a notice that can open it. */
+data class BackupSaved(val id: String, val incomplete: Boolean)
 data class BackupProgress(val message: String, val done: Int = 0, val total: Int = 0)
 data class BackupRequest(val id: String, val nonce: String = UUID.randomUUID().toString())
+/** [needsLogin]: offer login instead of a 数盟 ID; the caller retries once the user is back. */
+class BackupIdentityRequest(val needsLogin: Boolean = false, val retry: suspend () -> Unit)
+/** The selected folder refused a read or write; retrying the request against the server cannot help. */
+class BackupDirectoryException(cause: Throwable) : Exception("无法读写备份目录，请检查目录权限和剩余空间，或重新选择目录", cause)
+/** A local message for any backup failure; never the underlying exception's text. */
+internal fun backupFailureMessage(error: Throwable): String =
+    if (error is BackupDirectoryException) error.message!! else com.zailinn.c001apk.core.net.ApiFailure.from(error).message
 
 /** The selected SAF directory is authoritative. The local index can always be rebuilt from it. */
 class FeedBackupStore internal constructor(
@@ -40,6 +51,7 @@ class FeedBackupStore internal constructor(
     private val gallery: GalleryFiles,
     private val toast: (String) -> Unit,
     val archiveIndex: ArchiveIndex = ArchiveIndex(context),
+    private val defaultOptions: () -> BackupOptions = { BackupOptions() },
     private val directoryFactory: (String) -> BackupDirectory = { SafBackupDirectory(context, Uri.parse(it)) },
 ) {
     private val work = File(context.cacheDir, "feed-backup-work").apply { mkdirs() }
@@ -52,11 +64,14 @@ class FeedBackupStore internal constructor(
     private val index = MutableStateFlow<List<BackupRecord>>(emptyList())
     val records: StateFlow<List<BackupRecord>> = index
     val pending = MutableStateFlow<BackupRequest?>(null)
+    val identityRequired = MutableStateFlow<BackupIdentityRequest?>(null)
     val progress = MutableStateFlow<BackupProgress?>(null)
+    /** Collected by the host for a notice with an action; without a collector a toast is shown. */
+    val saved = kotlinx.coroutines.flow.MutableSharedFlow<BackupSaved>(extraBufferCapacity = 8)
     private val mutex = Mutex()
     private var task: Job? = null
     @Volatile var batchRunning: Boolean = false
-    val busy: Boolean get() = batchRunning || task?.isActive == true || pending.value != null
+    val busy: Boolean get() = batchRunning || task?.isActive == true || pending.value != null || identityRequired.value != null
     private val initialization = scope.async(Dispatchers.IO) {
         val legacy = store.readJson(store.prefs.value, INDEX, indexSerializer, emptyList())
         if (legacy.isNotEmpty() && archiveIndex.records().isEmpty()) {
@@ -82,7 +97,7 @@ class FeedBackupStore internal constructor(
     }
     fun request(id: String) {
         if (!id.matches(Regex("[0-9]{1,30}"))) return toast("动态编号无效")
-        if (batchRunning || task?.isActive == true || progress.value != null || pending.value != null) return toast("请先完成当前备份")
+        if (busy || progress.value != null) return toast("请先完成当前备份")
         pending.value = BackupRequest(id)
     }
     suspend fun selectDirectory(value: String) = withContext(Dispatchers.IO) {
@@ -92,8 +107,9 @@ class FeedBackupStore internal constructor(
         root.list() // Verify access before replacing the working selection.
         mutex.withLock {
             store.edit { it[TREE] = value }
-            selectedDirectory.value = value
             archiveIndex.directory(value)
+            if (selectedDirectory.value != value) index.value = emptyList()
+            selectedDirectory.value = value
             scan(root)
             directoryRevision.value++
         }
@@ -103,16 +119,23 @@ class FeedBackupStore internal constructor(
         directoryFactory(selected()).list().any { baseId(it.name) == id }
     }
     private fun selected() = directory.value.takeIf { it.isNotBlank() } ?: error("请先选择备份目录")
+    private fun <T> accessDirectory(block: () -> T): T = try {
+        block()
+    } catch (e: CancellationException) {
+        throw e
+    } catch (e: Exception) {
+        throw BackupDirectoryException(e)
+    }
     suspend fun sync(full: Boolean = false): Int = withContext(Dispatchers.IO) {
         awaitReady()
         mutex.withLock {
             archiveIndex.directory(selected())
             if (full) archiveIndex.rebuild()
-            scan(directoryFactory(selected()))
+            scan(accessDirectory { directoryFactory(selected()) })
         }
     }
     private suspend fun scan(root: BackupDirectory): Int {
-        val files = root.list().filter { baseId(it.name) != null }
+        val files = accessDirectory { root.list() }.filter { baseId(it.name) != null }
         val names = files.map { it.name }.toSet()
         archiveIndex.retainDocuments(names)
         archiveIndex.records().filter { "${it.base}.json" !in names }.forEach { archiveIndex.remove(it.feed.id) }
@@ -158,19 +181,29 @@ class FeedBackupStore internal constructor(
             progress.value = BackupProgress("正在准备备份")
             try {
                 val result = save(request.id, replace, tree, report = { progress.value = it })
-                toast(if (result.warnings.isEmpty()) "备份成功" else "文字和已读取的内容已保存，备份有缺失，详情见“我的备份”")
+                if (saved.subscriptionCount.value == 0 || !saved.tryEmit(BackupSaved(request.id, result.warnings.isNotEmpty())))
+                    toast(if (result.warnings.isEmpty()) "备份成功" else "文字和已读取的内容已保存，备份有缺失，详情见“我的备份”")
             } catch (e: CancellationException) { toast("已取消备份"); throw e }
-            catch (e: Exception) { toast("备份失败：${com.zailinn.c001apk.core.net.ApiFailure.from(e).message}，请检查备份目录权限") }
+            catch (e: com.zailinn.c001apk.core.net.BackupRestrictedException) {
+                requireIdentity(e.needsLogin) { start(BackupRequest(request.id), replace) }
+            }
+            catch (e: Exception) { toast("备份失败：${backupFailureMessage(e)}") }
             finally { progress.value = null }
         }
     }
     fun cancel() { task?.cancel() }
+    fun requireIdentity(needsLogin: Boolean = false, retry: suspend () -> Unit) { identityRequired.value = BackupIdentityRequest(needsLogin, retry) }
+    fun retryAfterIdentity(request: BackupIdentityRequest) {
+        if (identityRequired.value !== request) return
+        identityRequired.value = null
+        scope.launch { task?.join(); request.retry() }
+    }
 
-    internal suspend fun save(id: String, replace: Boolean, tree: String = selected(), options: BackupOptions = BackupOptions(), fingerprint: String = "", verify: Boolean = true, report: (BackupProgress) -> Unit = {}, beforeRequest: suspend () -> Unit = {}): FeedBackup = withContext(Dispatchers.IO) {
+    internal suspend fun save(id: String, replace: Boolean, tree: String = selected(), options: BackupOptions = defaultOptions(), fingerprint: String = "", verify: Boolean = true, report: (BackupProgress) -> Unit = {}, beforeRequest: suspend () -> Unit = {}): FeedBackup = withContext(Dispatchers.IO) {
         awaitReady()
         mutex.withLock {
-            val root = directoryFactory(tree)
-            val existing = root.list()
+            val root = accessDirectory { directoryFactory(tree) }
+            val existing = accessDirectory { root.list() }
             val previous = existing.filter { baseId(it.name) == id }.map { it.name.removeSuffix(".json") }
             val canonical = "feed_$id"
             val base = if (existing.none { it.name == "$canonical.json" || it.name == "$canonical.zip" }) canonical
@@ -225,9 +258,9 @@ class FeedBackupStore internal constructor(
                 json.writeText(FeedBackup.json.encodeToString(FeedBackup.serializer(), complete))
                 require(json.length() <= MAX_JSON) { "动态数据过大" }
                 // Publish JSON last: scanning cannot discover an unfinished pair.
-                root.write("$base.zip", zip); zipPublished = true
+                accessDirectory { root.write("$base.zip", zip) }; zipPublished = true
                 currentCoroutineContext().ensureActive()
-                root.write("$base.json", json); jsonPublished = true
+                accessDirectory { root.write("$base.json", json) }; jsonPublished = true
                 currentCoroutineContext().ensureActive()
                 if (replace) previous.filter { it != base }.forEach { old -> root.delete("$old.json"); root.delete("$old.zip") }
                 scan(root)
@@ -239,15 +272,17 @@ class FeedBackupStore internal constructor(
         }
     }
 
-    suspend fun delete(id: String) = withContext(Dispatchers.IO) {
+    suspend fun delete(id: String) = delete(setOf(id))
+    /** Deletes every version of each post, then scans the folder once. */
+    suspend fun delete(ids: Set<String>, directory: String = selected()) = withContext(Dispatchers.IO) {
         awaitReady()
         mutex.withLock {
-            val root = directoryFactory(selected())
-            root.list().filter { baseId(it.name) == id }.forEach { file ->
+            check(directory == selected()) { "备份目录已变更，请重新选择备份" }
+            val root = directoryFactory(directory)
+            try { root.list().filter { baseId(it.name) in ids }.forEach { file ->
                 check(root.delete(file.name)) { "无法删除备份，请检查目录权限" }
                 check(root.delete(file.name.removeSuffix(".json") + ".zip")) { "无法删除图片备份" }
-            }
-            scan(root)
+            } } finally { withContext(NonCancellable) { runCatching { scan(root) } } }
         }
     }
 

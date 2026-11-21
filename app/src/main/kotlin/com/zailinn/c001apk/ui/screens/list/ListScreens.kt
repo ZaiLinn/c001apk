@@ -188,7 +188,7 @@ fun DataListContent(
  * surfaces, which would each grow to the 48dp touch size and make the row as tall as a button.
  */
 @Composable
-fun SortSwitch(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
+fun SortSwitch(labels: List<String>, selected: Int, enabled: Boolean = true, onSelect: (Int) -> Unit) {
     Row(
         Modifier.clip(RoundedCornerShape(6.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(2.dp),
     ) {
@@ -198,10 +198,10 @@ fun SortSwitch(labels: List<String>, selected: Int, onSelect: (Int) -> Unit) {
                 label,
                 Modifier.clip(RoundedCornerShape(4.dp))
                     .background(if (chosen) MaterialTheme.colorScheme.surface else Color.Transparent)
-                    .selectable(chosen, role = Role.Tab, onClick = hapticClick { if (!chosen) onSelect(index) })
+                    .selectable(chosen, enabled = enabled, role = Role.Tab, onClick = hapticClick { if (!chosen) onSelect(index) })
                     .padding(horizontal = 8.dp, vertical = 2.dp),
                 style = MaterialTheme.typography.labelMedium,
-                color = if (chosen) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                color = (if (chosen) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant).let { if (enabled) it else it.copy(alpha = 0.38f) },
             )
         }
     }

@@ -75,6 +75,14 @@ class SensitiveMatcherTest {
     }
 
     @Test
+    fun partialTopicBlockingMatchesHashtagsWithoutHidingPlainMentions() {
+        val filter = ContentFilter(blockedTopics = listOf(TopicRule("游戏", contains = true)))
+        assertEquals(ContentFilter.BLOCKED_TOPIC, filter.blockReason(feed(""""message":"#手机游戏# 好玩吗""""))?.title)
+        assertNull(filter.blockReason(feed(""""message":"手机游戏好玩吗"""")))
+        assertNull(filter.blockReason(feed(""""message":"#手机游戏"""")))
+    }
+
+    @Test
     fun patternsCatchLongerPhrasings() {
         assertEquals("晒对象", all.match(feed(""""message":"我女朋友说这个手机好看""""))?.title)
         assertEquals("性压抑/擦边", all.match(feed(""""message":"好想找个女朋友啊""""))?.title)

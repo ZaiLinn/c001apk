@@ -10,6 +10,15 @@ import org.junit.Test
 
 /** Cloud collections: which folders hold a feed, and adding or taking it out. */
 class CollectionTest {
+    @Test fun archiveDiscoveryUsesTheActiveAccountAndTrailingCursor() = runTest {
+        val h = Harness()
+        h.session.activate(AccountCredentials("7", "synthetic", "synthetic"), notify = false)
+        h.repo.archiveCollections(true, Page(2, lastItem = "101"))
+        val url = h.transport.requests.single().url
+        assertEquals("7", url.queryParameter("uid"))
+        assertEquals("101", url.queryParameter("lastItem"))
+        assertEquals("2", url.queryParameter("page"))
+    }
     @Test
     fun collectionsForAFeedMarkTheOnesHoldingIt() = runTest {
         val h = Harness { _, _ ->

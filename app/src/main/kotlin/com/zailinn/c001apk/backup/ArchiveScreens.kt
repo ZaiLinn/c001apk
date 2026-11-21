@@ -1,6 +1,7 @@
 package com.zailinn.c001apk.backup
 
 import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -15,6 +16,7 @@ import androidx.compose.ui.text.buildAnnotatedString
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import com.zailinn.c001apk.core.backup.BackupText
+import com.zailinn.c001apk.data.backupOptions
 import com.zailinn.c001apk.ui.LocalSession
 import com.zailinn.c001apk.ui.common.*
 import com.zailinn.c001apk.ui.nav.*
@@ -271,9 +273,11 @@ fun ArchiveSyncScreen(local: Boolean = false) {
     var failures by remember { mutableStateOf<List<ArchiveQueueItem>>(emptyList()) }
     var expandFailures by remember { mutableStateOf(false) }
     var continueAfterPicker by remember { mutableStateOf(false) }
-    val picker = rememberBackupDirectoryPicker(app)
-    val options = com.zailinn.c001apk.core.backup.BackupOptions(
-        runCatching { com.zailinn.c001apk.core.backup.BackupImageQuality.valueOf(config.archiveImageQuality) }.getOrDefault(com.zailinn.c001apk.core.backup.BackupImageQuality.Original), config.archiveIncludeReplies)
+    var commentSettings by remember { mutableStateOf(false) }
+    val picker = rememberBackupDirectoryPicker(app, onCancel = { continueAfterPicker = false })
+    val options = config.backupOptions(
+        runCatching { com.zailinn.c001apk.core.backup.BackupImageQuality.valueOf(config.archiveImageQuality) }
+            .getOrDefault(com.zailinn.c001apk.core.backup.BackupImageQuality.Original))
     suspend fun load() {
         loading = true; error = ""
         try { sync.loadCollections(); selected = sync.collections.value.filter { it.readable }.map { it.id }.toSet() }
@@ -281,66 +285,136 @@ fun ArchiveSyncScreen(local: Boolean = false) {
         catch (e: Exception) {
             val failure = com.zailinn.c001apk.core.net.ApiFailure.from(e)
             error = failure.message
-            if (failure.kind == com.zailinn.c001apk.core.net.ApiFailureKind.Captcha) sync.status.value = state.copy(captcha = true, paused = true, phase = "需要完成验证后继续")
+            if (failure.kind == com.zailinn.c001apk.core.net.ApiFailureKind.Captcha) sync.status.value = sync.status.value.copy(captcha = true, paused = true, phase = "读取收藏夹列表：接口要求人机验证，完成后可继续")
         } finally { loading = false }
     }
     LaunchedEffect(local, session.uid) { if (!local && session.isLogin) load() }
     LaunchedEffect(revision) { failures = withContext(Dispatchers.IO) { app.archiveIndex.queue().filter { it.state == "failed" } } }
     suspend fun start() {
         if (directory.isEmpty()) { continueAfterPicker = true; picker(); return }
-        if (local) sync.startLocal(app.content.favorites.value.map { it.id }, options)
+        if (local) sync.startLocal(app.content.favorites.value.map { it.id }, options, force)
         else sync.startCloud(collections.filter { it.id in selected }, options, force)
     }
     LaunchedEffect(directory) { if (continueAfterPicker && directory.isNotEmpty()) { continueAfterPicker = false; start() } }
+    if (commentSettings) BackupCommentSettingsDialog(app) { commentSettings = false }
     Scaffold(topBar = { SimpleTopBar(if (local) "备份全部本地收藏" else "同步云端收藏") }) { padding ->
-        LazyColumn(Modifier.padding(padding), contentPadding = PaddingValues(16.dp)) {
+        val idle = !state.running
+        fun set(key: androidx.datastore.preferences.core.Preferences.Key<Boolean>, value: Boolean) { coroutine.launch { app.settings.set(key, value) } }
+        LazyColumn(Modifier.padding(padding), contentPadding = PaddingValues(bottom = 24.dp)) {
             item {
-                Text("备份目录", style = MaterialTheme.typography.titleMedium)
-                Text(directory.ifEmpty { "尚未选择" }, maxLines = 2)
-                TextButton(onClick = picker, enabled = !state.running) { Text("选择备份目录") }
-                Text("每次最多备份 500 条，可暂停并在下次继续。")
-                Text("备份档位", style = MaterialTheme.typography.titleMedium)
+                ListItem(
+                    headlineContent = { Text("备份目录") },
+                    supportingContent = { Text(if (directory.isEmpty()) "尚未选择" else android.net.Uri.parse(directory).lastPathSegment.orEmpty(), maxLines = 2) },
+                    leadingContent = { Icon(Icons.Outlined.FolderOpen, null) },
+                    modifier = Modifier.clickable(enabled = idle, onClick = picker),
+                )
+                SectionTitle("备份档位")
                 com.zailinn.c001apk.core.backup.BackupImageQuality.entries.forEach { quality ->
-                    Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                        RadioButton(options.images == quality, { coroutine.launch { app.settings.set(com.zailinn.c001apk.data.SettingKeys.archiveImageQuality, quality.name) } }, enabled = !state.running)
+                    fun select() { coroutine.launch { app.settings.set(com.zailinn.c001apk.data.SettingKeys.archiveImageQuality, quality.name) } }
+                    Row(Modifier.fillMaxWidth().clickable(enabled = idle) { select() }.padding(horizontal = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        RadioButton(options.images == quality, ::select, enabled = idle)
                         Text(when (quality) { com.zailinn.c001apk.core.backup.BackupImageQuality.None -> "仅文字"; com.zailinn.c001apk.core.backup.BackupImageQuality.Preview -> "文字和缩略图"; com.zailinn.c001apk.core.backup.BackupImageQuality.Original -> "文字和原图" })
                     }
                 }
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) { Text("包含回复", Modifier.weight(1f)); Switch(config.archiveIncludeReplies, { coroutine.launch { app.settings.set(com.zailinn.c001apk.data.SettingKeys.archiveIncludeReplies, it) } }, enabled = !state.running) }
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) { Text("仅在 WiFi 下下载图片", Modifier.weight(1f)); Switch(config.archiveImagesWifiOnly, { coroutine.launch { app.settings.set(com.zailinn.c001apk.data.SettingKeys.archiveImagesWifiOnly, it) } }, enabled = !state.running) }
-                if (!local) Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) { Text("全部重新备份", Modifier.weight(1f)); Switch(force, { force = it }, enabled = !state.running) }
-                if (!local && !session.isLogin) Text("登录后才能同步云端收藏")
-                if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
-                if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)
-                if (!local) TextButton(onClick = { coroutine.launch { load() } }, enabled = !loading && !state.running && session.isLogin) { Text("重新读取收藏夹") }
+                ListItem(
+                    headlineContent = { Text("备份时包含回复") },
+                    supportingContent = { Text(replyRuleSummary(config)) },
+                    modifier = Modifier.clickable(enabled = idle) { commentSettings = true },
+                    trailingContent = { Switch(config.archiveIncludeReplies, { set(com.zailinn.c001apk.data.SettingKeys.archiveSaveComments, it) }, enabled = idle) },
+                )
+                ListItem(
+                    headlineContent = { Text("仅在 WiFi 下下载图片") },
+                    supportingContent = { Text("移动网络下先保存文字，回到 WiFi 再同步补全图片") },
+                    modifier = Modifier.clickable(enabled = idle) { set(com.zailinn.c001apk.data.SettingKeys.archiveImagesWifiOnly, !config.archiveImagesWifiOnly) },
+                    trailingContent = { Switch(config.archiveImagesWifiOnly, { set(com.zailinn.c001apk.data.SettingKeys.archiveImagesWifiOnly, it) }, enabled = idle) },
+                )
+                ListItem(
+                    headlineContent = { Text("全部重新备份") },
+                    supportingContent = { Text("关闭时跳过未变化且档位足够的备份") },
+                    modifier = Modifier.clickable(enabled = idle) { force = !force },
+                    trailingContent = { Switch(force, { force = it }, enabled = idle) },
+                )
+                if (state.running) Text("同步进行中，暂停后可修改以上选项。", Modifier.padding(horizontal = 16.dp), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (!local) {
+                    Row(Modifier.fillMaxWidth().padding(start = 16.dp, end = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                        Text("收藏夹", Modifier.weight(1f), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+                        TextButton(onClick = { coroutine.launch { load() } }, enabled = !loading && idle && session.isLogin) { Text("重新读取") }
+                    }
+                    if (loading) LinearProgressIndicator(Modifier.fillMaxWidth())
+                    if (error.isNotEmpty()) Text(error, Modifier.padding(horizontal = 16.dp), color = MaterialTheme.colorScheme.error)
+                    if (!session.isLogin) Text("登录后才能同步云端收藏", Modifier.padding(horizontal = 16.dp))
+                }
             }
             if (!local) items(collections, key = { it.id }) { collection ->
-                Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
-                    Checkbox(collection.id in selected, { checked -> selected = if (checked) selected + collection.id else selected - collection.id }, enabled = !state.running && collection.readable)
+                val enabled = idle && collection.readable
+                fun toggle() { selected = if (collection.id in selected) selected - collection.id else selected + collection.id }
+                Row(Modifier.fillMaxWidth().clickable(enabled = enabled) { toggle() }.padding(horizontal = 4.dp), verticalAlignment = androidx.compose.ui.Alignment.CenterVertically) {
+                    Checkbox(collection.id in selected, { toggle() }, enabled = enabled)
                     Text("${collection.title}（${collection.count}）" + if (!collection.readable) " · 无法读取" else "")
                 }
             }
             item {
-                if (state.paused) Text("上次同步未完成，继续？")
-                Text(state.phase, style = MaterialTheme.typography.titleMedium)
-                Text("已完成 ${state.completed}/${state.total} · 失败 ${state.failed}")
-                if (state.total > 0) LinearProgressIndicator(progress = { (state.completed.toFloat() / state.total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
-                if (state.etaSeconds > 0) Text("预计剩余 ${state.etaSeconds / 60} 分 ${state.etaSeconds % 60} 秒")
-                Row {
-                    if (state.running) TextButton(onClick = sync::pause) { Text("暂停") }
-                    else if (state.paused) TextButton(onClick = { coroutine.launch { sync.resume() } }, enabled = !state.captcha) { Text("继续") }
-                    else Button(onClick = { coroutine.launch { start() } }, enabled = local || (session.isLogin && selected.isNotEmpty() && !loading)) { Text("开始备份") }
-                    if (state.running || state.paused) TextButton(onClick = { coroutine.launch { sync.cancel() } }) { Text("取消同步") }
+                // One card: what is happening, how far it is, and the single next step.
+                Surface(Modifier.fillMaxWidth().padding(16.dp), shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                    Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                        Text(state.phase, style = MaterialTheme.typography.titleMedium)
+                        if (state.total > 0) {
+                            LinearProgressIndicator(progress = { (state.completed.toFloat() / state.total).coerceIn(0f, 1f) }, modifier = Modifier.fillMaxWidth())
+                            Text("已完成 ${state.completed}/${state.total}" + (if (state.failed > 0) " · 失败 ${state.failed}" else "") +
+                                (if (state.running && state.etaSeconds > 0) " · 预计剩余 ${etaText(state.etaSeconds)}" else ""),
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                        Row(Modifier.fillMaxWidth()) {
+                            SyncStat("新增", state.added); SyncStat("更新", state.updated); SyncStat("跳过", state.skipped)
+                            if (!local) SyncStat("已取消收藏", state.removed)
+                        }
+                        if (state.imagesDeferred) Text("非 WiFi 下已按仅文字备份，可在 WiFi 下再次同步补全图片。", style = MaterialTheme.typography.bodySmall)
+                        Row(verticalAlignment = androidx.compose.ui.Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            when {
+                                state.running -> OutlinedButton(onClick = sync::pause) { Text("暂停") }
+                                state.captcha -> Button(onClick = sync::verify, enabled = !state.verifying) { Text(if (state.verifying) "正在验证…" else "完成验证") }
+                                state.needsIdentity -> Button(onClick = sync::requestIdentityRetry) { Text("填写数盟 ID 并重试") }
+                                state.paused -> Button(onClick = { coroutine.launch { sync.resume() } }) { Text("继续") }
+                                else -> Button(onClick = { coroutine.launch { start() } }, enabled = local || (session.isLogin && selected.isNotEmpty() && !loading)) { Text("开始备份") }
+                            }
+                            if (!session.isLogin && (!local || state.paused)) TextButton(onClick = { navigator.navigate(LoginRoute()) }) { Text("去登录") }
+                            if (state.running || state.paused) TextButton(onClick = { coroutine.launch { sync.cancel() } }) { Text("取消同步") }
+                        }
+                        Text("每次最多备份 500 条，可暂停并在下次继续。", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
-                if (state.captcha) TextButton(onClick = sync::verify) { Text("完成验证") }
-                Text("新增 ${state.added} · 更新 ${state.updated} · 未变化/非动态跳过 ${state.skipped} · 云端已取消收藏 ${state.removed}")
-                if (state.imagesDeferred) Text("非 WiFi 下已按仅文字备份，可在 WiFi 下再次同步补全图片。")
-                if (failures.isNotEmpty()) {
-                    TextButton(onClick = { expandFailures = !expandFailures }) { Text("查看失败原因（${failures.size}）") }
-                    TextButton(onClick = { coroutine.launch { sync.retryFailures() } }, enabled = !state.running) { Text("重试失败项") }
-                }
+                if (failures.isNotEmpty()) ListItem(
+                    headlineContent = { Text("失败 ${failures.size} 条") },
+                    supportingContent = { Text(if (expandFailures) "点击收起" else "点击查看原因") },
+                    leadingContent = { Icon(Icons.Outlined.ErrorOutline, null, tint = MaterialTheme.colorScheme.error) },
+                    trailingContent = { TextButton(onClick = { coroutine.launch { sync.retryFailures() } }, enabled = idle) { Text("重试失败项") } },
+                    modifier = Modifier.clickable { expandFailures = !expandFailures },
+                )
             }
-            if (expandFailures) items(failures, key = { it.id }) { Text("${it.id}：${it.error}", Modifier.padding(vertical = 4.dp)) }
+            if (expandFailures) items(failures, key = { it.id }) {
+                ListItem(headlineContent = { Text("动态 ${it.id}") }, supportingContent = { Text(it.error.ifEmpty { "未知原因" }) },
+                    modifier = Modifier.clickable { navigator.navigate(FeedRoute(it.id)) })
+            }
         }
     }
+}
+
+@Composable
+private fun SectionTitle(text: String) {
+    Text(text, Modifier.padding(start = 16.dp, top = 12.dp, bottom = 4.dp), style = MaterialTheme.typography.titleSmall, color = MaterialTheme.colorScheme.primary)
+}
+
+@Composable
+private fun RowScope.SyncStat(label: String, value: Int) {
+    Column(Modifier.weight(1f), horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+        Text("$value", style = MaterialTheme.typography.titleLarge)
+        Text(label, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+    }
+}
+
+internal fun etaText(seconds: Long): String = when {
+    seconds < 60 -> "$seconds 秒"
+    seconds < 3600 -> "${seconds / 60} 分 ${seconds % 60} 秒"
+    else -> "${seconds / 3600} 小时 ${seconds % 3600 / 60} 分"
 }

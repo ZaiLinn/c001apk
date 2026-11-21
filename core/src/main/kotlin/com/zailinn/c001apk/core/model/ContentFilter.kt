@@ -4,6 +4,8 @@ import com.zailinn.c001apk.core.protocol.Constants
 import com.zailinn.c001apk.core.semantic.SemanticMatcher
 import kotlinx.serialization.Serializable
 
+private val inlineTopic = Regex("#([^#\\r\\n]+)#")
+
 /**
  * A topic the user blocked. By default only the topic with exactly this name
  * (or `#name#` in the text); with [contains], every topic whose name contains it.
@@ -13,7 +15,9 @@ data class TopicRule(val name: String, val contains: Boolean = false) {
     fun matches(topics: Set<String>, text: String): Boolean {
         val key = SensitiveMatcher.normalize(name.trim('#'))
         if (key.isEmpty()) return false
-        return if (contains) topics.any { key in it } else key in topics || "#$key#" in text
+        return if (contains) {
+            topics.any { key in it } || inlineTopic.findAll(text).any { key in it.groupValues[1] }
+        } else key in topics || "#$key#" in text
     }
 
     /** How the hit is shown in the hidden-items log. */

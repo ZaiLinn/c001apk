@@ -93,31 +93,45 @@ class CoolapkRepository(
     suspend fun verifyArchiveRequest(value: String) {
         val url = value.toHttpUrlOrNull() ?: throw ApiFailure.invalidResponse
         require(url.isHttps && url.host in setOf("api.coolapk.com", "api2.coolapk.com") && url.encodedPath in setOf("/v6/feed/detail", "/v6/feed/replyList", "/v6/collection/list", "/v6/collection/itemList"))
-        readApiObject(client.get(url.toString(), skipCaptcha = false))
+        readApiObject(client.get(url.toString(), skipCaptcha = false, forceCaptcha = true))
     }
 
     /** Archive requests intentionally bypass UI filters and summary/hot-reply fallbacks. */
-    suspend fun backupFeed(id: String, verify: Boolean = true): JsonObject {
+    suspend fun backupFeed(id: String): JsonObject {
+        val guest = client.session.account == null
+        fun complete(root: JsonObject): JsonObject {
+            val data = root["data"] as? JsonObject ?: throw ApiFailure.invalidResponse
+            // Guests get list summaries of long posts; an account, not a 数盟 ID, unlocks them.
+            if ((data["issummary"] as? JsonPrimitive)?.content == "1") throw BackupRestrictedException(needsLogin = guest)
+            return root
+        }
         val root = try {
-            archiveRead("$API/v6/feed/detail", listOf("id" to id), verify)
+            complete(archiveRead("$API/v6/feed/detail", listOf("id" to id), verify = false))
         } catch (e: CancellationException) { throw e }
         catch (original: Exception) {
-            if (!verify && ApiFailure.from(original).kind == ApiFailureKind.Captcha) throw original
             // Guests may archive a complete official public page, never the
             // list-summary fallback used by ordinary online browsing.
             try {
-                readApiObject(publicFeedPage(client.get("${Constants.URL_COOLAPK}feed/$id"))).also { if (it["data"] !is JsonObject) throw original }
+                complete(readApiObject(publicFeedPage(client.get("${Constants.URL_COOLAPK}feed/$id"))))
             }
             catch (e: CancellationException) { throw e }
-            catch (_: Exception) { throw original }
+            catch (publicError: Exception) {
+                if (ApiFailure.from(publicError).kind == ApiFailureKind.Transport) throw publicError
+                if (original is BackupRestrictedException) throw original
+                when (ApiFailure.from(original).kind) {
+                    ApiFailureKind.Authentication -> throw BackupRestrictedException(needsLogin = true)
+                    ApiFailureKind.Captcha, ApiFailureKind.DeviceRejected -> throw BackupRestrictedException()
+                    else -> throw original
+                }
+            }
         }
         val data = root["data"] as? JsonObject ?: throw ApiFailure.invalidResponse
-        require((data["issummary"] as? JsonPrimitive)?.content != "1") { "无法读取完整动态，请登录后重试备份" }
         return data
     }
 
-    suspend fun backupReplies(id: String, page: Page, feedType: String = "feed", verify: Boolean = true): List<Datum> {
-        val query = replyQuery(id, "lastupdate_desc", page, 0).filter { it.first != "feedType" } + ("feedType" to feedType)
+    suspend fun backupReplies(id: String, page: Page, feedType: String = "feed", verify: Boolean = true, discussMode: Int = 1): List<Datum> {
+        val query = replyQuery(id, "lastupdate_desc", page, 0).filter { it.first !in setOf("feedType", "discussMode") } +
+            listOf("feedType" to feedType, "discussMode" to discussMode.toString())
         return backupRows(archiveRead("$API2/v6/feed/replyList", query, verify))
     }
 
@@ -438,10 +452,10 @@ class CoolapkRepository(
 
     /** Unfiltered archive discovery; never prompts or retries a captcha. */
     suspend fun archiveCollections(showDefault: Boolean, page: Page): List<Datum> = backupRows(
-        archiveRead("$API/v6/collection/list", page.query() + listOf("uid" to "", "showDefault" to if (showDefault) "1" else "0"), false))
+        archiveRead("$API/v6/collection/list", page.query() + listOf("uid" to client.session.account?.uid.orEmpty(), "showDefault" to if (showDefault) "1" else "0"), false))
 
     suspend fun verifyArchiveCollections() {
-        readApiObject(client.get("$API/v6/collection/list", listOf("showDefault" to "1", "page" to "1"), skipCaptcha = false))
+        readApiObject(client.get("$API/v6/collection/list", listOf("showDefault" to "1", "page" to "1"), skipCaptcha = false, forceCaptcha = true))
     }
 
     suspend fun collectionItems(id: String, page: Page): List<Datum> = backupRows(

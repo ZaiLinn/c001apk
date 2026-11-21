@@ -121,6 +121,8 @@ fun FeedCard(data: Datum, actions: ItemActions = ItemActions(), detail: Boolean 
                         Modifier.padding(start = pad, end = pad, top = 5.dp),
                         fontSize = TextSizes.Body,
                         maxLines = if (detail) Int.MAX_VALUE else 8,
+                        picArr = data.picArr,
+                        media = data.mediaImages,
                         onClick = if (detail) null else open,
                         selectable = detail,
                     )
@@ -457,6 +459,7 @@ fun ReplyCard(
                     Spacer(Modifier.width(10.dp))
                     Column(Modifier.weight(1f)) {
                         HtmlText(replyTitle(data, nested, isTop, feedUid, floorUid), Modifier.padding(end = 28.dp), fontSize = TextSizes.Name)
+                        Spacer(Modifier.height(6.dp))
                         HtmlText(data.message.orEmpty(), picArr = data.picArr, media = data.mediaImages, selectable = true)
                         if (data.picArr.isNotEmpty()) ImageGrid(data.picArr, Modifier.padding(top = 10.dp), media = data.mediaImages)
                         data.obj("feed")?.takeIf { !isFeedReply && !nested }?.let { SourceFeed(it) }

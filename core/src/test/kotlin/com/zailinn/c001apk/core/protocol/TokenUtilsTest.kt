@@ -51,7 +51,7 @@ class TokenUtilsTest {
     @Test
     fun generatedParamsAreComplete() {
         val params = ProtocolParams.generate()
-        assertTrue(params.userAgent.contains("+CoolMarket/16.6.4-2609291-universal"))
+        assertTrue(params.userAgent.contains("+CoolMarket/${Constants.VERSION_NAME}-${Constants.VERSION_CODE}-universal"))
         assertTrue(params.xAppDevice.isNotEmpty() && !params.xAppDevice.contains("="))
         assertTrue(params.profile in RealDevices.profiles)
     }

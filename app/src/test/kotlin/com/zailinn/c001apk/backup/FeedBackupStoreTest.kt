@@ -148,7 +148,7 @@ class FeedBackupStoreTest {
         }
     }
 
-    @Test fun exportRebuildIndexAndReadImagesAndThreadsWithoutNetwork() = runBlocking {
+    @Test fun exportRebuildIndexAndReadPostImagesWithoutNetwork() = runBlocking {
         Harness().use { h ->
             val store = h.store()
             store.selectDirectory("test-directory")
@@ -156,7 +156,7 @@ class FeedBackupStoreTest {
             assertTrue(snapshot.warnings.isEmpty())
             assertEquals(setOf("feed_42.json", "feed_42.zip"), h.directory.list().map { it.name }.toSet())
             ZipFile(File(h.directory.folder, "feed_42.zip")).use { zip ->
-                assertEquals(4, zip.size())
+                assertEquals(2, zip.size())
                 zip.entries().asSequence().forEach { assertEquals(ZipEntry.STORED, it.method) }
             }
             assertTrue(h.imageRequests.all { it.url.isHttps && it.header("Cookie") == null && it.header("X-App-Token") == null })
@@ -167,7 +167,8 @@ class FeedBackupStoreTest {
             assertEquals(1, restored.records.value.size)
             val offline = restored.open(restored.records.value.single())
             assertEquals("完整正文", offline.data.message)
-            assertEquals("楼中楼正文", (offline.replies.single()["replyRows"] as JsonArray).single().jsonObject["message"]!!.jsonPrimitive.content)
+            assertTrue(offline.replies.isEmpty())
+            assertEquals(1, h.apiRequests.size)
             val picture = offline.data.picArr.single()
             assertTrue(picture.startsWith(BACKUP_MEDIA_SCHEME))
             assertArrayEquals(h.photo, restored.localMedia(picture)!!.readBytes())
@@ -209,6 +210,17 @@ class FeedBackupStoreTest {
             assertTrue(runCatching { task.await() }.isFailure)
             assertEquals(old, h.directory.list().map { it.name }.toSet())
             assertEquals("完整正文", store.open(store.records.value.single()).data.message)
+        }
+    }
+
+    @Test fun deletionConfirmedForAnotherDirectoryLeavesTheCurrentBackupIntact() = runBlocking {
+        Harness().use { h ->
+            val store = h.store()
+            store.selectDirectory("current-directory")
+            store.save("42", replace = false)
+            assertTrue(runCatching { store.delete(setOf("42"), "previous-directory") }.isFailure)
+            assertEquals(setOf("feed_42.json", "feed_42.zip"), h.directory.list().map { it.name }.toSet())
+            assertEquals("42", store.records.value.single().feed.id)
         }
     }
 
@@ -259,7 +271,7 @@ class FeedBackupStoreTest {
                     if (format == ArchiveExportFormat.HtmlImages) ZipFile(prepared.file).use { zip ->
                         val html = zip.getInputStream(zip.getEntry("index.html")).reader().readText()
                         assertTrue(html.contains("完整正文")); assertFalse(html.contains("<img src=\"https:"))
-                        assertEquals(4, zip.entries().asSequence().count { it.name.startsWith("images/") })
+                        assertEquals(2, zip.entries().asSequence().count { it.name.startsWith("images/") })
                         zip.entries().asSequence().filter { it.name.startsWith("images/") }.forEach { entry ->
                             assertEquals(ZipEntry.STORED, entry.method)
                             assertArrayEquals(h.photo, zip.getInputStream(entry).readBytes())
@@ -267,7 +279,7 @@ class FeedBackupStoreTest {
                     } else {
                         assertEquals(zipReads, h.directory.zipReads)
                         assertTrue(prepared.file.readText().contains("完整正文"))
-                        assertTrue(prepared.file.readText().contains("楼中楼正文"))
+                        assertFalse(prepared.file.readText().contains("楼中楼正文"))
                     }
                     assertEquals(api, h.apiRequests.size); assertEquals(images, h.imageRequests.size)
                 } finally { exporter.discard(prepared) }
@@ -298,10 +310,10 @@ class FeedBackupStoreTest {
             h.failImage = true
             val store = h.store(); store.selectDirectory("test-directory")
             val snapshot = store.save("42", replace = false)
-            assertEquals(4, snapshot.warnings.count { it.contains("未保存") })
+            assertEquals(2, snapshot.warnings.count { it.contains("未保存") })
             val offline = store.open(store.records.value.single())
             assertEquals("完整正文", offline.data.message)
-            assertEquals(1, offline.replies.size)
+            assertTrue(offline.replies.isEmpty())
             assertNull(store.localMedia(offline.data.picArr.single()))
             assertTrue(offline.warnings.isNotEmpty())
         }

@@ -10,6 +10,8 @@ import com.zailinn.c001apk.core.model.SensitiveCategory
 import com.zailinn.c001apk.core.model.SensitiveMatcher
 import com.zailinn.c001apk.core.model.TopicRule
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.serialization.Serializable
 import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.builtins.serializer
@@ -58,6 +60,7 @@ data class LocalFollowTopic(val id: String, val title: String, val logo: String 
 /** History, favorites, blocking, search history and local follows (users and topics). Shared by all accounts. */
 class LocalContent(private val store: LocalStore) {
     var favoritesChanged: suspend (List<FeedRecord>) -> Unit = {}
+    private val favoriteEdits = Mutex()
     private val records = ListSerializer(FeedRecord.serializer())
     private val strings = ListSerializer(String.serializer())
     private val follows = ListSerializer(LocalFollowUser.serializer())
@@ -232,23 +235,25 @@ class LocalContent(private val store: LocalStore) {
 
     fun isFavorite(id: String) = favorites.value.any { it.id == id }
 
-    suspend fun toggleFavorite(feed: Datum): Boolean {
-        val id = feed.id ?: return false
-        val adding = !isFavorite(id)
+    suspend fun toggleFavorite(feed: Datum): Boolean = favoriteEdits.withLock {
+        val id = feed.id ?: return@withLock false
+        var adding = false
         var updated = emptyList<FeedRecord>()
         store.updateJson(FAVORITES, records, emptyList()) { list ->
-            (if (adding) listOf(FeedRecord.of(feed)) + list.filter { it.id != id } else list.filter { it.id != id }).also { updated = it }
+            adding = list.none { it.id == id }
+            updated = if (adding) listOf(FeedRecord.of(feed)) + list else list.filter { it.id != id }
+            updated
         }
         favoritesChanged(updated)
-        return adding
+        adding
     }
 
-    suspend fun removeFavorite(id: String) {
+    suspend fun removeFavorite(id: String) = favoriteEdits.withLock {
         var updated = emptyList<FeedRecord>()
         store.updateJson(FAVORITES, records, emptyList()) { it.filter { r -> r.id != id }.also { list -> updated = list } }
         favoritesChanged(updated)
     }
-    suspend fun clearFavorites() {
+    suspend fun clearFavorites() = favoriteEdits.withLock {
         store.updateJson(FAVORITES, records, emptyList()) { emptyList() }
         favoritesChanged(emptyList())
     }

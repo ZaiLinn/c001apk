@@ -54,17 +54,21 @@ class ArchiveIndex(context: Context) : SQLiteOpenHelper(context,
             put("image_quality", backup.imageQuality.name); put("includes_replies", if (backup.includesReplies) 1 else 0)
             put("list_fingerprint", backup.listFingerprint); put("warnings", backup.warnings.size); put("online_state", oldState)
         }
-        writableDatabase.insertWithOnConflict("backup", null, values, SQLiteDatabase.CONFLICT_REPLACE); changes.value++
+        writableDatabase.insertWithOnConflict("backup", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+        meta("comment_limit_${backup.id}", backup.commentLimit.toString())
+        meta("comment_nested_${backup.id}", if (backup.includesSubReplies) "1" else "0"); changes.value++
     }
-    @Synchronized fun records(): List<BackupRecord> = readableDatabase.rawQuery("SELECT feed_id,base,saved_at,uid,username,title,dateline,warnings FROM backup ORDER BY saved_at DESC,feed_id", null).use { cursor -> buildList { while (cursor.moveToNext()) add(record(cursor)) } }
+    @Synchronized fun records(): List<BackupRecord> = readableDatabase.rawQuery("SELECT feed_id,base,saved_at,uid,username,title,dateline,warnings,image_quality,includes_replies FROM backup ORDER BY saved_at DESC,feed_id", null).use { cursor -> buildList { while (cursor.moveToNext()) add(record(cursor)) } }
     private fun record(c: Cursor): BackupRecord {
         fun text(key: String) = c.getString(c.getColumnIndexOrThrow(key)).orEmpty()
         fun long(key: String) = c.getLong(c.getColumnIndexOrThrow(key))
         return BackupRecord(FeedRecord(text("feed_id"), text("uid"), text("username"), message = text("title"), dateline = long("dateline"), time = long("saved_at")),
-            text("base"), long("saved_at"), if (long("warnings") > 0) listOf("备份有缺失") else emptyList())
+            text("base"), long("saved_at"), if (long("warnings") > 0) listOf("备份有缺失") else emptyList(),
+            text("image_quality"), long("includes_replies") > 0)
     }
     @Synchronized fun row(id: String): Map<String, String>? = readableDatabase.rawQuery("SELECT feed_id,base,doc_modified,doc_size,saved_at,uid,username,title,dateline,image_quality,includes_replies,list_fingerprint,warnings,online_state FROM backup WHERE feed_id=?", arrayOf(id)).use { c ->
-        if (!c.moveToFirst()) null else c.columnNames.associateWith { c.getString(c.getColumnIndexOrThrow(it)).orEmpty() }
+        if (!c.moveToFirst()) null else c.columnNames.associateWith { c.getString(c.getColumnIndexOrThrow(it)).orEmpty() } +
+            mapOf("comment_limit" to meta("comment_limit_$id").orEmpty(), "comment_nested" to meta("comment_nested_$id").orEmpty())
     }
     @Synchronized fun state(id: String): String = row(id)?.get("online_state") ?: "unknown"
     @Synchronized fun state(id: String, state: String) { require(state in listOf("unknown", "ok", "gone")); writableDatabase.update("backup", ContentValues().apply { put("online_state", state) }, "feed_id=?", arrayOf(id)); changes.value++ }
@@ -72,7 +76,10 @@ class ArchiveIndex(context: Context) : SQLiteOpenHelper(context,
         writableDatabase.update("backup", ContentValues().apply { put("list_fingerprint", value) }, "feed_id=?", arrayOf(id))
         changes.value++
     }
-    @Synchronized fun remove(id: String) { writableDatabase.delete("backup", "feed_id=?", arrayOf(id)); changes.value++ }
+    @Synchronized fun remove(id: String) {
+        writableDatabase.delete("backup", "feed_id=?", arrayOf(id))
+        writableDatabase.delete("meta", "key IN (?,?)", arrayOf("comment_limit_$id", "comment_nested_$id")); changes.value++
+    }
     @Synchronized fun clearBackups() { writableDatabase.delete("backup", null, null); changes.value++ }
     @Synchronized fun retain(ids: Set<String>) { records().filter { it.feed.id !in ids }.forEach { remove(it.feed.id) } }
     @Synchronized fun source(id: String, kind: String, account: String = "", collection: String = "", title: String = "", removed: Boolean = false) {

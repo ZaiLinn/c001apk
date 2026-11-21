@@ -3,67 +3,84 @@ package com.zailinn.c001apk.core.backup
 import com.zailinn.c001apk.core.model.Datum
 import com.zailinn.c001apk.core.net.CoolapkRepository
 import com.zailinn.c001apk.core.net.Page
+import com.zailinn.c001apk.core.net.ApiFailure
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.currentCoroutineContext
 import kotlinx.coroutines.ensureActive
-import kotlinx.serialization.json.JsonArray
-import kotlinx.serialization.json.JsonObject
+import kotlinx.serialization.json.*
 
-/** Uses unfiltered API pages: UI blacklists and hot/web fallbacks must not truncate an archive. */
-class FeedBackupCollector(private val repository: CoolapkRepository, private val maxPages: Int = 1000) {
-    suspend fun collect(id: String, options: BackupOptions = BackupOptions(), verify: Boolean = true, beforeRequest: suspend () -> Unit = {}, progress: (String) -> Unit = {}): FeedBackup {
+/** Reply collection is opt-in and bounded across main replies and nested replies together. */
+class FeedBackupCollector(private val repository: CoolapkRepository) {
+    @Suppress("UNUSED_PARAMETER")
+    suspend fun collect(id: String, options: BackupOptions = BackupOptions(), verify: Boolean = false,
+        beforeRequest: suspend () -> Unit = {}, progress: (String) -> Unit = {}): FeedBackup {
         require(id.matches(Regex("[0-9]{1,30}"))) { "动态编号无效" }
+        val limit = if (options.replies) options.commentLimit else 0
+        require(limit in 0..1000) { "评论数量须在 0 至 1000 条之间" }
         progress("正在读取完整动态")
         beforeRequest()
-        val feed = repository.backupFeed(id, verify)
+        val feed = repository.backupFeed(id)
         require(backupFeedId(Datum(feed)) == id) { "服务器返回的动态编号不匹配" }
-        if (!options.replies) return FeedBackup(JsonObject(mapOf("data" to feed)),
-            imageQuality = options.images, includesReplies = false)
+        val comments = linkedMapOf<String, Datum>()
+        val savedIds = mutableSetOf<String>()
         val warnings = mutableListOf<String>()
-        val roots = linkedMapOf<String, Datum>()
-        fun merge(items: List<Datum>) { items.forEach { item -> item.id?.let { roots[it] = item } } }
-        listOf("topReplyRows", "replyMeRows", "replyRows").forEach { merge(Datum(feed).list(it)) }
-        suspend fun pages(label: String, load: suspend (Page) -> List<Datum>): List<Datum> {
-            val result = linkedMapOf<String, Datum>()
-            var first: String? = null
+        suspend fun pages(label: String, load: suspend (Page) -> List<Datum>, accept: suspend (Datum) -> Unit) {
             var last: String? = null
             try {
-                for (number in 1..maxPages) {
+                for (number in 1..1000) {
                     currentCoroutineContext().ensureActive()
-                    progress("$label（第 $number 页）")
+                    if (savedIds.size >= limit) break
+                    progress("$label（${savedIds.size}/$limit）")
                     beforeRequest()
-                    val page = load(Page(number, first, last)).filter { it.entityType == "feed_reply" }
-                    if (page.isEmpty()) return result.values.toList()
-                    val new = page.filter { it.id != null && it.id !in result }
-                    if (new.isEmpty()) { warnings += "$label：服务器重复返回同一页，可能未收齐"; return result.values.toList() }
-                    new.forEach { result[it.id!!] = it }
-                    if (first == null) first = page.first().id
-                    last = page.last().id
+                    val rows = load(Page(number, lastItem = last)).filter {
+                        it.entityType == "feed_reply" || (it.entityType == null && it.id != null && it.message != null)
+                    }
+                    if (rows.isEmpty()) break
+                    val previous = savedIds.size
+                    rows.forEach { if (savedIds.size < limit) accept(it) }
+                    val next = rows.lastOrNull()?.id
+                    if (next == null || next == last || (number > 1 && savedIds.size == previous)) break
+                    last = next
                 }
-                warnings += "$label：达到分页上限，可能未收齐"
             } catch (e: CancellationException) { throw e }
-            catch (e: Exception) {
-                if (!verify && com.zailinn.c001apk.core.net.ApiFailure.from(e).kind == com.zailinn.c001apk.core.net.ApiFailureKind.Captcha) throw e
-                warnings += "${label}失败，已保存成功读取的部分"
+            catch (e: Exception) { warnings += "${label}失败：${ApiFailure.from(e).message}；已保存正文和 ${savedIds.size} 条评论" }
+        }
+        suspend fun addRoot(item: Datum) {
+            val key = item.id ?: return
+            if (savedIds.size >= limit || !savedIds.add(key)) return
+            var root = Datum(withoutReplies(item.json) as JsonObject)
+            comments[key] = root
+            if (options.includeSubReplies) {
+                val children = mutableListOf<Datum>()
+                fun addChild(child: Datum) {
+                    val childId = child.id ?: return
+                    if (savedIds.size < limit && savedIds.add(childId)) children += Datum(withoutReplies(child.json) as JsonObject)
+                }
+                item.replyRows.forEach(::addChild)
+                if (savedIds.size < limit && ((item.int("replynum") ?: 0) > item.replyRows.size || (item.int("replyRowsMore") ?: 0) > 0)) {
+                    pages("读取楼中楼", { repository.backupSubReplies(key, it, verify = false) }) { addChild(it) }
+                }
+                root = root.withList("replyRows", children).with("replyRowsMore", 0).with("replynum", children.size)
+                comments[key] = root
             }
-            return result.values.toList()
         }
-        var replies = pages("正在读取回复") { repository.backupReplies(id, it, verify = verify) }
-        if (replies.isEmpty() && (Datum(feed).int("replynum") ?: 0) > 0) {
-            replies = pages("正在重试回复") { repository.backupReplies(id, it, feedType = "", verify = verify) }
+        if (limit > 0) {
+            Datum(feed).list("topReplyRows").forEach { addRoot(it) }
+            pages("读取主回复", { repository.backupReplies(id, it, verify = false) }, ::addRoot)
         }
-        merge(replies)
-        for ((key, item) in roots.toMap()) {
-            if ((item.int("replynum") ?: 0) > item.replyRows.size) {
-                val children = pages("正在读取楼中楼") { repository.backupSubReplies(key, it, verify) }
-                val all = (item.replyRows + children).distinctBy { it.id }
-                roots[key] = item.with("replyRows", JsonArray(all.map { it.json })).with("replyRowsMore", 0)
-            }
-        }
-        val replyIds = mutableSetOf<String>()
-        fun count(item: Datum) { item.id?.let(replyIds::add); item.replyRows.forEach(::count) }
-        roots.values.forEach(::count)
-        if (replyIds.size < (Datum(feed).int("replynum") ?: 0)) warnings += "服务器未返回全部回复，回复可能有缺失"
-        return FeedBackup(JsonObject(mapOf("data" to feed)), roots.values.map { it.json }, warnings = warnings.distinct(), imageQuality = options.images, includesReplies = true)
+        // A chosen limit, an empty page, deleted/hidden replies or a stale server
+        // replynum are not evidence of a failed request. Only actual errors warn.
+        return FeedBackup(JsonObject(mapOf("data" to withoutReplies(feed))), comments.values.map { it.json }, warnings = warnings,
+            imageQuality = options.images, includesReplies = limit > 0, commentLimit = limit,
+            includesSubReplies = limit > 0 && options.includeSubReplies)
+    }
+
+    private fun withoutReplies(value: JsonElement): JsonElement = when (value) {
+        is JsonObject -> JsonObject(value.filterKeys { it !in replyFields }.mapValues { withoutReplies(it.value) })
+        is JsonArray -> JsonArray(value.map(::withoutReplies))
+        else -> value
+    }
+    private companion object {
+        val replyFields = setOf("topReplyRows", "hotReplyRows", "replyMeRows", "replyRows", "replyRowsMore", "replyList", "reply_list")
     }
 }

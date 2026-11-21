@@ -122,9 +122,9 @@ fun ImageViewerScreen(urls: List<String>, index: Int, mediaJson: String? = null)
             permission.launch(Manifest.permission.WRITE_EXTERNAL_STORAGE)
         } else export(current, kind, share)
     }
-    LaunchedEffect(pager.settledPage, interaction, menu, busy) {
-        controls = true
-        if (menu == null && busy == null) { delay(3500); controls = false }
+    LaunchedEffect(pager.settledPage) { touch() }
+    LaunchedEffect(controls, interaction, menu, busy) {
+        if (controls && menu == null && busy == null) { delay(3500); controls = false }
     }
     HdrColorMode(hdr[pager.settledPage] == true, pager, displayed[pager.settledPage] == true)
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -133,7 +133,7 @@ fun ImageViewerScreen(urls: List<String>, index: Int, mediaJson: String? = null)
             ViewerPage(
                 items[page], active = page == pager.settledPage && !pager.isScrollInProgress,
                 automaticPlayed = automaticPlayed,
-                onTap = { interaction++; controls = !controls }, onInteraction = ::touch,
+                onTap = { controls = !controls }, onInteraction = ::touch,
                 onHdr = { hdr[page] = it }, onLive = { live[page] = it }, onDisplayed = { displayed[page] = it },
             )
         }

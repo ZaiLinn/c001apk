@@ -115,6 +115,30 @@ class UxFixesTest {
     }
 
     @Test
+    fun aFailedPullToRefreshPreservesTheEarlierPageRetry() {
+        val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
+        val pages = mutableListOf<Int>()
+        var failing = false
+        val list = PagedList(scope) { page ->
+            pages += page.page
+            if (failing) LoadResult.Error("网络错误") else LoadResult.Success(listOf(feed(page.page)))
+        }
+        list.start()
+        waitFor { list.items.size == 1 }
+        failing = true
+        list.loadMore()
+        waitFor { list.state.value.footer is com.zailinn.c001apk.ui.common.Footer.Error }
+        list.refresh(showIndicator = true)
+        waitFor { !list.state.value.refreshing }
+        assertEquals(com.zailinn.c001apk.ui.common.Footer.Error("网络错误"), list.state.value.footer)
+        failing = false
+        list.retry()
+        waitFor { list.items.size == 2 }
+        assertEquals(listOf(1, 2, 1, 2), pages)
+        scope.cancel()
+    }
+
+    @Test
     fun aRefreshWithoutTheIndicatorStillShowsItsError() {
         val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
         var failing = false
@@ -266,9 +290,13 @@ class UxFixesTest {
     @Test
     fun aFailedImageOffersRetryAndBackClosesTheViewer() {
         var closed = 0
+        val imageTransport = Interceptor { chain ->
+            Response.Builder().request(chain.request()).protocol(Protocol.HTTP_1_1)
+                .code(404).message("Not found").body("".toResponseBody()).build()
+        }
         compose.setContent {
             val context = androidx.compose.ui.platform.LocalContext.current
-            val app = AppContainer(context, "test-${UUID.randomUUID()}")
+            val app = AppContainer(context, "test-${UUID.randomUUID()}", imageTransport = imageTransport)
             val nav = rememberNavController()
             CompositionLocalProvider(LocalNavigator provides AppNavigator(context, nav, app.settings), LocalAppContainer provides app) {
                 NavHost(nav, startDestination = "list") {
@@ -285,6 +313,7 @@ class UxFixesTest {
         compose.waitUntil(15_000) { compose.onAllNodesWithText("图片加载失败").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("点击重试").assertExists()
         // A tap reveals the controls after their idle timeout; back leaves the viewer.
+        compose.mainClock.advanceTimeBy(4_000)
         compose.onRoot().performTouchInput { click(androidx.compose.ui.geometry.Offset(width * 0.2f, height * 0.7f)) }
         compose.onNodeWithContentDescription("返回").performClick()
         compose.waitUntil(5_000) { closed == 1 }

@@ -3,6 +3,7 @@ package com.zailinn.c001apk
 import android.os.Looper
 import androidx.test.core.app.ApplicationProvider
 import com.zailinn.c001apk.core.model.Datum
+import com.zailinn.c001apk.core.model.LoadResult
 import com.zailinn.c001apk.core.net.ReplySource
 import com.zailinn.c001apk.ui.screens.feed.FeedViewModel
 import com.zailinn.c001apk.ui.screens.feed.ReplyThreadViewModel
@@ -23,6 +24,8 @@ import org.robolectric.RobolectricTestRunner
 import org.robolectric.Shadows.shadowOf
 import org.robolectric.annotation.Config
 import java.util.UUID
+import java.util.concurrent.CountDownLatch
+import java.util.concurrent.TimeUnit
 
 /** Drives FeedViewModel/ReplyThreadViewModel against programmable responses. */
 @RunWith(RobolectricTestRunner::class)
@@ -92,6 +95,87 @@ class FeedRepliesViewModelTest {
         val vm = FeedViewModel(app, "100")
         waitFor { vm.list.items.any { it.id == "5" } }
         assertEquals(ReplySource.Api, vm.repliesSource.value)
+    }
+
+    @Test
+    fun malformedArticleBlocksStillShowTheAvailableBody() {
+        val app = app { path, _ ->
+            if (path.endsWith("/v6/feed/detail")) detail(100).dropLast(2) + ""","message_raw_output":"["}}"""
+            else """{"data":[]}"""
+        }
+        val vm = FeedViewModel(app, "100")
+        waitFor { !vm.loadingDetail.value }
+        assertEquals("正文", (vm.feed.value as? LoadResult.Success)?.value?.message)
+        assertTrue(vm.articles.value.isEmpty())
+    }
+
+    @Test
+    fun detailRepliesAreVisibleWhenTheCommentEndpointIsEmpty() {
+        val app = app { path, _ ->
+            if (path.endsWith("/v6/feed/detail")) {
+                detail(100).dropLast(2) + ""","topReplyRows":[${replyFeed(6, 12)}],"replyMeRows":[${replyFeed(7, 13)}]}}"""
+            } else """{"data":[]}"""
+        }
+        val vm = FeedViewModel(app, "100")
+        waitFor { vm.list.state.value.status != LoadResult.Loading }
+        assertTrue(vm.list.state.value.status is LoadResult.Success)
+        assertEquals(listOf("6", "7"), vm.list.items.map { it.id })
+    }
+
+    @Test
+    fun postingTheFirstCommentReplacesTheEmptyState() {
+        val app = app { path, _ -> if (path.endsWith("/v6/feed/detail")) detail(100) else """{"data":[]}""" }
+        val vm = FeedViewModel(app, "100")
+        waitFor { vm.list.state.value.status == LoadResult.Empty }
+        vm.addReply(Datum(Json.parseToJsonElement(replyFeed(5, 11)).jsonObject), null, null)
+        assertTrue(vm.list.state.value.status is LoadResult.Success)
+        assertEquals(listOf("5"), vm.list.items.map { it.id })
+    }
+
+    @Test
+    fun firstPageInFlightKeepsAPostedCommentAndDeduplicatesTheServerCopy() {
+        val allowReplyList = CountDownLatch(1)
+        val app = app { path, _ ->
+            when {
+                path.endsWith("/v6/feed/detail") -> detail(100)
+                path.endsWith("/v6/feed/replyList") -> {
+                    check(allowReplyList.await(5, TimeUnit.SECONDS))
+                    """{"data":[${replyFeed(5, 11)},${replyFeed(6, 12)}]}"""
+                }
+                else -> """{"data":[]}"""
+            }
+        }
+        val vm = FeedViewModel(app, "100")
+        try {
+            waitFor { vm.feed.value is LoadResult.Success }
+            vm.addReply(Datum(Json.parseToJsonElement(replyFeed(5, 11)).jsonObject), null, null)
+            vm.addReply(Datum(Json.parseToJsonElement(replyFeed(7, 11)).jsonObject), null, null)
+            assertEquals(listOf("7", "5"), vm.list.items.map { it.id })
+        } finally {
+            allowReplyList.countDown()
+        }
+        waitFor { vm.list.items.any { it.id == "6" } }
+        assertEquals(listOf("7", "5", "6"), vm.list.items.map { it.id })
+    }
+
+    @Test
+    fun pinnedRepliesFromBlockedUsersAreHidden() {
+        val pinned = replyFeed(6, 12).replace("\"entityType\":\"feed_reply\",", "")
+        val author = replyFeed(7, 13).replace("\"entityType\":\"feed_reply\",", "")
+        val app = app { path, _ ->
+            when {
+                path.endsWith("/v6/feed/detail") ->
+                    detail(100).dropLast(2) + ""","topReplyRows":[$pinned],"replyMeRows":[$author]}}"""
+                path.endsWith("/v6/feed/replyList") -> """{"data":[${replyFeed(5, 11)}]}"""
+                else -> """{"data":[]}"""
+            }
+        }
+        runBlocking { app.content.block("12") }
+        waitFor { app.content.isUserBlocked("12") }
+        val vm = FeedViewModel(app, "100")
+        waitFor { vm.list.items.any { it.id == "5" } }
+        assertEquals(listOf("7", "5"), vm.list.items.map { it.id })
+        assertEquals(null, vm.topReply)
     }
 
     @Test

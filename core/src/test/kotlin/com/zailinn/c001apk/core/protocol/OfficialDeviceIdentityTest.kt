@@ -12,6 +12,13 @@ class OfficialDeviceIdentityTest {
         UUID: 00000000-0000-0000-0000-000000000000
     """.trimIndent()
 
+    @Test fun backupDialogAcceptsEitherTheIdOrCopiedDiagnosticText() {
+        assertEquals("DUsyntheticSZLM0123456789abcdef", OfficialDeviceIdentity.parseInput("  DUsyntheticSZLM0123456789abcdef  "))
+        assertEquals("DUsyntheticSZLM0123456789abcdef", OfficialDeviceIdentity.parseInput(copied))
+        assertThrows(IllegalArgumentException::class.java) { OfficialDeviceIdentity.parseInput("null") }
+        assertThrows(IllegalArgumentException::class.java) { OfficialDeviceIdentity.parseInput("bad") }
+    }
+
     @Test
     fun readsOnlyTheShuzlmField() {
         assertEquals("DUsyntheticSZLM0123456789abcdef", OfficialDeviceIdentity.parse(copied))

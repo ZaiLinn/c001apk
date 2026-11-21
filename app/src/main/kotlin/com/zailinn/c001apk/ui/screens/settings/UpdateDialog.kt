@@ -9,7 +9,6 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import com.zailinn.c001apk.core.update.UpdateResult
@@ -24,9 +23,8 @@ fun UpdateDialog(result: UpdateResult, onDismiss: () -> Unit) {
     val release = result.release ?: return
     val navigator = LocalNavigator.current
     val app = appContainer()
-    val scope = rememberCoroutineScope()
     val later = {
-        scope.launch { app.updates.preferences.snooze(System.currentTimeMillis()) }
+        app.scope.launch { app.updates.preferences.snooze(System.currentTimeMillis()) }
         onDismiss()
     }
     AppAlertDialog(
@@ -49,7 +47,7 @@ fun UpdateDialog(result: UpdateResult, onDismiss: () -> Unit) {
         },
         dismissButton = {
             TextButton(onClick = {
-                scope.launch { app.updates.preferences.skip(release.version.toString()) }
+                app.scope.launch { app.updates.preferences.skip(release.version.toString()) }
                 onDismiss()
             }) { Text("跳过") }
             TextButton(onClick = later) { Text("稍后") }

@@ -59,6 +59,21 @@ class NavigationStackTest {
     }
 
     @Test
+    fun delayedBackOnlyPopsThePageThatRequestedIt() {
+        val (nav, navigator) = host()
+        compose.runOnUiThread {
+            navigator.navigate(FeedRoute("1"))
+            val original = nav.currentBackStackEntry!!
+            navigator.navigate(FeedRoute("2"))
+            navigator.backFrom(original)
+            assertEquals("2", nav.currentBackStackEntry!!.toRoute<FeedRoute>().id)
+            navigator.back()
+            navigator.backFrom(original)
+            assertEquals(MainRoute, nav.currentBackStackEntry!!.toRoute<MainRoute>())
+        }
+    }
+
+    @Test
     fun otherProfileStacksAndBackReturnsToTheFirst() {
         val (nav, navigator) = host()
         compose.runOnUiThread { navigator.openUser("10") }

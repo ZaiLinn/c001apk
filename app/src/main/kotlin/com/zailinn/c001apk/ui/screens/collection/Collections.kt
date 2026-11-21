@@ -167,7 +167,9 @@ fun CollectionPickerSheet(feedId: String, onDismiss: () -> Unit) {
             scope.launch {
                 val id = app.createCollection(title, description, open) ?: return@launch
                 // The new collection takes the feed right away, as in the official app.
-                app.runAction { app.repository.setCollected(id, feedId, true) }
+                app.runAction { app.repository.setCollected(id, feedId, true) }?.let {
+                    app.archiveSync.favoriteChanged(feedId, id, title, collected = true)
+                }
                 load()
             }
         }

@@ -11,7 +11,8 @@ import org.jsoup.parser.Parser
 enum class BackupImageQuality { None, Preview, Original }
 
 @Serializable
-data class BackupOptions(val images: BackupImageQuality = BackupImageQuality.Original, val replies: Boolean = true)
+data class BackupOptions(val images: BackupImageQuality = BackupImageQuality.Original, val replies: Boolean = false,
+    val commentLimit: Int = 0, val includeSubReplies: Boolean = false)
 
 const val BACKUP_MEDIA_SCHEME = "c001apk-backup://"
 
@@ -29,6 +30,8 @@ data class FeedBackup(
     val warnings: List<String> = emptyList(),
     val imageQuality: BackupImageQuality = BackupImageQuality.Original,
     val includesReplies: Boolean = true,
+    val commentLimit: Int = 0,
+    val includesSubReplies: Boolean = false,
     val listFingerprint: String = "",
 ) {
     val data: Datum get() = Datum((feed["data"] as? JsonObject) ?: feed)

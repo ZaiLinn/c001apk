@@ -131,7 +131,7 @@ enum class SettingsSection(val title: String, val description: String, val icon:
     Interaction("交互", "震动、滑动隐藏栏、返回刷新、实况播放", Icons.Outlined.Vibration, SettingsGroup.Personal),
     Content("首页与关注", "首页标签、本地关注与悄悄关注", Icons.Outlined.Home, SettingsGroup.Personal),
     Filter("内容过滤", "黑名单、敏感话题、语义屏蔽", Icons.Outlined.FilterAlt, SettingsGroup.Personal),
-    Archive("备份与收藏", "我的备份、收藏自动备份", Icons.Outlined.FolderOpen, SettingsGroup.Data),
+    Archive("我的备份", "备份目录、同步收藏、导出与离线查看", Icons.Outlined.FolderOpen, SettingsGroup.Data),
     Privacy("隐私", "浏览历史、外部链接", Icons.Outlined.PrivacyTip, SettingsGroup.Data),
     Storage("存储与更新", "缓存、版本更新", Icons.Outlined.Storage, SettingsGroup.Data),
     Protocol("协议与设备", "设备标识、请求参数、验证记录", Icons.Outlined.DeveloperMode, SettingsGroup.Advanced),
@@ -171,6 +171,7 @@ fun SettingsScreen() {
                                 when {
                                     // A page of its own, also on wide windows.
                                     section == SettingsSection.Filter -> navigator.navigate(ContentFilterRoute)
+                                    section == SettingsSection.Archive -> navigator.navigate(com.zailinn.c001apk.ui.nav.BackupsRoute)
                                     wide -> selected = section
                                     else -> navigator.navigate(SettingsSectionRoute(section.name))
                                 }
@@ -226,6 +227,10 @@ private fun CookieExportItem() {
 @Composable
 fun SettingsSectionScreen(name: String) {
     val section = SettingsSection.valueOf(name)
+    if (section == SettingsSection.Archive) {
+        com.zailinn.c001apk.backup.BackupsScreen()
+        return
+    }
     Scaffold(topBar = { SimpleTopBar(section.title) }) { padding ->
         Column(Modifier.padding(padding).verticalScroll(rememberScrollState())) { SectionItems(section) }
     }
@@ -279,18 +284,7 @@ private fun SectionItems(section: SettingsSection) {
     val setInt = rememberSetter<Int>()
     val setString = rememberSetter<String>()
     when (section) {
-        SettingsSection.Archive -> {
-            ListItem(
-                headlineContent = { Text("我的备份") },
-                supportingContent = { Text("备份目录、同步收藏、导出与离线查看") },
-                leadingContent = { Icon(Icons.Outlined.Archive, null) },
-                modifier = Modifier.clickable { navigator.navigate(com.zailinn.c001apk.ui.nav.BackupsRoute) },
-            )
-            val values = listOf("Off", "None", "Preview", "Original")
-            ChoiceItem(Icons.Outlined.BookmarkAdd, "收藏时自动备份", "加入收藏后排队保存到所选目录", listOf("关闭", "仅文字", "文字和缩略图", "文字和原图"), values.indexOf(settings.archiveAutoBackup).coerceAtLeast(0)) { setString(SettingKeys.archiveAutoBackup, values[it]) }
-            SwitchItem(Icons.Outlined.Forum, "批量备份包含回复", "保存主回复与楼中楼", settings.archiveIncludeReplies) { setBool(SettingKeys.archiveIncludeReplies, it) }
-            SwitchItem(Icons.Outlined.Wifi, "仅在 WiFi 下下载图片", "关闭时可使用移动网络下载备份图片", settings.archiveImagesWifiOnly) { setBool(SettingKeys.archiveImagesWifiOnly, it) }
-        }
+        SettingsSection.Archive -> Unit
         SettingsSection.Interaction -> {
             SwitchItem(
                 Icons.Outlined.Vibration, "震动反馈", "切换标签、点赞、回复、更多菜单和调整设置时提供触感反馈", settings.hapticFeedback,

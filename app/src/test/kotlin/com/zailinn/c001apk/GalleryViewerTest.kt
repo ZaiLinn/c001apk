@@ -18,6 +18,7 @@ import com.zailinn.c001apk.core.model.GalleryMedia
 import com.zailinn.c001apk.core.model.MediaAutoPlay
 import com.zailinn.c001apk.data.AppSettings
 import com.zailinn.c001apk.ui.LocalAppSettings
+import com.zailinn.c001apk.ui.common.ImageGrid
 import com.zailinn.c001apk.ui.nav.AppNavigator
 import com.zailinn.c001apk.ui.nav.LocalNavigator
 import com.zailinn.c001apk.ui.screens.LocalAppContainer
@@ -100,6 +101,41 @@ class GalleryViewerTest {
     private fun waitDraining(timeoutMillis: Long = 1_000, condition: () -> Boolean) =
         compose.waitUntil(timeoutMillis) { shadowOf(android.os.Looper.getMainLooper()).idle(); condition() }
     private fun media(suffix: String) = GalleryMedia.fromUrl("https://image.coolapk.com/test/${UUID.randomUUID()}-$suffix@64x64.jpg", "123")
+
+    @Test fun imageGridKeepsExternalUrlsAndCoolapkQueryParameters() {
+        val app = app()
+        val external = "https://example.com/${UUID.randomUUID()}.png"
+        val coolapk = media("photo").sourceUrl
+        compose.setContent {
+            val nav = rememberNavController()
+            CompositionLocalProvider(LocalAppContainer provides app, LocalNavigator provides AppNavigator(context, nav, app.settings)) {
+                ImageGrid(listOf(external, "$coolapk?sig=sample"))
+            }
+        }
+        waitDraining(10_000) {
+            val urls = requests.map { it.url.toString() }
+            external in urls && "$coolapk.s.jpg?sig=sample" in urls
+        }
+    }
+
+    @Test fun tappingThePhotoHidesAndShowsTheControls() {
+        val app = app()
+        val photo = media("photo")
+        compose.setContent {
+            val nav = rememberNavController()
+            CompositionLocalProvider(LocalAppContainer provides app, LocalNavigator provides AppNavigator(context, nav, app.settings)) {
+                ImageViewerScreen(listOf(photo.sourceUrl), 0)
+            }
+        }
+        val save = compose.onNodeWithContentDescription("保存")
+        save.assertIsDisplayed()
+        compose.onRoot().performTouchInput { click(center) }
+        compose.mainClock.advanceTimeBy(400)
+        save.assertDoesNotExist()
+        compose.onRoot().performTouchInput { click(center) }
+        compose.mainClock.advanceTimeBy(400)
+        save.assertIsDisplayed()
+    }
 
     @Test fun unsupportedHdrLoadsSdrHdAndQualitySwitchKeepsZoom() {
         val app = app()

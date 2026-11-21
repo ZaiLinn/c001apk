@@ -15,6 +15,10 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.semantics.contentDescription
@@ -31,7 +35,7 @@ private val Corner = RoundedCornerShape(12.dp)
 
 /**
  * Feed images: one image keeps its proportions (bounded at 22:9), several are
- * laid out three per row. Lists always load thumbnails; tapping opens originals.
+ * laid out three per row. Uses the preview URL for display; tapping opens the original.
  * Sizes come from weights and aspect ratios, so no subcomposition is needed.
  */
 @Composable
@@ -41,7 +45,8 @@ fun ImageGrid(pics: List<String>, modifier: Modifier = Modifier, article: Boolea
     val open = { url: String, index: Int -> navigator.openImages(gallery, gallery.indexOf(url).takeIf { it >= 0 } ?: index, media) }
     if (article || pics.size == 1) {
         val url = pics.first()
-        val ratio = imageAspectRatio(url) ?: 1f
+        var decodedRatio by remember(url) { mutableStateOf<Float?>(null) }
+        val ratio = imageAspectRatio(url) ?: decodedRatio ?: 1f
         // Width as a share of the row: full, two cells or one cell.
         val share = when {
             article || ratio > 1.5f -> 1f
@@ -49,7 +54,13 @@ fun ImageGrid(pics: List<String>, modifier: Modifier = Modifier, article: Boolea
             else -> 1f / 3f
         }
         Box(modifier.fillMaxWidth()) {
-            ImageCell(url, Modifier.fillMaxWidth(share).aspectRatio(max(ratio, 9f / 22f)), long = 1f / ratio > 22f / 9f, media = media.firstOrNull { it.matches(url) }) { open(url, 0) }
+            ImageCell(url, Modifier.fillMaxWidth(share).aspectRatio(max(ratio, 9f / 22f)),
+                long = 1f / ratio > 22f / 9f, media = media.firstOrNull { it.matches(url) },
+                onImageSize = { width, height ->
+                    // Offline URLs lack the original @WxH suffix. Coil's decoded
+                    // dimensions also account for image orientation.
+                    if (decodedRatio == null && width > 0 && height > 0) decodedRatio = width.toFloat() / height
+                }) { open(url, 0) }
         }
     } else {
         Column(modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(Space)) {
@@ -66,10 +77,11 @@ fun ImageGrid(pics: List<String>, modifier: Modifier = Modifier, article: Boolea
 }
 
 @Composable
-private fun ImageCell(url: String, modifier: Modifier, long: Boolean = false, media: com.zailinn.c001apk.core.model.GalleryMedia? = null, onClick: () -> Unit) {
+private fun ImageCell(url: String, modifier: Modifier, long: Boolean = false, media: com.zailinn.c001apk.core.model.GalleryMedia? = null,
+    onImageSize: ((Int, Int) -> Unit)? = null, onClick: () -> Unit) {
     Box(modifier.clip(Corner).clickable(onClick = onClick).semantics { contentDescription = "查看图片" }) {
-        NetworkImage(thumbnail(url), Modifier.fillMaxSize())
         val item = media ?: com.zailinn.c001apk.core.model.GalleryMedia.fromUrl(url)
+        NetworkImage(item.preview, Modifier.fillMaxSize(), onImageSize = onImageSize)
         val header = rememberJpegFlags(url)
         if (item.isHdr || header.hdr) CellLabel("HDR", Modifier.align(Alignment.TopStart))
         if (item.isLive || header.live) CellLabel("Live", Modifier.align(Alignment.TopEnd))

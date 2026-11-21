@@ -11,10 +11,15 @@ import com.zailinn.c001apk.core.net.ReplySource
 import com.zailinn.c001apk.ui.common.PagedList
 import com.zailinn.c001apk.ui.screens.ContentViewModel
 import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.async
 import kotlinx.coroutines.coroutineScope
 import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.SharingStarted
+import kotlinx.coroutines.flow.map
+import kotlinx.coroutines.flow.stateIn
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 enum class ReplySort(val label: String, val listType: String, val fromAuthor: Int) {
     Default("默认", "lastupdate_desc", 0),
@@ -30,7 +35,8 @@ class FeedViewModel(app: AppContainer, val id: String, private val backupFallbac
     val notice = MutableStateFlow("")
     val loadingDetail = MutableStateFlow(false)
     val sort = MutableStateFlow(ReplySort.Default)
-    val favorite = MutableStateFlow(app.content.isFavorite(id))
+    val favorite = app.content.favorites.map { records -> records.any { it.id == id } }
+        .stateIn(viewModelScope, SharingStarted.Eagerly, app.content.isFavorite(id))
     /**
      * The reply whose sub-replies are open. Held here, not in the screen, since the
      * screen leaves composition while an image or profile opened from the sheet shows.
@@ -50,11 +56,9 @@ class FeedViewModel(app: AppContainer, val id: String, private val backupFallbac
 
     override val list = PagedList(
         viewModelScope,
-        transform = { page, items ->
-            val head = if (page == 1 && sort.value == ReplySort.Default) listOfNotNull(topReply, replyMe) else emptyList()
-            val rules = app.content.filter()
-            val headIds = head.mapNotNull { it.id }.toSet()
-            (head + items.filter { it.id == null || it.id !in headIds }).map(rules::filterReplyRows)
+        transform = ::withReplyHead,
+        fallback = { result ->
+            if (result == LoadResult.Empty) withReplyHead(1, emptyList()).takeIf { it.isNotEmpty() } else null
         },
     ) { page ->
         // Replies are requested together with the detail instead of after it: one round trip, not two.
@@ -63,6 +67,13 @@ class FeedViewModel(app: AppContainer, val id: String, private val backupFallbac
             detailReady.await()
             replies.await()
         }
+    }
+
+    private fun withReplyHead(page: Int, items: List<Datum>): List<Datum> {
+        val head = if (page == 1 && sort.value == ReplySort.Default) listOfNotNull(topReply, replyMe).distinctBy { it.id ?: it.json } else emptyList()
+        val rules = app.content.filter()
+        val headIds = head.mapNotNull { it.id }.toSet()
+        return (head + items.filter { it.id == null || it.id !in headIds }).map(rules::filterReplyRows)
     }
 
     /**
@@ -133,14 +144,28 @@ class FeedViewModel(app: AppContainer, val id: String, private val backupFallbac
                     val data = result.value
                     val parsed = try {
                         FeedArticle.parse(data)
-                    } catch (e: Exception) {
-                        val error = LoadResult.Error(ApiFailure.from(e).message)
-                        if (verify && previous is LoadResult.Success) notice.value = error.message else feed.value = error
-                        return@launch
+                    } catch (e: IllegalArgumentException) {
+                        if (data.message.isNullOrBlank() && data.picArr.isEmpty()) {
+                            val error = LoadResult.Error(ApiFailure.from(e).message)
+                            if (verify && previous is LoadResult.Success) notice.value = error.message else feed.value = error
+                            return@launch
+                        }
+                        emptyList()
                     }
                     articles.value = parsed
-                    topReply = data.list("topReplyRows").firstOrNull()
-                    replyMe = data.list("replyMeRows").firstOrNull()
+                    val pinned = data.list("topReplyRows").firstOrNull()
+                    val author = data.list("replyMeRows").firstOrNull()
+                    val (visiblePinned, visibleAuthor) = if (pinned == null && author == null) null to null else withContext(Dispatchers.Default) {
+                        val rules = app.contentFilter()
+                        fun visibleReply(row: Datum?): Datum? {
+                            if (row == null) return null
+                            val reply = if (row.entityType == null) row.with("entityType", "feed_reply") else row
+                            return rules.apply(listOf(reply)).firstOrNull()
+                        }
+                        visibleReply(pinned) to visibleReply(author)
+                    }
+                    topReply = visiblePinned
+                    replyMe = visibleAuthor
                     feed.value = result
                     notice.value = when {
                         !result.isPublic -> ""
@@ -183,7 +208,6 @@ class FeedViewModel(app: AppContainer, val id: String, private val backupFallbac
         val data = (feed.value as? LoadResult.Success)?.value ?: return
         viewModelScope.launch {
             val added = app.content.toggleFavorite(data)
-            favorite.value = added
             app.archiveSync.favoriteChanged(id, collected = added, local = true)
             app.toast(if (added) "已收藏" else "已取消收藏")
         }
@@ -201,9 +225,7 @@ class FeedViewModel(app: AppContainer, val id: String, private val backupFallbac
             feed.value = current.copy(value = current.value.with("replynum", count.toString()))
         }
         if (target == null) {
-            list.update { items ->
-                items.toMutableList().apply { add(if (topReply == null) 0 else minOf(1, size), reply) }
-            }
+            list.insertLocal(reply, topReply?.id?.takeIf { sort.value == ReplySort.Default })
         } else {
             val holder = parent?.id ?: target.id
             list.replace(holder) { it.withList("replyRows", it.replyRows + reply) }

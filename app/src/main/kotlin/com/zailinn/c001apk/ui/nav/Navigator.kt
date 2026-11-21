@@ -9,6 +9,7 @@ import android.net.Uri
 import android.widget.Toast
 import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.core.net.toUri
+import androidx.lifecycle.LifecycleOwner
 import androidx.navigation.NavDestination.Companion.hasRoute
 import androidx.navigation.NavHostController
 import androidx.navigation.toRoute
@@ -35,6 +36,9 @@ class AppNavigator(
     }
     fun back() {
         if (nav.previousBackStackEntry != null) nav.popBackStack()
+    }
+    fun backFrom(owner: LifecycleOwner) {
+        if (nav.currentBackStackEntry === owner) back()
     }
     fun backToMain() = nav.popBackStack(MainRoute, inclusive = false)
 

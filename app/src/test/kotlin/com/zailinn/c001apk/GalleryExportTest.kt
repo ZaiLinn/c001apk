@@ -9,6 +9,8 @@ import android.os.ParcelFileDescriptor
 import android.provider.MediaStore
 import androidx.test.core.app.ApplicationProvider
 import com.zailinn.c001apk.core.media.MotionPhoto
+import com.zailinn.c001apk.core.model.GalleryMedia
+import com.zailinn.c001apk.ui.screens.other.GalleryExport
 import com.zailinn.c001apk.ui.screens.other.GalleryFile
 import com.zailinn.c001apk.ui.screens.other.saveGalleryFile
 import kotlinx.coroutines.runBlocking
@@ -146,6 +148,40 @@ class GalleryExportTest {
         val embedded = com.zailinn.c001apk.core.model.GalleryMedia("https://image.coolapk.com/${java.util.UUID.randomUUID()}.jpg", isLive = true)
         assertArrayEquals(mp4, files.video(embedded).readBytes())
         assertEquals(listOf(embedded.sourceUrl), requests.map { it.url.toString() })
+    }
+
+    @Test fun videoExportWorksWhenASeparateClipHasNoOriginalPhoto() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val photo = "https://image.coolapk.com/${java.util.UUID.randomUUID()}.jpg"
+        val video = "https://cdn.example.com/${java.util.UUID.randomUUID()}.mp4"
+        val requests = java.util.concurrent.CopyOnWriteArrayList<String>()
+        val transport = okhttp3.Interceptor { chain ->
+            val request = chain.request()
+            requests += request.url.toString()
+            val isVideo = request.url.toString() == video
+            okhttp3.Response.Builder().request(request).protocol(okhttp3.Protocol.HTTP_1_1)
+                .code(if (isVideo) 200 else 404).message(if (isVideo) "OK" else "Not found")
+                .body(if (isVideo) mp4.toResponseBody() else "".toResponseBody()).build()
+        }
+        val app = AppContainer(context, "video-only-${java.util.UUID.randomUUID()}", imageTransport = transport)
+        val file = app.galleryFiles.export(GalleryMedia(photo, videoUrl = video, isLive = true), GalleryExport.Video)
+        assertEquals("video/mp4", file.mime)
+        assertArrayEquals(mp4, file.file.readBytes())
+        assertEquals(listOf(video), requests)
+    }
+
+    @Test fun aDownloadRecreatesTheGalleryDirectoryAfterClearingCache() = runBlocking {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        val bytes = byteArrayOf(1, 2, 3, 4)
+        val transport = okhttp3.Interceptor { chain ->
+            okhttp3.Response.Builder().request(chain.request()).protocol(okhttp3.Protocol.HTTP_1_1)
+                .code(200).message("OK").body(bytes.toResponseBody()).build()
+        }
+        val app = AppContainer(context, "gallery-cache-${java.util.UUID.randomUUID()}", imageTransport = transport)
+        val url = "https://image.coolapk.com/${java.util.UUID.randomUUID()}"
+        val cached = app.galleryFiles.image("$url-1.jpg")
+        assertTrue(cached.parentFile!!.deleteRecursively())
+        assertArrayEquals(bytes, app.galleryFiles.image("$url-2.jpg").readBytes())
     }
 
     @Test fun aMotionExportCreatesOneImageAndCommitsAfterTheWrite() = runBlocking {

@@ -13,9 +13,16 @@ import androidx.compose.ui.text.TextLayoutResult
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.runtime.CompositionLocalProvider
+import androidx.navigation.NavHostController
+import androidx.navigation.compose.NavHost
+import androidx.navigation.compose.composable
+import androidx.navigation.compose.rememberNavController
+import androidx.navigation.toRoute
 import com.zailinn.c001apk.ui.common.HtmlText
 import com.zailinn.c001apk.ui.nav.AppNavigator
+import com.zailinn.c001apk.ui.nav.ImageViewerRoute
 import com.zailinn.c001apk.ui.nav.LocalNavigator
+import com.zailinn.c001apk.ui.nav.MainRoute
 import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -38,6 +45,33 @@ class HtmlLinkTapTest {
 
     private val plain = "我嘞个传奇耐电王再世，1.3v给到8ee6，缩肛都跳过了，直接给电死了"
     private val html = """$plain[受虐滑稽]<a href="">#骁龙8至尊版Gen6#</a> <a href="">#荣耀Magic9ProMax#</a> <a href="">#iQOO16#</a>"""
+
+    @Test
+    fun anInlineThumbnailOpensItsOwnImageInTheGallery() {
+        val pics = listOf("https://image.coolapk.com/first.jpg", "https://image.coolapk.com/second.jpg")
+        val label = "第二张图片"
+        lateinit var nav: NavHostController
+        compose.setContent {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            nav = rememberNavController()
+            val navigator = AppNavigator(context, nav, AppContainer(context, "test-${UUID.randomUUID()}").settings)
+            CompositionLocalProvider(LocalNavigator provides navigator) {
+                NavHost(nav, startDestination = MainRoute) {
+                    composable<MainRoute> { HtmlText("""<a href="${pics[1]}.s.jpg">$label</a>""", picArr = pics) }
+                    composable<ImageViewerRoute> {}
+                }
+            }
+        }
+        val node = compose.onNodeWithText(label)
+        val layouts = mutableListOf<TextLayoutResult>()
+        node.fetchSemanticsNode().config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+        node.performTouchInput { click(layouts.single().getBoundingBox(1).center) }
+        compose.runOnIdle {
+            val route = nav.currentBackStackEntry!!.toRoute<ImageViewerRoute>()
+            assertEquals(pics, route.urls)
+            assertEquals(1, route.index)
+        }
+    }
 
     @Test
     fun onlyTheLinkedCharactersOpenTheLink() {

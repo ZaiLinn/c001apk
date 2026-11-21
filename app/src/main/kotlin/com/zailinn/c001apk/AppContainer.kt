@@ -23,6 +23,7 @@ import com.zailinn.c001apk.data.AppSettings
 import com.zailinn.c001apk.data.CaptchaLog
 import com.zailinn.c001apk.data.HiddenLog
 import com.zailinn.c001apk.data.SettingsRepository
+import com.zailinn.c001apk.data.backupOptions
 import com.zailinn.c001apk.semantic.SemanticConfig
 import com.zailinn.c001apk.semantic.SemanticModel
 import kotlinx.coroutines.CompletableDeferred
@@ -91,9 +92,11 @@ class AppContainer(
         else -> context.resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_YES
     }
     val semantic = SemanticModel(context, baseHttp, scope)
-    val repository = CoolapkRepository(client) {
+    val repository = CoolapkRepository(client, filter = ::contentFilter)
+
+    internal fun contentFilter(): com.zailinn.c001apk.core.model.ContentFilter {
         val current = settings.current
-        content.filter(current).copy(semantic = semantic.matcher(current.semanticFold, semanticConfig()), onHidden = hiddenLog::add)
+        return content.filter(current).copy(semantic = semantic.matcher(current.semanticFold, semanticConfig(current)), onHidden = hiddenLog::add)
     }
 
     fun semanticConfig(current: AppSettings = settings.current) =
@@ -104,7 +107,8 @@ class AppContainer(
     }
     val archiveIndex by lazy { com.zailinn.c001apk.backup.ArchiveIndex(context) }
     val backups: com.zailinn.c001apk.backup.FeedBackupStore by lazy {
-        com.zailinn.c001apk.backup.FeedBackupStore(context, store, scope, repository, galleryFiles, ::toast, archiveIndex = archiveIndex)
+        com.zailinn.c001apk.backup.FeedBackupStore(context, store, scope, repository, galleryFiles, ::toast, archiveIndex = archiveIndex,
+            defaultOptions = { settings.current.backupOptions() })
     }
     val archiveSync by lazy {
         com.zailinn.c001apk.backup.ArchiveSync(repository, backups, archiveIndex, scope,

@@ -105,6 +105,8 @@ class CoolapkClient(
         expectImage: Boolean = false,
         followRedirects: Boolean = true,
         account: AccountCredentials? = null,
+        /** Explicit user verification may reopen a prompt cancelled or rejected earlier. */
+        forceCaptcha: Boolean = false,
     ): ApiResponse {
         val generation = session.generation
         val snapshot = session.account
@@ -115,7 +117,7 @@ class CoolapkClient(
             .tag(RequestOptions::class.java, opts)
             .get().build()
         val response = execute(client, build(emptyList()), generation)
-        return verifyAndRetry("GET", response, snapshot, generation, skipCaptcha) { proof, challenge ->
+        return verifyAndRetry("GET", response, snapshot, generation, skipCaptcha, forceCaptcha) { proof, challenge ->
             if (challenge.field.isEmpty())
                 execute(client, build(emptyList(), options.copy(validateProof = proof)), generation)
             else
@@ -154,6 +156,7 @@ class CoolapkClient(
         snapshot: AccountCredentials?,
         generation: Int,
         skip: Boolean,
+        forceCaptcha: Boolean = false,
         retry: suspend (String, CaptchaChallenge) -> ApiResponse,
     ): ApiResponse {
         if (!response.url.isHttps || response.url.host !in CoolapkHeaders.apiHosts || response.code !in 200..299) return response
@@ -181,7 +184,7 @@ class CoolapkClient(
             report("not-prompted")
             return response
         }
-        if (pausedGeneration == generation && clock() < promptsPausedUntil) {
+        if (!forceCaptcha && pausedGeneration == generation && clock() < promptsPausedUntil) {
             report("paused")
             return response.withVerification("paused")
         }
@@ -210,6 +213,7 @@ class CoolapkClient(
             return result.withVerification("rejected")
         }
         report("submitted")
+        if (forceCaptcha && pausedGeneration == generation) promptsPausedUntil = 0L
         return result.withVerification("submitted")
     }
 

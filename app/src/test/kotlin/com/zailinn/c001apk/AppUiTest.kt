@@ -192,11 +192,10 @@ class AppUiTest {
 
     @Test
     fun feedCanBeCollectedIntoACloudCollection() {
-        launch()
         kotlinx.coroutines.runBlocking { app.accounts.saveLogin("10", "synthetic", "synthetic-token") }
-        compose.waitUntil(10_000) { compose.onAllNodesWithText("合成动态正文", substring = true).fetchSemanticsNodes().isNotEmpty() }
+        launch()
         compose.onAllNodesWithText("合成动态正文", substring = true, useUnmergedTree = true).onFirst().performClick()
-        compose.waitUntil(10_000) { compose.onAllNodesWithContentDescription("更多").fetchSemanticsNodes().isNotEmpty() }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("共 2 回复").fetchSemanticsNodes().isNotEmpty() }
         // The top bar's menu, not a reply's.
         val menus = compose.onAllNodesWithContentDescription("更多")
         val top = menus.fetchSemanticsNodes().withIndex().minBy { it.value.boundsInRoot.top }.index

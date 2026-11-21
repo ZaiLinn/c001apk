@@ -88,9 +88,9 @@ class GalleryFiles(context: Context, private val http: OkHttpClient, private val
     }
 
     suspend fun export(media: GalleryMedia, kind: GalleryExport): GalleryFile = withContext(Dispatchers.IO) {
-        val original = photo(media)
         when (kind) {
             GalleryExport.Photo -> {
+                val original = photo(media)
                 val image = if (MotionPhoto.inspect(original) == null) original else {
                     File(directory, key(media.sourceUrl) + "-still").also { target ->
                         locks.getOrPut(target.name, ::Mutex).withLock {
@@ -103,6 +103,7 @@ class GalleryFiles(context: Context, private val http: OkHttpClient, private val
             }
             GalleryExport.Video -> GalleryFile(video(media), "video/mp4", ".mp4")
             GalleryExport.Motion -> {
+                val original = photo(media)
                 if (MotionPhoto.inspect(original) != null) GalleryFile(original, "image/jpeg", ".MP.jpg")
                 else {
                     val target = File(directory, key(media.sourceUrl) + "-motion.jpg")
@@ -144,6 +145,7 @@ class GalleryFiles(context: Context, private val http: OkHttpClient, private val
         val target = File(directory, key(url))
         locks.getOrPut(target.name, ::Mutex).withLock {
             if (!target.isFile) {
+                directory.mkdirs()
                 val partial = File(directory, target.name + ".${UUID.randomUUID()}.part")
                 try {
                     http.newCall(Request.Builder().url(url).build()).await().use { response ->
@@ -174,6 +176,7 @@ class GalleryFiles(context: Context, private val http: OkHttpClient, private val
     }
 
     private fun writeAtomic(target: File, write: (File) -> Unit) {
+        directory.mkdirs()
         val partial = File(directory, target.name + ".${UUID.randomUUID()}.part")
         try { write(partial); check(partial.renameTo(target)) } finally { partial.delete() }
     }

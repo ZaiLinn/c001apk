@@ -22,18 +22,41 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAGS: ${{ inputs.tags }}
         run: |
+          http_status() {
+            curl --silent --show-error --output /dev/null --write-out '%{http_code}' \
+              --header "Authorization: Bearer $GH_TOKEN" "$GITHUB_API_URL/$1"
+          }
           status=0
+          set -f
+          release_query='query($owner: String!, $repo: String!, $tag: String!) {
+            repository(owner: $owner, name: $repo) { release(tagName: $tag) { id } }
+          }'
           for tag in $TAGS; do
             if ! printf '%s' "$tag" | grep -Eq '^[A-Za-z0-9._-]+$'; then
               echo "Skipping invalid tag name: $tag"; status=1; continue
             fi
-            if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
-              echo "Keeping $tag: it still has a release"; status=1; continue
+            # The tag lookup includes draft releases.
+            if ! has_release=$(gh api graphql -f query="$release_query" -f owner="${GITHUB_REPOSITORY%/*}" \
+                -f repo="${GITHUB_REPOSITORY#*/}" -f tag="$tag" \
+                --jq 'if .data.repository == null then error("Repository unavailable") else .data.repository.release != null end'); then
+              echo "Keeping $tag: release lookup failed"; status=1; continue
             fi
-            if gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag" >/dev/null 2>&1; then
-              gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag" && echo "Deleted $tag"
-            else
+            if [[ $has_release == true ]]; then
+              echo "Keeping $tag: it still has a release"; status=1; continue
+            elif [[ $has_release != false ]]; then
+              echo "Keeping $tag: unexpected release lookup result"; status=1; continue
+            fi
+            tag_status=$(http_status "repos/$GITHUB_REPOSITORY/git/ref/tags/$tag") || tag_status=000
+            if [[ $tag_status == 200 ]]; then
+              if gh api -X DELETE "repos/$GITHUB_REPOSITORY/git/refs/tags/$tag"; then
+                echo "Deleted $tag"
+              else
+                status=1
+              fi
+            elif [[ $tag_status == 404 ]]; then
               echo "No tag $tag"
+            else
+              echo "Keeping $tag: tag lookup failed (HTTP $tag_status)"; status=1
             fi
           done
           exit $status

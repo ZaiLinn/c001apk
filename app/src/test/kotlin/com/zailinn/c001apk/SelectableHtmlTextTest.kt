@@ -29,6 +29,11 @@ import com.zailinn.c001apk.ui.common.HtmlText
 import com.zailinn.c001apk.ui.common.LocalContentPress
 import com.zailinn.c001apk.ui.nav.AppNavigator
 import com.zailinn.c001apk.ui.nav.LocalNavigator
+import com.zailinn.c001apk.core.model.Datum
+import com.zailinn.c001apk.core.model.FeedArticle
+import com.zailinn.c001apk.ui.cards.ItemActions
+import com.zailinn.c001apk.ui.screens.feed.ArticleBody
+import kotlinx.serialization.json.buildJsonObject
 import java.util.UUID
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
@@ -97,6 +102,53 @@ class SelectableHtmlTextTest {
         compose.onNodeWithTag("card").performTouchInput { longClick(androidx.compose.ui.geometry.Offset(20f, 20f)) }
         compose.waitForIdle()
         assertEquals("long press beside the content", 1, cardLongPress)
+    }
+
+    @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)
+    @Test
+    fun articleSelectionCanCopyAcrossTextBlocksAndKeepLinks() {
+        val clips = mutableListOf<String>()
+        val fake = object : androidx.compose.ui.platform.Clipboard {
+            override val nativeClipboard: androidx.compose.ui.platform.NativeClipboard
+                get() = compose.activity.getSystemService(android.content.ClipboardManager::class.java)
+            override suspend fun getClipEntry(): androidx.compose.ui.platform.ClipEntry? = null
+            override suspend fun setClipEntry(clipEntry: androidx.compose.ui.platform.ClipEntry?) {
+                clipEntry?.clipData?.getItemAt(0)?.text?.let { clips += it.toString() }
+            }
+        }
+        compose.setContent {
+            val context = androidx.compose.ui.platform.LocalContext.current
+            val nav = androidx.navigation.compose.rememberNavController()
+            val navigator = AppNavigator(context, nav, AppContainer(context, "test-${UUID.randomUUID()}").settings)
+            CompositionLocalProvider(LocalNavigator provides navigator, androidx.compose.ui.platform.LocalClipboard provides fake) {
+                Column(Modifier.width(367.dp).testTag("article")) {
+                    ArticleBody(Datum(buildJsonObject {}), listOf(
+                        FeedArticle(type = "text", message = "上段结尾文字"),
+                        FeedArticle(type = "text", message = """下段开头文字 <a href="https://example.com/link">附加链接</a> 结束"""),
+                    ), ItemActions())
+                }
+            }
+        }
+        val article = compose.onNodeWithTag("article")
+        val origin = article.fetchSemanticsNode().boundsInRoot.topLeft
+        fun position(label: String, offset: Int): androidx.compose.ui.geometry.Offset {
+            val node = compose.onNodeWithText(label, substring = true, useUnmergedTree = true).fetchSemanticsNode()
+            val layouts = mutableListOf<TextLayoutResult>()
+            node.config[SemanticsActions.GetTextLayoutResult].action!!.invoke(layouts)
+            return node.boundsInRoot.topLeft - origin + layouts.single().getBoundingBox(offset).center
+        }
+        val first = position("上段结尾文字", 1)
+        val last = position("下段开头文字", 13)
+        article.performTouchInput {
+            down(first)
+            advanceEventTime(viewConfiguration.longPressTimeoutMillis + 100)
+            moveTo(last)
+            up()
+        }
+        article.performKeyInput { withKeyDown(androidx.compose.ui.input.key.Key.CtrlLeft) { pressKey(androidx.compose.ui.input.key.Key.C) } }
+        compose.waitForIdle()
+        val copied = clips.lastOrNull().orEmpty()
+        assertTrue("copied: $copied", "结尾文字" in copied && "下段开头文字" in copied && "https://example.com/link" in copied)
     }
 
     @OptIn(androidx.compose.ui.ExperimentalComposeUiApi::class)

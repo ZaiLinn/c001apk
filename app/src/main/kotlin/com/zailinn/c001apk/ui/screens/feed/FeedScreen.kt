@@ -9,6 +9,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.lazy.rememberLazyListState
+import androidx.compose.foundation.text.selection.DisableSelection
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Reply
 import androidx.compose.material.icons.filled.Star
@@ -28,9 +29,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
-import androidx.compose.material3.SegmentedButton
-import androidx.compose.material3.SegmentedButtonDefaults
-import androidx.compose.material3.SingleChoiceSegmentedButtonRow
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -63,6 +61,7 @@ import com.zailinn.c001apk.ui.cards.cardColor
 import com.zailinn.c001apk.ui.common.AppAlertDialog
 import com.zailinn.c001apk.ui.common.AppBottomSheet
 import com.zailinn.c001apk.ui.common.AppDropdownMenu
+import com.zailinn.c001apk.ui.common.HtmlSelection
 import com.zailinn.c001apk.ui.common.HtmlText
 import com.zailinn.c001apk.ui.common.ImageGrid
 import com.zailinn.c001apk.ui.common.PagedListView
@@ -181,19 +180,12 @@ fun FeedScreen(id: String, toReplies: Boolean = false, backupFallback: Boolean =
                 item(key = "sort") {
                     HorizontalDivider()
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text("共 ${data.string("replynum") ?: "0"} 回复", Modifier.weight(1f))
-                        SingleChoiceSegmentedButtonRow {
-                            ReplySort.entries.forEachIndexed { index, item ->
-                                SegmentedButton(
-                                    selected = sort == item,
-                                    // While replies come from the hot/web fallback the reply API's
-                                    // sorting is unavailable; disable it instead of silently ignoring taps.
-                                    enabled = repliesSource == ReplySource.Api,
-                                    onClick = hapticClick { vm.setSort(item) },
-                                    shape = SegmentedButtonDefaults.itemShape(index, ReplySort.entries.size),
-                                    icon = {},
-                                ) { Text(item.label, fontSize = TextSizes.Tag) }
-                            }
+                        Text("共 ${data.string("replynum") ?: "0"} 回复", Modifier.weight(1f),
+                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        com.zailinn.c001apk.ui.screens.list.SortSwitch(
+                            ReplySort.entries.map { it.label }, ReplySort.entries.indexOf(sort), enabled = repliesSource == ReplySource.Api,
+                        ) { index ->
+                            vm.setSort(ReplySort.entries[index])
                         }
                     }
                     if (repliesSource != ReplySource.Api) {
@@ -211,9 +203,10 @@ fun FeedScreen(id: String, toReplies: Boolean = false, backupFallback: Boolean =
                     }
                 }
             },
-        ) { index, item ->
+        ) { _, item ->
             Column {
-                ReplyCard(item, actions, isTop = index == 0 && vm.topReply != null && sort == ReplySort.Default)
+                val isTop = sort == ReplySort.Default && vm.topReply?.id?.let { it == item.id } == true
+                ReplyCard(item, actions, isTop = isTop)
                 HorizontalDivider()
             }
         }
@@ -251,22 +244,29 @@ internal fun ArticleBody(data: Datum, blocks: List<FeedArticle>, actions: ItemAc
         val header = data.with("message", "").withList("picArr", emptyList())
             .let { if (blocks.any { it.type == "title" }) it.with("message_title", "") else it }
         FeedCard(header, actions, detail = true, footer = false, authorOnly = true)
-        blocks.forEach { block ->
-            when (block.type) {
-                "title" -> HtmlText(block.title.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = 17.sp, bold = true, selectable = true)
-                "text" -> HtmlText(block.message.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = TextSizes.Body, selectable = true)
-                "image" -> Column(Modifier.padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                    val url = block.url.orEmpty()
-                    ImageGrid(listOf(url), article = true, gallery = images, media = data.mediaImages)
-                    block.description?.takeIf { it.isNotEmpty() }?.let {
-                        Text(it, fontSize = TextSizes.Nested, color = MaterialTheme.colorScheme.outline, textAlign = TextAlign.Center)
+        HtmlSelection {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                val media = remember(data) { data.mediaImages }
+                blocks.forEach { block ->
+                    when (block.type) {
+                        "title" -> HtmlText(block.title.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = 17.sp, bold = true, selectable = true)
+                        "text" -> HtmlText(block.message.orEmpty(), Modifier.padding(horizontal = 16.dp), fontSize = TextSizes.Body,
+                            picArr = images, media = media, selectable = true)
+                        "image" -> Column(Modifier.padding(horizontal = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            val url = block.url.orEmpty()
+                            ImageGrid(listOf(url), article = true, gallery = images, media = media)
+                            block.description?.takeIf { it.isNotEmpty() }?.let {
+                                Text(it, fontSize = TextSizes.Nested, color = MaterialTheme.colorScheme.outline, textAlign = TextAlign.Center)
+                            }
+                        }
+                        "shareUrl" -> DisableSelection {
+                            Surface(color = cardColor(), shape = CardShape, onClick = { navigator.openLink(block.url.orEmpty()) },
+                                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp)) {
+                                Text(block.title.orEmpty(), Modifier.padding(10.dp))
+                            }
+                        }
                     }
                 }
-                "shareUrl" -> Surface(
-                    color = cardColor(), shape = CardShape,
-                    onClick = { navigator.openLink(block.url.orEmpty()) },
-                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp),
-                ) { Text(block.title.orEmpty(), Modifier.padding(10.dp)) }
             }
         }
         Column(Modifier.padding(bottom = 12.dp)) { FeedFooter(data, actions) }

@@ -1,6 +1,7 @@
 package com.zailinn.c001apk
 
 import androidx.datastore.preferences.core.PreferenceDataStoreFactory
+import com.zailinn.c001apk.core.protocol.Constants
 import com.zailinn.c001apk.core.protocol.DeviceProfile
 import com.zailinn.c001apk.core.protocol.ProtocolParams
 import com.zailinn.c001apk.core.protocol.RealDevices
@@ -58,6 +59,36 @@ class ProtocolSettingsTest {
         settings.initialize()
         settings.await { current.protocol.profile == phone }
         assertEquals(old.deviceId, settings.current.protocol.deviceId)
+    }
+
+    @Test
+    fun upgradesThePriorDefaultWithoutReplacingTheStoredDevice() = runBlocking {
+        val settings = repository()
+        val old = ProtocolParams.generate().copy(versionName = "16.6.4", versionCode = "2609291").withUserAgent()
+        settings.set(SettingKeys.installTime, "1")
+        settings.saveProtocol(old, PROTOCOL_GENERATED)
+        settings.await { current.installTime == "1" && current.protocol == old }
+
+        settings.initialize()
+        val updated = old.copy(versionName = Constants.VERSION_NAME, versionCode = Constants.VERSION_CODE).withUserAgent()
+        assertEquals(updated, settings.current.protocol)
+        assertEquals(PROTOCOL_GENERATED, settings.current.protocolSource)
+        settings.initialize()
+        assertEquals(updated, settings.current.protocol)
+    }
+
+    @Test
+    fun customProtocolValuesKeepTheirVersionsAndUserAgent() = runBlocking {
+        val settings = repository()
+        val base = ProtocolParams.generate().copy(versionName = "16.6.4", versionCode = "2609291").withUserAgent()
+        val custom = listOf(base.copy(userAgent = "Custom user agent"), base.copy(versionName = "16.5.0").withUserAgent())
+        settings.set(SettingKeys.installTime, "1")
+        for (value in custom) {
+            settings.saveProtocol(value, PROTOCOL_GENERATED)
+            settings.await { current.installTime == "1" && current.protocol == value }
+            settings.initialize()
+            assertEquals(value, settings.current.protocol)
+        }
     }
 
     @Test

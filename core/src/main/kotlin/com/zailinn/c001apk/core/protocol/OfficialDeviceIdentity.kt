@@ -14,6 +14,13 @@ object OfficialDeviceIdentity {
     private val field = Regex("^\\s*ShuzlmID\\s*[:：]\\s*([^\\r\\n]*)$", setOf(RegexOption.MULTILINE, RegexOption.IGNORE_CASE))
     private val value = Regex("^[A-Za-z0-9_+/.=-]{8,4096}$")
 
+    /** A manually entered ID or the complete diagnostic text copied by the official app. */
+    fun parseInput(text: String): String {
+        val trimmed = text.trim()
+        if (value.matches(trimmed) && trimmed.lowercase() !in setOf("null", "undefined")) return trimmed
+        return parse(text)
+    }
+
     /** The SZLM ID in [text]; throws [IllegalArgumentException] with a message for the user. */
     fun parse(text: String): String {
         require(text.length <= 32768) { "复制内容过长，请重新从官方酷安复制" }

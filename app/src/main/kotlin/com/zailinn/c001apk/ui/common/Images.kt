@@ -34,6 +34,7 @@ fun NetworkImage(
     contentScale: ContentScale = ContentScale.Crop,
     isAvatar: Boolean = false,
     contentDescription: String? = null,
+    onImageSize: ((Int, Int) -> Unit)? = null,
 ) {
     // A plain color placeholder: no subcomposition per image while scrolling.
     val tint = MaterialTheme.colorScheme.outline.copy(alpha = 0.25f)
@@ -52,6 +53,7 @@ fun NetworkImage(
         modifier = modifier,
         placeholder = placeholder,
         error = placeholder,
+        onSuccess = { state -> onImageSize?.invoke(state.result.image.width, state.result.image.height) },
     )
 }
 
@@ -79,6 +81,3 @@ fun imageAspectRatio(url: String): Float? {
     val height = url.substring(x + 1, dot).toFloatOrNull() ?: return null
     return if (width > 0 && height > 0) width / height else null
 }
-
-/** Server-side thumbnail, used for every list image; the viewer loads originals. */
-fun thumbnail(url: String) = if (url.startsWith(com.zailinn.c001apk.core.backup.BACKUP_MEDIA_SCHEME) || url.endsWith(".s.jpg")) url else "$url.s.jpg"

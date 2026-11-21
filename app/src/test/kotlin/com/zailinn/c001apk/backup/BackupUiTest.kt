@@ -64,6 +64,7 @@ class BackupUiTest {
     private val context = ApplicationProvider.getApplicationContext<Context>()
     private val requests = CopyOnWriteArrayList<String>()
     private var detailFailure = ""
+    private var holdDetail: java.util.concurrent.CountDownLatch? = null
     private val decoded = CopyOnWriteArrayList<Any>()
     private val tree = Uri.parse("content://backup.test/tree/root")
     private val feed = """{"id":"42","entityType":"feed","uid":"7","username":"备份作者","message":"完整正文","replynum":0,"picArr":["https://image.coolapk.com/synthetic-body.png"]}"""
@@ -84,6 +85,7 @@ class BackupUiTest {
         val api = Interceptor { chain ->
             val request = chain.request(); requests += request.url.toString()
             val body = if (request.url.encodedPath.endsWith("/feed/detail")) {
+                holdDetail?.await(10, java.util.concurrent.TimeUnit.SECONDS)
                 when (detailFailure) {
                     "gone" -> """{"status":-1,"message":"该动态已删除"}"""
                     "captcha" -> """{"status":"err_request_captcha","message":"需要验证码"}"""
@@ -110,6 +112,110 @@ class BackupUiTest {
         }
     }
     @After fun releaseLoader() { SingletonImageLoader.get(context).shutdown(); SingletonImageLoader.reset() }
+
+    @Test fun restrictedBackupAcceptsIdentityInDialogAndRetriesTheSamePost() {
+        val docs = provider()
+        val app = app()
+        runBlocking { app.backups.selectDirectory(tree.toString()) }
+        detailFailure = "captcha"
+        compose.setContent {
+            val nav = rememberNavController()
+            CompositionLocalProvider(LocalAppContainer provides app, LocalNavigator provides AppNavigator(context, nav, app.settings)) {
+                BackupHost(app)
+            }
+        }
+        app.backups.start(BackupRequest("42"), replace = false)
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("帖子正文受限").fetchSemanticsNodes().isNotEmpty() }
+        assertTrue(docs.folder.listFiles().orEmpty().isEmpty())
+        compose.onNodeWithText("数盟 ID 或官方复制的完整内容").performTextInput("bad")
+        compose.onNodeWithText("保存并重试").performClick()
+        compose.onNodeWithText("帖子正文受限").assertExists()
+        assertTrue(app.settings.current.protocol.szlmId.isEmpty())
+        compose.onNodeWithText("数盟 ID 或官方复制的完整内容").performTextClearance()
+        compose.onNodeWithText("数盟 ID 或官方复制的完整内容").performTextInput("DUsyntheticBackupIdentity012345")
+        detailFailure = ""
+        compose.onNodeWithText("保存并重试").performClick()
+        compose.waitUntil(15_000) { app.backups.records.value.size == 1 && app.backups.progress.value == null }
+        assertEquals("DUsyntheticBackupIdentity012345", app.settings.current.protocol.szlmId)
+        assertNull(app.backups.identityRequired.value)
+        assertFalse(requests.any { "/replyList" in it || "/hotReplyList" in it })
+    }
+
+    @Test fun settingsOpensBackupsDirectlyAndGlobalReplyRulesApplyToManualBackups() {
+        provider()
+        val app = app()
+        runBlocking { app.backups.selectDirectory(tree.toString()) }
+        compose.setContent {
+            val nav = rememberNavController()
+            CompositionLocalProvider(LocalAppContainer provides app, LocalNavigator provides AppNavigator(context, nav, app.settings)) {
+                NavHost(nav, startDestination = SettingsRoute) {
+                    composable<SettingsRoute> { com.zailinn.c001apk.ui.screens.settings.SettingsScreen() }
+                    composable<BackupsRoute> { BackupsScreen() }
+                }
+                BackupHost(app)
+            }
+        }
+        compose.onNodeWithText("备份与收藏").assertDoesNotExist()
+        compose.onNode(hasScrollAction()).performScrollToNode(hasText("我的备份"))
+        compose.onNodeWithText("我的备份").performClick()
+        compose.onNodeWithText("备份目录").assertExists()
+        compose.onNodeWithText("收藏时自动备份").assertDoesNotExist()
+        compose.onNodeWithText("备份设置").performClick()
+        compose.onNodeWithText("收藏时自动备份").assertExists()
+        compose.onNodeWithText("仅在 WiFi 下下载图片").assertExists()
+        compose.onNodeWithText("备份时包含回复").performClick()
+        val toggle = compose.onNodeWithContentDescription("备份时包含回复开关")
+        toggle.assertIsOff()
+        compose.onNodeWithText("每帖最多保存评论数").assertDoesNotExist()
+        toggle.performClick()
+        compose.waitUntil { app.settings.current.archiveIncludeReplies }
+        compose.onNodeWithText("每帖最多保存评论数").performTextClearance()
+        compose.onNodeWithText("每帖最多保存评论数").performTextInput("3")
+        compose.onNodeWithText("主回复和楼中楼都保存").performClick()
+        compose.waitUntil { app.settings.current.archiveCommentLimit == 3 && app.settings.current.archiveIncludeSubReplies }
+        compose.onNodeWithText("完成").performClick()
+        app.backups.start(BackupRequest("42"), replace = false)
+        compose.waitUntil(15_000) { app.backups.records.value.size == 1 && app.backups.progress.value == null }
+        val saved = runBlocking { app.backups.open(app.backups.records.value.single(), readImages = false) }
+        assertTrue(saved.includesReplies)
+        assertTrue(saved.includesSubReplies)
+        assertEquals(3, saved.commentLimit)
+    }
+
+    @Test fun offlineSingleImagesRecoverLandscapeAndPortraitRatiosFromLocalPixels() {
+        val docs = provider()
+        val app = app()
+        val source = FeedBackup(Json.parseToJsonElement("""{"data":{"id":"42","entityType":"feed","message":"尺寸测试","picArr":["https://image.coolapk.com/wide.png","https://image.coolapk.com/tall.png"]}}""").jsonObject)
+        File(docs.folder, "feed_42.json").writeText(FeedBackup.json.encodeToString(FeedBackup.serializer(), source))
+        ZipOutputStream(File(docs.folder, "feed_42.zip").outputStream()).use { zip ->
+            listOf(160 to 90, 90 to 160).forEachIndexed { index, (width, height) ->
+                zip.putNextEntry(ZipEntry("image_${index + 1}.png"))
+                Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888).also { it.compress(Bitmap.CompressFormat.PNG, 100, zip); it.recycle() }
+                zip.closeEntry()
+            }
+        }
+        val urls = runBlocking {
+            app.backups.selectDirectory(tree.toString())
+            app.backups.open(app.backups.records.value.single()).data.picArr
+        }
+        val before = requests.size
+        compose.setContent {
+            val nav = rememberNavController()
+            CompositionLocalProvider(LocalAppContainer provides app, LocalNavigator provides AppNavigator(context, nav, app.settings),
+                com.zailinn.c001apk.ui.common.LocalOfflineBackup provides true) {
+                androidx.compose.foundation.layout.Column {
+                    urls.forEach { com.zailinn.c001apk.ui.common.ImageGrid(listOf(it)) }
+                }
+            }
+        }
+        compose.waitUntil(10_000) { urls.all { it in decoded } }
+        compose.waitForIdle()
+        val cells = compose.onAllNodesWithContentDescription("查看图片").fetchSemanticsNodes()
+        assertEquals(2, cells.size)
+        assertEquals(160f / 90, cells[0].boundsInRoot.width / cells[0].boundsInRoot.height, 0.03f)
+        assertEquals(90f / 160, cells[1].boundsInRoot.width / cells[1].boundsInRoot.height, 0.03f)
+        assertEquals(before, requests.size)
+    }
 
     @Test fun firstBackupPicksPersistentDirectoryAndDuplicateChoicesWork() {
         val docs = provider()
@@ -231,11 +337,14 @@ class BackupUiTest {
         }
         compose.waitUntil { app.content.favorites.value.isNotEmpty() }
         compose.onNodeWithText("文字和原图").assertExists()
-        assertTrue(app.settings.current.archiveIncludeReplies)
+        assertFalse(app.settings.current.archiveIncludeReplies)
         assertFalse(app.settings.current.archiveImagesWifiOnly)
+        val held = java.util.concurrent.CountDownLatch(1)
+        holdDetail = held
         compose.onNodeWithText("开始备份").performScrollTo().performClick()
-        compose.waitUntil(10_000) { app.archiveSync.status.value.running }
+        compose.waitUntil(10_000) { compose.onAllNodesWithText("暂停").fetchSemanticsNodes().isNotEmpty() }
         compose.onNodeWithText("暂停").performScrollTo().performClick()
+        held.countDown()
         compose.waitUntil(10_000) { app.archiveSync.status.value.paused && !app.backups.batchRunning }
         compose.onNodeWithText("继续").assertExists()
         assertTrue(app.archiveIndex.queue().any { it.state == "pending" })

@@ -13,10 +13,13 @@ import com.zailinn.c001apk.core.protocol.ProtocolParams
 import com.zailinn.c001apk.core.semantic.SemanticAnchors
 import com.zailinn.c001apk.core.update.UpdatePreferenceStore
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.first
 
 data class AppSettings(
     val archiveAutoBackup: String = "Off",
-    val archiveIncludeReplies: Boolean = true,
+    val archiveIncludeReplies: Boolean = false,
+    val archiveCommentLimit: Int = 10,
+    val archiveIncludeSubReplies: Boolean = false,
     val archiveImagesWifiOnly: Boolean = false,
     val archiveImageQuality: String = "Original",
     val hapticFeedback: Boolean = true,
@@ -72,7 +75,9 @@ fun androidDevice() = DeviceProfile(
 
 object SettingKeys {
     val archiveAutoBackup = stringPreferencesKey("archiveAutoBackup")
-    val archiveIncludeReplies = booleanPreferencesKey("archiveIncludeReplies")
+    val archiveSaveComments = booleanPreferencesKey("archiveSaveComments")
+    val archiveCommentLimit = intPreferencesKey("archiveCommentLimit")
+    val archiveIncludeSubReplies = booleanPreferencesKey("archiveIncludeSubReplies")
     val archiveImagesWifiOnly = booleanPreferencesKey("archiveImagesWifiOnly")
     val archiveImageQuality = stringPreferencesKey("archiveImageQuality")
     val hapticFeedback = booleanPreferencesKey("hapticFeedback")
@@ -128,8 +133,24 @@ class SettingsRepository(
         if (store.prefs.value[SettingKeys.installTime].isNullOrEmpty()) {
             store.edit { it[SettingKeys.installTime] = System.currentTimeMillis().toString() }
             saveProtocol(ProtocolParams.fromProfile(localDevice()), PROTOCOL_LOCAL)
-        } else if (current.protocolSource == PROTOCOL_LOCAL && current.protocol.profile != localDevice()) {
-            useLocalDevice()
+            return
+        }
+        val saved = current
+        val previous = saved.protocol
+        var updated = previous
+        // The former default was persisted for both phone and generated profiles.
+        if (previous.versionName == "16.6.4" && previous.versionCode == "2609291" &&
+            previous.apiVersion == "16" && previous.userAgent == previous.withUserAgent().userAgent
+        ) {
+            updated = previous.copy(versionName = Constants.VERSION_NAME, versionCode = Constants.VERSION_CODE).withUserAgent()
+        }
+        if (saved.protocolSource == PROTOCOL_LOCAL) {
+            val profile = localDevice()
+            if (updated.profile != profile) updated = updated.withProfile(profile)
+        }
+        if (updated != previous) {
+            saveProtocol(updated)
+            settings.first { it.protocol == updated }
         }
     }
 
@@ -185,7 +206,9 @@ class SettingsRepository(
 
     private fun read(p: Preferences) = AppSettings(
         archiveAutoBackup = p[SettingKeys.archiveAutoBackup] ?: "Off",
-        archiveIncludeReplies = p[SettingKeys.archiveIncludeReplies] ?: true,
+        archiveIncludeReplies = p[SettingKeys.archiveSaveComments] ?: false,
+        archiveCommentLimit = (p[SettingKeys.archiveCommentLimit] ?: 10).coerceIn(1, 1000),
+        archiveIncludeSubReplies = p[SettingKeys.archiveIncludeSubReplies] ?: false,
         archiveImagesWifiOnly = p[SettingKeys.archiveImagesWifiOnly] ?: false,
         archiveImageQuality = p[SettingKeys.archiveImageQuality] ?: "Original",
         hapticFeedback = p[SettingKeys.hapticFeedback] ?: true,
